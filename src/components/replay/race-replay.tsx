@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
+import { PanelTabs } from "@/components/replay/panels/panel-tabs";
 import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import { Timeline } from "@/components/replay/timeline";
@@ -70,8 +71,11 @@ export function RaceReplay({ raceName, trackMetas }: { raceName: string; trackMe
 
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1">
-        <MapView tracks={tracks} styleId={styleId} />
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div className="min-w-0 flex-1">
+          <MapView tracks={tracks} styleId={styleId} />
+        </div>
+        <PanelTabs tracks={tracks} />
       </div>
       <div className="border-t border-border/70 bg-background/95 px-4 py-3">
         <div className="flex items-center justify-between gap-4">
