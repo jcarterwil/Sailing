@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Notice = { tone: "success" | "error"; message: string } | null;
 
-const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true";
+const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED?.trim() === "true";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
