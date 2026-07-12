@@ -78,7 +78,8 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    suppressClickUntilRef.current = gesture.moved ? performance.now() + 300 : 0;
+    const didDrag = gesture.moved || Math.abs(deltaY) > 6;
+    suppressClickUntilRef.current = didDrag ? performance.now() + 300 : 0;
     gestureRef.current = null;
     setMobileOpen(nextOpen);
     setDragging(false);
