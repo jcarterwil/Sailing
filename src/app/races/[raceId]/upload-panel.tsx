@@ -8,6 +8,15 @@ import { EntryMetaEditor } from "@/app/races/[raceId]/race-meta-panel";
 import { createEntryFromFile, requestTrackUpload } from "@/app/races/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import type { TrackImportDigest } from "@/lib/analytics/track/import-digest";
 import type { CrewMember } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/client";
 
@@ -25,6 +34,7 @@ interface EntryRow {
     errorMessage: string | null;
     pointCount: number | null;
     filename: string;
+    importDigest: TrackImportDigest | null;
   } | null;
 }
 
@@ -186,16 +196,7 @@ export function UploadPanel({
               />
               <span className="min-w-0 flex-1 truncate font-medium">{entry.boatName}</span>
               {entry.track ? (
-                <>
-                  <TrackStatusBadge status={entry.track.status} />
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    {entry.track.status === "error"
-                      ? entry.track.errorMessage
-                      : entry.track.pointCount
-                        ? `${entry.track.pointCount.toLocaleString()} pts`
-                        : entry.track.filename}
-                  </span>
-                </>
+                <TrackStatusBadge status={entry.track.status} />
               ) : (
                 <span className="text-xs text-muted-foreground">no track</span>
               )}
@@ -212,6 +213,24 @@ export function UploadPanel({
                 </Button>
               )}
             </div>
+            {entry.track?.status === "processed" && (
+              <ProcessedTrackDigest
+                pointCount={entry.track.pointCount}
+                digest={entry.track.importDigest}
+              />
+            )}
+            {entry.track?.status === "error" && (
+              <p className="mt-2 ml-6 text-xs text-destructive">
+                {entry.track.errorMessage ?? "Processing failed."}
+              </p>
+            )}
+            {entry.track &&
+              entry.track.status !== "processed" &&
+              entry.track.status !== "error" && (
+                <p className="mt-2 ml-6 text-xs text-muted-foreground">
+                  {entry.track.filename}
+                </p>
+              )}
             <EntryMetaEditor
               key={`${entry.entryId}:${entry.tags.join("|")}:${entry.crew.map((c) => `${c.name}|${c.role}`).join(";")}`}
               entryId={entry.entryId}
@@ -230,4 +249,51 @@ function TrackStatusBadge({ status }: { status: string }) {
   if (status === "processed") return <Badge variant="secondary">processed</Badge>;
   if (status === "error") return <Badge variant="destructive">error</Badge>;
   return <Badge variant="outline">{status}</Badge>;
+}
+
+function ProcessedTrackDigest({
+  pointCount,
+  digest,
+}: {
+  pointCount: number | null;
+  digest: TrackImportDigest | null;
+}) {
+  return (
+    <div className="mt-2 ml-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      {pointCount !== null && <Badge variant="outline">{pointCount.toLocaleString()} pts</Badge>}
+      {digest?.loggingRateHz !== null && digest?.loggingRateHz !== undefined && (
+        <Badge variant="outline">{digest.loggingRateHz.toLocaleString()} Hz</Badge>
+      )}
+      {digest?.hasWind && <Badge variant="secondary">wind</Badge>}
+      {digest && digest.warningCount > 0 && (
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="destructive" size="xs" className="h-5 rounded-full">
+              {digest.warningCount.toLocaleString()}{" "}
+              {digest.warningCount === 1 ? "warning" : "warnings"}
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Track import warnings</DialogTitle>
+              <DialogDescription>
+                The importer recovered the track, but found the following data-quality issues.
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="space-y-3">
+              {digest.warnings.map((warning) => (
+                <li key={`${warning.code}:${warning.message}`} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <code className="text-xs font-semibold">{warning.code}</code>
+                    <Badge variant="secondary">×{warning.count.toLocaleString()}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{warning.message}</p>
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
 }
