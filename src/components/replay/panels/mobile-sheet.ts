@@ -26,3 +26,16 @@ export function settleMobileSheet({
   }
   return open;
 }
+
+export function resolveMobileSheetGesture({
+  open,
+  deltaY,
+  durationMs,
+}: {
+  open: boolean;
+  deltaY: number;
+  durationMs: number;
+}): boolean {
+  if (Math.abs(deltaY) < FLING_DISTANCE_PX) return !open;
+  return settleMobileSheet({ open, deltaY, durationMs });
+}

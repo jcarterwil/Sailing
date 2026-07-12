@@ -9,7 +9,7 @@ import {
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { Instruments } from "@/components/replay/panels/instruments";
-import { settleMobileSheet } from "@/components/replay/panels/mobile-sheet";
+import { resolveMobileSheetGesture } from "@/components/replay/panels/mobile-sheet";
 import { Performance } from "@/components/replay/panels/performance";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { Button } from "@/components/ui/button";
@@ -31,12 +31,12 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef<HTMLElement>(null);
+  const handleRef = useRef<HTMLButtonElement>(null);
   const gestureRef = useRef<{
     pointerId: number;
     startY: number;
     startTime: number;
     open: boolean;
-    moved: boolean;
   } | null>(null);
   const suppressClickUntilRef = useRef(0);
 
@@ -47,7 +47,6 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
       startY: event.clientY,
       startTime: performance.now(),
       open: mobileOpen,
-      moved: false,
     };
     setDragging(true);
     setDragOffsetY(0);
@@ -57,8 +56,10 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     const gesture = gestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const deltaY = event.clientY - gesture.startY;
-    if (Math.abs(deltaY) > 6) gesture.moved = true;
-    const maxTravel = Math.max(0, (sheetRef.current?.offsetHeight ?? 0) - 52);
+    const maxTravel = Math.max(
+      0,
+      (sheetRef.current?.offsetHeight ?? 0) - (handleRef.current?.offsetHeight ?? 0),
+    );
     setDragOffsetY(
       gesture.open
         ? Math.min(maxTravel, Math.max(0, deltaY))
@@ -70,7 +71,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     const gesture = gestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const deltaY = event.clientY - gesture.startY;
-    const nextOpen = settleMobileSheet({
+    const nextOpen = resolveMobileSheetGesture({
       open: gesture.open,
       deltaY,
       durationMs: performance.now() - gesture.startTime,
@@ -78,8 +79,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    const didDrag = gesture.moved || Math.abs(deltaY) > 6;
-    suppressClickUntilRef.current = didDrag ? performance.now() + 300 : 0;
+    suppressClickUntilRef.current = performance.now() + 300;
     gestureRef.current = null;
     setMobileOpen(nextOpen);
     setDragging(false);
@@ -112,6 +112,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
       } absolute inset-x-0 bottom-0 z-20 flex h-[min(55dvh,28rem)] flex-col overflow-hidden rounded-t-xl border-t border-border/80 bg-background/95 shadow-xl backdrop-blur will-change-transform md:static md:inset-auto md:z-auto md:h-auto md:w-[340px] md:shrink-0 md:transform-none md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:shadow-none md:will-change-auto`}
     >
       <Button
+        ref={handleRef}
         type="button"
         variant="ghost"
         className="relative flex h-[3.25rem] w-full touch-none flex-col gap-1 rounded-none px-4 py-1 md:hidden"
@@ -121,8 +122,8 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
         onPointerMove={onPointerMove}
         onPointerUp={finishGesture}
         onPointerCancel={cancelGesture}
-        onClick={() => {
-          if (performance.now() < suppressClickUntilRef.current) {
+        onClick={(event) => {
+          if (event.detail !== 0 && performance.now() < suppressClickUntilRef.current) {
             suppressClickUntilRef.current = 0;
             return;
           }
