@@ -29,7 +29,8 @@ export async function getConfiguredAiModel(): Promise<string> {
     .select("model")
     .eq("id", true)
     .maybeSingle();
-  if (error || !data?.model) return DEFAULT_AI_MODEL;
+  if (error) throw new Error(`Could not read AI settings: ${error.message}`);
+  if (!data?.model) return DEFAULT_AI_MODEL;
   return data.model;
 }
 

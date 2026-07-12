@@ -294,7 +294,6 @@ export function summarizeOpenMeteoWeather(
 
   const speedValues = numericArray(hourly.wind_speed_10m);
   const directionValues = numericArray(hourly.wind_direction_10m);
-  const speeds = selectedNumbers(speedValues, indices);
   const windPairs = indices
     .map((index) => ({ speed: speedValues[index], direction: directionValues[index] }))
     .filter(
@@ -304,7 +303,7 @@ export function summarizeOpenMeteoWeather(
         typeof pair.direction === "number" &&
         Number.isFinite(pair.direction),
     );
-  if (speeds.length === 0 || windPairs.length === 0) {
+  if (windPairs.length === 0) {
     throw new Error("Weather service returned no usable wind data during the race window.");
   }
   const gusts = selectedNumbers(numericArray(hourly.wind_gusts_10m), indices);
@@ -317,6 +316,7 @@ export function summarizeOpenMeteoWeather(
     windPairs.map((pair) => pair.direction),
     windPairs.map((pair) => pair.speed),
   );
+  const pairedSpeeds = windPairs.map((pair) => pair.speed);
   if (direction === null) throw new Error("Weather service wind direction was indeterminate.");
 
   return {
@@ -329,8 +329,8 @@ export function summarizeOpenMeteoWeather(
     windowEnd: end.toISOString(),
     fetchedAt: fetchedAt.toISOString(),
     sampleCount: indices.length,
-    windMinKts: round(Math.min(...speeds)),
-    windMaxKts: round(Math.max(...speeds)),
+    windMinKts: round(Math.min(...pairedSpeeds)),
+    windMaxKts: round(Math.max(...pairedSpeeds)),
     windDirectionDeg: Math.round(direction) % 360,
     gustMaxKts: gusts.length ? round(Math.max(...gusts)) : null,
     temperatureMinC: temperatures.length ? round(Math.min(...temperatures)) : null,

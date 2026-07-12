@@ -118,4 +118,25 @@ describe("Open-Meteo weather evidence", () => {
     expect(evidence.gustMaxKts).toBeNull();
     expect(Number.isFinite(evidence.windMinKts)).toBe(true);
   });
+
+  it("uses the same paired samples for wind range and direction", () => {
+    const evidence = summarizeOpenMeteoWeather(
+      {
+        hourly: {
+          time: ["2026-07-07T22:00", "2026-07-07T23:00"],
+          wind_speed_10m: [10, 30],
+          wind_direction_10m: [270],
+        },
+      },
+      location,
+      new Date("2026-07-07T22:00:00Z"),
+      new Date("2026-07-07T23:00:00Z"),
+      "historical-forecast",
+      "https://weather.example/atmosphere",
+    );
+
+    expect(evidence.windMinKts).toBe(10);
+    expect(evidence.windMaxKts).toBe(10);
+    expect(evidence.windDirectionDeg).toBe(270);
+  });
 });
