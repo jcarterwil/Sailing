@@ -1,5 +1,11 @@
 import { aggregateEntry, aggregateFleet } from "@/lib/analytics/aggregates";
-import { columnLength, epochAt, finite, hasMismatchedColumns } from "@/lib/analytics/internal";
+import {
+  columnLength,
+  compactInvalidTimeRows,
+  epochAt,
+  finite,
+  hasMismatchedColumns,
+} from "@/lib/analytics/internal";
 import { detectManeuvers } from "@/lib/analytics/maneuvers";
 import { buildRaceStructure, detectRaceWindow } from "@/lib/analytics/race";
 import type {
@@ -39,12 +45,14 @@ function trackQuality(track: ProcessedTrack): number[] {
     if (finite(track.cog[i]) && finite(track.sog[i])) validSailingRows++;
   }
   return [
-    length,
     track.extras?.timerEvents.length ?? 0,
     track.extras?.windSamples.length ?? 0,
     track.extras?.linePings.length ?? 0,
+    length > 0 ? validPositions / length : 0,
+    length > 0 ? validSailingRows / length : 0,
     validPositions,
     validSailingRows,
+    length,
     -track.warnings.length,
   ];
 }
@@ -111,15 +119,25 @@ export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
   const warnings: AnalysisWarning[] = [];
   validateTracks(ordered, warnings);
 
-  const fleetTracks = [...ordered.reduce((byEntry, track) => {
+  const fleetSourceTracks = [...ordered.reduce((byEntry, track) => {
     const current = byEntry.get(track.entryId);
     if (!current || preferTrack(track, current, canonicalTracks)) byEntry.set(track.entryId, track);
     return byEntry;
   }, new Map<string, ProcessedTrack>()).values()];
+  const compactedTracks = new Map<ProcessedTrack, ProcessedTrack>();
+  const compact = (track: ProcessedTrack) => {
+    const current = compactedTracks.get(track);
+    if (current) return current;
+    const result = compactInvalidTimeRows(track);
+    compactedTracks.set(track, result);
+    return result;
+  };
+  const fleetTracks = fleetSourceTracks.map(compact);
   const window = detectRaceWindow(fleetTracks, warnings);
   const wind = analyzeWind(fleetTracks, window.start.timeMs, window.finish.timeMs, warnings);
   const race = buildRaceStructure(fleetTracks, window, wind, warnings);
-  const analyzed = ordered.map((track) => {
+  const analyzed = ordered.map((sourceTrack) => {
+    const track = compact(sourceTrack);
     const maneuvers = detectManeuvers(
       track,
       wind,
@@ -137,13 +155,14 @@ export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
         race.finish.timeMs,
       ),
     };
-    return { track, analysis };
+    return { sourceTrack, analysis };
   });
   const perEntry = analyzed.map(({ analysis }) => analysis);
-  const fleetTrackSet = new Set(fleetTracks);
-  const fleetEntries = analyzed
-    .filter(({ track }) => fleetTrackSet.has(track))
-    .map(({ analysis }) => analysis);
+  const analysisBySourceTrack = new Map<ProcessedTrack, EntryAnalysis>();
+  for (const { sourceTrack, analysis } of analyzed) {
+    if (!analysisBySourceTrack.has(sourceTrack)) analysisBySourceTrack.set(sourceTrack, analysis);
+  }
+  const fleetEntries = fleetSourceTracks.map((track) => analysisBySourceTrack.get(track)!);
 
   return {
     v: 1,

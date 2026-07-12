@@ -84,6 +84,7 @@ export type AnalysisWarningCode =
   | "finish-inferred-from-tracks"
   | "wind-unavailable"
   | "wind-speed-unavailable"
+  | "wind-direction-ambiguous"
   | "sensor-wind-unusable"
   | "race-window-unavailable"
   | "leg-structure-limited";

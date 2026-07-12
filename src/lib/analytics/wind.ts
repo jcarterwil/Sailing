@@ -287,6 +287,11 @@ export function analyzeWind(
       message: "Fleet headings estimate true-wind direction but cannot reliably estimate true-wind speed.",
       entryId: null,
     });
+    warnings.push({
+      code: "wind-direction-ambiguous",
+      message: "Fleet heading modes assume the opening analysis window is upwind; without sensor wind, the opposite direction remains possible.",
+      entryId: null,
+    });
     return {
       source: "estimated",
       twdDeg: round(estimated.twdDeg, 2),
@@ -295,7 +300,7 @@ export function analyzeWind(
       provenance: {
         source: "estimated",
         method: "fleet-heading-modes",
-        confidence: estimated.confidence,
+        confidence: estimated.confidence === "high" ? "medium" : estimated.confidence,
         sensorEntryIds: [],
         sensorSampleCount: 0,
         estimatedHeadingSampleCount: estimated.sampleCount,

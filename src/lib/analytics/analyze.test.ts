@@ -289,6 +289,66 @@ describe("analyzeRace", () => {
     expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
     expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(241);
   });
+
+  it("treats persisted null timestamp offsets as invalid rows", () => {
+    const track = syntheticTrack("persisted", new Array(180).fill(240), { t0: START });
+    (track.t as unknown[])[50] = null;
+
+    const analysis = analyzeRace([track]);
+    expect(analysis.perEntry[0].aggregates.pointCount).toBe(179);
+    expect(analysis.warnings).toContainEqual(expect.objectContaining({
+      code: "invalid-track-points",
+      entryId: "persisted",
+    }));
+    expect(JSON.parse(JSON.stringify(analysis))).toEqual(analysis);
+  });
+
+  it("counts the selected fleet track once when the same object is repeated", () => {
+    const track = syntheticTrack("repeated", new Array(180).fill(240), { t0: START });
+    const analysis = analyzeRace([track, track]);
+
+    expect(analysis.perEntry).toHaveLength(2);
+    expect(analysis.fleet.entryCount).toBe(1);
+    expect(analysis.fleet.pointCount).toBe(analysis.perEntry[0].aggregates.pointCount);
+  });
+
+  it("prefers a usable corrected duplicate over a longer damaged upload", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const corrected = syntheticTrack("port", new Array(661).fill(238), {
+      extras: extras(timerEvents),
+    });
+    const damaged = syntheticTrack("port", new Array(700).fill(100));
+    for (let i = 0; i < 500; i++) damaged.t[i] = NaN;
+    const starboard = syntheticTrack("starboard", new Array(661).fill(328), {
+      extras: extras(timerEvents),
+    });
+
+    const analysis = analyzeRace([damaged, corrected, starboard]);
+    expect(analysis.race.start.timeMs).toBe(START);
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
+    expect(analysis.fleet.pointCount).toBe(1_202);
+  });
+
+  it("marks heading-mode wind polarity as ambiguous", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const portGybe = syntheticTrack("port-gybe", new Array(661).fill(58), {
+      extras: extras(timerEvents),
+    });
+    const starboardGybe = syntheticTrack("starboard-gybe", new Array(661).fill(148), {
+      extras: extras(timerEvents),
+    });
+
+    const analysis = analyzeRace([portGybe, starboardGybe]);
+    expect(analysis.wind.source).toBe("estimated");
+    expect(analysis.wind.provenance.confidence).not.toBe("high");
+    expect(analysis.warnings.map((warning) => warning.code)).toContain("wind-direction-ambiguous");
+  });
 });
 
 describe("detectManeuvers", () => {

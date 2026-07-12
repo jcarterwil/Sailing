@@ -33,7 +33,28 @@ export function hasMismatchedColumns(track: ProcessedTrack): boolean {
 }
 
 export function epochAt(track: ProcessedTrack, index: number): number {
-  return track.t0 + track.t[index];
+  const offset = track.t[index];
+  return finite(track.t0) && finite(offset) ? track.t0 + offset : NaN;
+}
+
+export function compactInvalidTimeRows(track: ProcessedTrack): ProcessedTrack {
+  const length = columnLength(track);
+  const indices: number[] = [];
+  for (let i = 0; i < length; i++) {
+    if (finite(epochAt(track, i))) indices.push(i);
+  }
+  if (indices.length === length) return track;
+  return {
+    ...track,
+    t: indices.map((index) => track.t[index]),
+    lat: indices.map((index) => track.lat[index]),
+    lon: indices.map((index) => track.lon[index]),
+    sog: indices.map((index) => track.sog[index]),
+    cog: indices.map((index) => track.cog[index]),
+    hdg: indices.map((index) => track.hdg[index]),
+    heel: indices.map((index) => track.heel[index]),
+    trim: indices.map((index) => track.trim[index]),
+  };
 }
 
 export function lowerBoundEpoch(track: ProcessedTrack, epochMs: number, length = columnLength(track)): number {
