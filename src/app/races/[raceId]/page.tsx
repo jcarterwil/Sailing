@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, PlayCircle, Waves } from "lucide-react";
 
 import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
+import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export default async function RaceManagePage({
     { data: entries, error: entriesError },
     { data: canOrganize, error: organizerError },
     { data: boatMemberships, error: membershipsError },
+    { data: analysisRow },
   ] = await Promise.all([
       supabase
         .from("race_entries")
@@ -62,6 +64,11 @@ export default async function RaceManagePage({
         .from("boat_memberships")
         .select("boat_id, role")
         .eq("user_id", user.id),
+      supabase
+        .from("race_analyses")
+        .select("computed_at")
+        .eq("race_id", raceId)
+        .maybeSingle(),
     ]);
   if (entriesError) {
     throw new Error(`Could not load race entries: ${entriesError.message}`);
@@ -177,12 +184,22 @@ export default async function RaceManagePage({
               </div>
             )}
           </div>
-          <Button asChild disabled={processedCount === 0}>
-            <Link href={`/races/${race.id}/replay`}>
-              <PlayCircle className="size-4" aria-hidden="true" />
-              Open replay
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canManageRace && (
+              <ReanalyzeButton
+                raceId={race.id}
+                processedCount={processedCount}
+                entryCount={panelEntries.length}
+                lastComputedAt={analysisRow?.computed_at ?? null}
+              />
+            )}
+            <Button asChild disabled={processedCount === 0}>
+              <Link href={`/races/${race.id}/replay`}>
+                <PlayCircle className="size-4" aria-hidden="true" />
+                Open replay
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
