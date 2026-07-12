@@ -290,8 +290,10 @@ export function MapView({
       map.getCanvas().style.cursor = "";
     });
     // User pan/rotate/pitch breaks follow/chase; skip the north-reset ease so
-    // it doesn't fight the gesture. jumpTo/easeTo never fire these events.
-    const breakFollowCamera = () => {
+    // it doesn't fight the gesture. jumpTo also fires rotatestart/pitchstart
+    // when bearing/pitch change — those lack originalEvent, so ignore them.
+    const breakFollowCamera = (e: maplibregl.MapLibreEvent) => {
+      if (!e.originalEvent) return;
       if (usePlaybackStore.getState().cameraMode === "north") return;
       skipResetEaseRef.current = true;
       usePlaybackStore.getState().setCameraMode("north");
