@@ -39,7 +39,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   rangeSel: null,
   selectedEntryId: null,
   cameraMode: "north",
-  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0 }),
+  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0, cameraMode: "north" }),
   seek: (timeMs) => {
     const { t0, t1 } = get();
     set({ timeMs: Math.min(t1, Math.max(t0, timeMs)) });

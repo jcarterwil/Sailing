@@ -289,13 +289,16 @@ export function MapView({
     map.on("mouseleave", "boats", () => {
       map.getCanvas().style.cursor = "";
     });
-    // User pan/rotate breaks follow/chase; skip the north-reset ease so it
-    // doesn't fight the gesture. jumpTo never fires dragstart.
-    map.on("dragstart", () => {
+    // User pan/rotate/pitch breaks follow/chase; skip the north-reset ease so
+    // it doesn't fight the gesture. jumpTo/easeTo never fire these events.
+    const breakFollowCamera = () => {
       if (usePlaybackStore.getState().cameraMode === "north") return;
       skipResetEaseRef.current = true;
       usePlaybackStore.getState().setCameraMode("north");
-    });
+    };
+    map.on("dragstart", breakFollowCamera);
+    map.on("rotatestart", breakFollowCamera);
+    map.on("pitchstart", breakFollowCamera);
 
     return () => {
       readyRef.current = false;
@@ -367,7 +370,9 @@ export function MapView({
           const s = sampleAt(track, timeMs);
           const center: [number, number] = [s.lon, s.lat];
           if (cameraMode === "follow") {
-            map.jumpTo({ center });
+            // North-up follow: lock center only, keep bearing/pitch flat so a
+            // prior chase session cannot leave the camera tilted/rotated.
+            map.jumpTo({ center, bearing: 0, pitch: 0 });
           } else {
             let target = Number.NaN;
             if (!Number.isNaN(s.hdgDeg)) target = s.hdgDeg;
