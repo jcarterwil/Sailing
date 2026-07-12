@@ -1,13 +1,23 @@
 import Link from "next/link";
 import { ArrowRight, BarChart3, ShieldCheck, Waves } from "lucide-react";
 
+import { AuthHashRedirect } from "@/app/auth-hash-redirect";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-8 sm:px-10 lg:px-12">
+      <AuthHashRedirect />
       <nav className="flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
@@ -16,7 +26,9 @@ export default function Home() {
           Sailing
         </Link>
         <Button asChild variant="outline">
-          <Link href="/login">Racer sign in</Link>
+          <Link href={user ? "/dashboard" : "/login"}>
+            {user ? "Open dashboard" : "Racer sign in"}
+          </Link>
         </Button>
       </nav>
 
@@ -34,8 +46,8 @@ export default function Home() {
           </p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">
-              <Link href="/login">
-                Access the racer app
+              <Link href={user ? "/dashboard" : "/login"}>
+                {user ? "Open your dashboard" : "Access the racer app"}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </Link>
             </Button>

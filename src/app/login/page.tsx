@@ -1,13 +1,25 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Waves } from "lucide-react";
 
 import { LoginForm } from "@/app/login/login-form";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Sign in",
 };
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="grid min-h-screen place-items-center px-6 py-12">
       <div className="w-full max-w-md space-y-7">
