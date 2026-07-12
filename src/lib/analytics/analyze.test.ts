@@ -176,6 +176,23 @@ describe("analyzeRace", () => {
       entryId: "short-column",
     }));
   });
+
+  it("does not double-weight duplicate entry IDs in fleet wind", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const port = syntheticTrack("port", new Array(661).fill(238), { extras: extras(timerEvents) });
+    const duplicateNoise = syntheticTrack("port", new Array(500).fill(100), { extras: extras(timerEvents) });
+    const starboard = syntheticTrack("starboard", new Array(661).fill(328), {
+      extras: extras(timerEvents),
+    });
+
+    const analysis = analyzeRace([port, duplicateNoise, starboard]);
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
+    expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(242);
+    expect(analysis.warnings.map((warning) => warning.code)).toContain("duplicate-entry-id");
+  });
 });
 
 describe("detectManeuvers", () => {
@@ -235,5 +252,13 @@ describe("detectManeuvers", () => {
     expect(gybes).toHaveLength(1);
     expect(gybes[0].type).toBe("gybe");
     expect(gybes[0].turnAngleDeg).toBeGreaterThan(30);
+
+    // A turn without a full in-race stable context must not import pre-start data.
+    expect(detectManeuvers(
+      track,
+      wind,
+      START + 63_000,
+      START + 130_000,
+    )).toHaveLength(0);
   });
 });

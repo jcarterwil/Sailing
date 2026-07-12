@@ -113,11 +113,17 @@ function findWindow(
   track: ProcessedTrack,
   candidate: Candidate,
   length: number,
+  minimumMs: number,
+  maximumMs: number,
 ): { startIndex: number; endIndex: number } {
   const halfWindow = MANEUVER_MAX_WINDOW_MS / 2;
-  const first = lowerBoundEpoch(track, candidate.tMs - halfWindow, length);
+  const first = lowerBoundEpoch(track, Math.max(minimumMs, candidate.tMs - halfWindow), length);
   const center = lowerBoundEpoch(track, candidate.tMs, length);
-  const limit = lowerBoundEpoch(track, candidate.tMs + halfWindow, length);
+  const maximumWindowMs = Math.min(maximumMs, candidate.tMs + halfWindow);
+  const upper = lowerBoundEpoch(track, maximumWindowMs, length);
+  const limit = upper < length && epochAt(track, upper) === maximumWindowMs
+    ? upper
+    : Math.max(0, upper - 1);
   let startIndex = Math.max(0, first);
   let endIndex = Math.min(length - 1, limit);
 
@@ -133,8 +139,19 @@ function findWindow(
     }
   }
   if (endIndex <= startIndex) {
-    startIndex = Math.max(0, lowerBoundEpoch(track, candidate.tMs - MANEUVER_CONTEXT_MS / 2, length));
-    endIndex = Math.min(length - 1, lowerBoundEpoch(track, candidate.tMs + MANEUVER_CONTEXT_MS / 2, length));
+    startIndex = Math.max(0, lowerBoundEpoch(
+      track,
+      Math.max(minimumMs, candidate.tMs - MANEUVER_CONTEXT_MS / 2),
+      length,
+    ));
+    const fallbackMaximumMs = Math.min(
+      maximumMs,
+      candidate.tMs + MANEUVER_CONTEXT_MS / 2,
+    );
+    const fallbackUpper = lowerBoundEpoch(track, fallbackMaximumMs, length);
+    endIndex = fallbackUpper < length && epochAt(track, fallbackUpper) === fallbackMaximumMs
+      ? fallbackUpper
+      : Math.max(0, fallbackUpper - 1);
   }
   return { startIndex, endIndex };
 }
@@ -183,8 +200,21 @@ function botchedReason(
   return null;
 }
 
-function materialize(track: ProcessedTrack, wind: WindAnalysis, candidate: Candidate, length: number): Maneuver {
-  const { startIndex, endIndex } = findWindow(track, candidate, length);
+function materialize(
+  track: ProcessedTrack,
+  wind: WindAnalysis,
+  candidate: Candidate,
+  length: number,
+  minimumMs: number,
+  maximumMs: number,
+): Maneuver {
+  const { startIndex, endIndex } = findWindow(
+    track,
+    candidate,
+    length,
+    minimumMs,
+    maximumMs,
+  );
   const startMs = Math.round(epochAt(track, startIndex));
   const endMs = Math.round(epochAt(track, endIndex));
   const durationSec = Math.max(0, (endMs - startMs) / 1_000);
@@ -234,8 +264,10 @@ export function detectManeuvers(
   if (length < 5 || wind.twdDeg === null) return [];
   const firstTime = epochAt(track, 0);
   const lastTime = epochAt(track, length - 1);
-  const start = Math.max(firstTime + MANEUVER_CONTEXT_MS, startTimeMs ?? firstTime);
-  const finish = Math.min(lastTime - MANEUVER_CONTEXT_MS, finishTimeMs ?? lastTime);
+  const raceStart = Math.max(firstTime, startTimeMs ?? firstTime);
+  const raceFinish = Math.min(lastTime, finishTimeMs ?? lastTime);
+  const start = raceStart + MANEUVER_CONTEXT_MS;
+  const finish = raceFinish - MANEUVER_CONTEXT_MS;
   if (finish <= start) return [];
 
   const candidates: Candidate[] = [];
@@ -284,5 +316,12 @@ export function detectManeuvers(
       deduped.push(candidate);
     }
   }
-  return deduped.map((candidate) => materialize(track, wind, candidate, length));
+  return deduped.map((candidate) => materialize(
+    track,
+    wind,
+    candidate,
+    length,
+    raceStart,
+    raceFinish,
+  ));
 }
