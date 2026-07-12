@@ -243,6 +243,52 @@ describe("analyzeRace", () => {
     expect(analysis.fleet.entryCount).toBe(2);
     expect(analyzeRace([corrected, starboard, incomplete])).toEqual(analysis);
   });
+
+  it("does not retain duplicate ordering state across analysis calls", () => {
+    const first = syntheticTrack("duplicate", new Array(180).fill(100), { t0: START });
+    const second = syntheticTrack("duplicate", new Array(180).fill(200), { t0: START });
+    analyzeRace([first, second]);
+    first.cog.fill(300);
+    second.cog.fill(50);
+
+    const reused = analyzeRace([first, second]);
+    const fresh = analyzeRace(JSON.parse(JSON.stringify([first, second])) as ProcessedTrack[]);
+    expect(reused).toEqual(fresh);
+  });
+
+  it("limits every track to the global first-leg wind window", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 30 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const port = syntheticTrack("port", new Array(1_861).fill(238), { extras: extras(timerEvents) });
+    const starboard = syntheticTrack("starboard", new Array(1_861).fill(328), {
+      extras: extras(timerEvents),
+    });
+    const late = syntheticTrack("late", new Array(600).fill(100), {
+      t0: START + 20 * 60_000 + 1_000,
+    });
+
+    const analysis = analyzeRace([late, port, starboard]);
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
+    expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(482);
+  });
+
+  it("excludes non-finite timestamps from fleet wind samples", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const port = syntheticTrack("port", new Array(661).fill(238), { extras: extras(timerEvents) });
+    const starboard = syntheticTrack("starboard", new Array(661).fill(328), {
+      extras: extras(timerEvents),
+    });
+    port.t[300] = NaN;
+
+    const analysis = analyzeRace([port, starboard]);
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
+    expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(241);
+  });
 });
 
 describe("detectManeuvers", () => {

@@ -10,9 +10,7 @@ import type {
 } from "@/lib/analytics/types";
 import { analyzeWind } from "@/lib/analytics/wind";
 
-const canonicalTracks = new WeakMap<ProcessedTrack, string>();
-
-function canonicalTrack(track: ProcessedTrack): string {
+function canonicalTrack(track: ProcessedTrack, canonicalTracks: Map<ProcessedTrack, string>): string {
   const cached = canonicalTracks.get(track);
   if (cached !== undefined) return cached;
   const canonical = JSON.stringify(track);
@@ -20,11 +18,15 @@ function canonicalTrack(track: ProcessedTrack): string {
   return canonical;
 }
 
-function compareTrackOrder(a: ProcessedTrack, b: ProcessedTrack): number {
+function compareTrackOrder(
+  a: ProcessedTrack,
+  b: ProcessedTrack,
+  canonicalTracks: Map<ProcessedTrack, string>,
+): number {
   if (a.entryId !== b.entryId) return a.entryId < b.entryId ? -1 : 1;
   if (a.t0 !== b.t0) return a.t0 - b.t0;
-  const aCanonical = canonicalTrack(a);
-  const bCanonical = canonicalTrack(b);
+  const aCanonical = canonicalTrack(a, canonicalTracks);
+  const bCanonical = canonicalTrack(b, canonicalTracks);
   return aCanonical < bCanonical ? -1 : aCanonical > bCanonical ? 1 : 0;
 }
 
@@ -47,13 +49,17 @@ function trackQuality(track: ProcessedTrack): number[] {
   ];
 }
 
-function preferTrack(candidate: ProcessedTrack, current: ProcessedTrack): boolean {
+function preferTrack(
+  candidate: ProcessedTrack,
+  current: ProcessedTrack,
+  canonicalTracks: Map<ProcessedTrack, string>,
+): boolean {
   const candidateQuality = trackQuality(candidate);
   const currentQuality = trackQuality(current);
   for (let i = 0; i < candidateQuality.length; i++) {
     if (candidateQuality[i] !== currentQuality[i]) return candidateQuality[i] > currentQuality[i];
   }
-  return canonicalTrack(candidate) > canonicalTrack(current);
+  return canonicalTrack(candidate, canonicalTracks) > canonicalTrack(current, canonicalTracks);
 }
 
 function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWarning[]): void {
@@ -100,13 +106,14 @@ function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWar
 // Deterministic fleet analytics entrypoint. It does not mutate tracks, perform
 // I/O, or depend on wall-clock time, and its result is safe to JSON.stringify.
 export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
-  const ordered = [...tracks].sort(compareTrackOrder);
+  const canonicalTracks = new Map<ProcessedTrack, string>();
+  const ordered = [...tracks].sort((a, b) => compareTrackOrder(a, b, canonicalTracks));
   const warnings: AnalysisWarning[] = [];
   validateTracks(ordered, warnings);
 
   const fleetTracks = [...ordered.reduce((byEntry, track) => {
     const current = byEntry.get(track.entryId);
-    if (!current || preferTrack(track, current)) byEntry.set(track.entryId, track);
+    if (!current || preferTrack(track, current, canonicalTracks)) byEntry.set(track.entryId, track);
     return byEntry;
   }, new Map<string, ProcessedTrack>()).values()];
   const window = detectRaceWindow(fleetTracks, warnings);

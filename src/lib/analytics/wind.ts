@@ -52,20 +52,24 @@ function estimateDirectionFromFleet(
   for (const track of tracks) {
     const length = columnLength(track);
     if (length === 0) continue;
-    const first = epochAt(track, 0);
-    const last = epochAt(track, length - 1);
-    const windowStart = Math.max(first, startTimeMs ?? first);
+    let first = 0;
+    while (first < length && !finite(epochAt(track, first))) first++;
+    if (first === length) continue;
+    const firstTimeMs = epochAt(track, first);
+    const windowStart = Math.max(firstTimeMs, startTimeMs ?? firstTimeMs);
+    const estimationEnd = (startTimeMs ?? windowStart) + WIND_ESTIMATION_WINDOW_MS;
     const windowEnd = Math.min(
-      last,
-      finishTimeMs ?? last,
-      windowStart + WIND_ESTIMATION_WINDOW_MS,
+      finishTimeMs ?? estimationEnd,
+      estimationEnd,
     );
+    if (windowStart > windowEnd) continue;
     const step = sampleStep(track, ANALYSIS_SAMPLE_MS, length);
     for (let i = 0; i < length; i += step) {
       const timeMs = epochAt(track, i);
       const sog = track.sog[i];
       const course = track.cog[i];
       if (
+        !finite(timeMs) ||
         timeMs < windowStart ||
         timeMs > windowEnd ||
         !finite(sog) ||

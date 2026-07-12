@@ -98,6 +98,7 @@ export function nullable(value: number, digits = 3): number | null {
 export function sampleStep(track: ProcessedTrack, sampleMs: number, length = columnLength(track)): number {
   if (length < 2) return 1;
   const duration = track.t[length - 1] - track.t[0];
+  if (!finite(duration) || duration <= 0) return 1;
   const meanInterval = duration / (length - 1);
   return Math.max(1, Math.round(sampleMs / Math.max(1, meanInterval)));
 }
