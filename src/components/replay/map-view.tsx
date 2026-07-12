@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { usePlaybackStore, type TrailMode } from "@/components/replay/playback-store";
+import { usePlaybackStore, type CameraMode, type TrailMode } from "@/components/replay/playback-store";
 import {
   buildSpeedTrackData,
   createFleetSpeedDomain,
@@ -13,6 +13,8 @@ import {
 } from "@/components/replay/speed-track";
 import { indexAt, sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
+import { lerpAngle } from "@/lib/analytics/angles";
+import { MIN_SOG_FOR_COG_KTS } from "@/lib/analytics/constants";
 
 export type MapStyleId = "map" | "satellite";
 
@@ -122,6 +124,11 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const readyRef = useRef(false);
+  const camBearingRef = useRef(0);
+  const lastCamFrameNowRef = useRef(0);
+  const lastCamTimeMsRef = useRef(0);
+  const prevCameraModeRef = useRef<CameraMode>("north");
+  const skipResetEaseRef = useRef(false);
   const trailMode = usePlaybackStore((state) => state.trailMode);
   const speedDomain = useMemo(() => createFleetSpeedDomain(tracks), [tracks]);
   const speedTracks = useMemo(
@@ -154,7 +161,10 @@ export function MapView({
       fitBoundsOptions: { padding: 60 },
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
+      "top-right",
+    );
     mapRef.current = map;
 
     const addLayers = () => {
@@ -279,6 +289,13 @@ export function MapView({
     map.on("mouseleave", "boats", () => {
       map.getCanvas().style.cursor = "";
     });
+    // User pan/rotate breaks follow/chase; skip the north-reset ease so it
+    // doesn't fight the gesture. jumpTo never fires dragstart.
+    map.on("dragstart", () => {
+      if (usePlaybackStore.getState().cameraMode === "north") return;
+      skipResetEaseRef.current = true;
+      usePlaybackStore.getState().setCameraMode("north");
+    });
 
     return () => {
       readyRef.current = false;
@@ -320,11 +337,79 @@ export function MapView({
   // Per-frame imperative updates driven by transient store subscription.
   useEffect(() => {
     let lastTrailUpdate = 0;
-    const update = (timeMs: number, trailMode: TrailMode, selectedEntryId: string | null) => {
+    const update = (
+      timeMs: number,
+      trailMode: TrailMode,
+      selectedEntryId: string | null,
+      cameraMode: CameraMode,
+    ) => {
       const map = mapRef.current;
       if (!map || !readyRef.current) return;
+
+      const prevMode = prevCameraModeRef.current;
+      if (
+        (prevMode === "follow" || prevMode === "chase") &&
+        cameraMode === "north"
+      ) {
+        if (!skipResetEaseRef.current) {
+          map.easeTo({ bearing: 0, pitch: 0, duration: 600 });
+        }
+        skipResetEaseRef.current = false;
+      }
+      prevCameraModeRef.current = cameraMode;
+
       const boats = map.getSource<maplibregl.GeoJSONSource>("boats");
       boats?.setData(boatsGeoJson(tracks, timeMs, selectedEntryId));
+
+      if (cameraMode !== "north" && selectedEntryId) {
+        const track = tracks.find((t) => t.entryId === selectedEntryId);
+        if (track) {
+          const s = sampleAt(track, timeMs);
+          const center: [number, number] = [s.lon, s.lat];
+          if (cameraMode === "follow") {
+            map.jumpTo({ center });
+          } else {
+            let target = Number.NaN;
+            if (!Number.isNaN(s.hdgDeg)) target = s.hdgDeg;
+            else if (
+              !Number.isNaN(s.cogDeg) &&
+              s.sogKts >= MIN_SOG_FOR_COG_KTS
+            ) {
+              target = s.cogDeg;
+            }
+
+            const now = performance.now();
+            const dtSec =
+              lastCamFrameNowRef.current === 0
+                ? 0
+                : Math.min(0.25, (now - lastCamFrameNowRef.current) / 1000);
+            lastCamFrameNowRef.current = now;
+
+            const enteringChase = prevMode !== "chase";
+            const scrubbed =
+              Math.abs(timeMs - lastCamTimeMsRef.current) > 15_000;
+            if (!Number.isNaN(target)) {
+              if (enteringChase || scrubbed) {
+                camBearingRef.current = target;
+              } else if (dtSec > 0) {
+                camBearingRef.current = lerpAngle(
+                  camBearingRef.current,
+                  target,
+                  1 - Math.exp(-dtSec / 2),
+                );
+              }
+            }
+
+            map.jumpTo({
+              center,
+              bearing: camBearingRef.current,
+              pitch: 60,
+            });
+          }
+        }
+      }
+      lastCamTimeMsRef.current = timeMs;
+
       if (trailMode === "speed") return;
       const now = performance.now();
       // Trails are heavier; ~12Hz is visually smooth.
@@ -337,9 +422,9 @@ export function MapView({
       }
     };
     const state = usePlaybackStore.getState();
-    update(state.timeMs, state.trailMode, state.selectedEntryId);
+    update(state.timeMs, state.trailMode, state.selectedEntryId, state.cameraMode);
     const unsub = usePlaybackStore.subscribe((s) =>
-      update(s.timeMs, s.trailMode, s.selectedEntryId),
+      update(s.timeMs, s.trailMode, s.selectedEntryId, s.cameraMode),
     );
     return unsub;
   }, [tracks]);
