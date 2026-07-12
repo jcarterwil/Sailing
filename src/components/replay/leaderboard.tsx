@@ -119,12 +119,19 @@ function useLadderRungs(
     }
 
     let lastUpdate = 0;
+    let lastTimeMs = usePlaybackStore.getState().timeMs;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let pendingTime = usePlaybackStore.getState().timeMs;
+    let pendingTime = lastTimeMs;
 
     const publish = (timeMs: number) => {
       lastUpdate = performance.now();
       timer = null;
+      // Large seeks drop hysteresis / axis memory (same idea as map chase snap).
+      if (Math.abs(timeMs - lastTimeMs) > 15_000) {
+        prevOrderRef.current = [];
+        prevSignRef.current = 1;
+      }
+      lastTimeMs = timeMs;
       const next = computeBoard(
         tracks,
         timeMs,
