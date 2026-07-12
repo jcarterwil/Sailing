@@ -2,7 +2,7 @@
 
 Two user asks drive this: **"tag my boat and see a live leaderboard / info on boats around me"** and **"a 3D POV view with real heel and tack"**. Much of the supporting machinery is already specced or shipped; this roadmap adds only the genuinely new work and sequences it against the existing backlog.
 
-The data is unusually ready for both asks: heel/trim/heading come from onboard quaternions at 2 Hz, are cleaned and persisted, and are already interpolated per frame by `sampleAt` (`src/components/replay/track-index.ts`) — real measured attitude, never yet rendered. And every VKX log carries a fleet-synchronized `race_start` timer event plus the start line the crew actually pinged (pin + committee boat) inside `ProcessedTrack.extras` — persisted today, dropped by the client loader.
+The data is unusually ready for both asks: heel/trim/heading come from onboard quaternions at 2 Hz, are cleaned and persisted, and are already interpolated per frame by `sampleAt` (`src/components/replay/track-index.ts`) — real measured attitude, never yet rendered. And VKX logs can carry a fleet-synchronized `race_start` timer event plus the start line the crew actually pinged (pin + committee boat) inside `ProcessedTrack.extras` — persisted today, dropped by the client loader. Those rows are **optional per log** (empty when a crew didn't run the race timer or ping the line; the golden test guarantees a synchronized `race_start` on only ≥2 of the 5 example logs, and CSV tracks carry no extras at all), so #22 requires empty-state fallbacks: countdown only when a gun exists, a line only when both ends were pinged, wall-clock display otherwise.
 
 ## Already covered — do not re-spec
 
