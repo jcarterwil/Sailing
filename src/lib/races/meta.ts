@@ -99,6 +99,21 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
     "historical-forecast-api.open-meteo.com",
     "archive-api.open-meteo.com",
   ]);
+  const marineSourceValue = weather.marineSourceUrl;
+  if (marineSourceValue !== null && marineSourceValue !== undefined) {
+    let marineSourceUrl: URL;
+    try {
+      marineSourceUrl = new URL(String(marineSourceValue));
+    } catch {
+      return null;
+    }
+    if (
+      marineSourceUrl.protocol !== "https:" ||
+      marineSourceUrl.hostname !== "marine-api.open-meteo.com"
+    ) {
+      return null;
+    }
+  }
   if (
     weather.provider !== "open-meteo" ||
     sourceUrl.protocol !== "https:" ||

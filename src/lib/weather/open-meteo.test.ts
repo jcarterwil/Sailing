@@ -97,4 +97,25 @@ describe("Open-Meteo weather evidence", () => {
       waveDirectionDeg: 0,
     });
   });
+
+  it("ignores truncated optional hourly arrays instead of producing NaN", () => {
+    const evidence = summarizeOpenMeteoWeather(
+      {
+        hourly: {
+          time: ["2026-07-07T22:00", "2026-07-07T23:00"],
+          wind_speed_10m: [10, 12],
+          wind_direction_10m: [270, 280],
+          wind_gusts_10m: [15],
+        },
+      },
+      location,
+      new Date("2026-07-07T22:40:00Z"),
+      new Date("2026-07-07T23:20:00Z"),
+      "historical-forecast",
+      "https://weather.example/atmosphere",
+    );
+
+    expect(evidence.gustMaxKts).toBeNull();
+    expect(Number.isFinite(evidence.windMinKts)).toBe(true);
+  });
 });

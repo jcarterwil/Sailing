@@ -56,7 +56,7 @@ export async function listAvailableAiModels(): Promise<{
         id: model.id,
         displayName: model.display_name,
         createdAt: model.created_at,
-        structuredOutputs: model.capabilities?.structured_outputs.supported ?? null,
+        structuredOutputs: model.capabilities?.structured_outputs?.supported ?? null,
       })),
       warning: null,
     };

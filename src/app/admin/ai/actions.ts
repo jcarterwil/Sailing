@@ -24,7 +24,7 @@ export async function updateAiModel(modelInput: string): Promise<{ warning: stri
   if (apiKey) {
     try {
       const selected = await new Anthropic({ apiKey }).models.retrieve(model);
-      if (selected.capabilities?.structured_outputs.supported === false) {
+      if (selected.capabilities?.structured_outputs?.supported === false) {
         throw new Error("This model does not support structured outputs required by the weather wizard.");
       }
     } catch (error) {
@@ -38,11 +38,14 @@ export async function updateAiModel(modelInput: string): Promise<{ warning: stri
     warning = "Saved without live validation because ANTHROPIC_API_KEY is not configured.";
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("ai_settings")
     .update({ model, updated_at: new Date().toISOString(), updated_by: user.id })
-    .eq("id", true);
+    .eq("id", true)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(`Could not save AI model: ${error.message}`);
+  if (!updated) throw new Error("Could not save AI model: the settings row is missing.");
 
   revalidatePath("/admin/ai");
   return { warning };

@@ -240,7 +240,9 @@ function selectedIndices(times: string[], start: Date, end: Date): number[] {
 }
 
 function selectedNumbers(values: Array<number | null>, indices: number[]): number[] {
-  return indices.map((index) => values[index]).filter((value): value is number => value !== null);
+  return indices
+    .map((index) => values[index])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
 }
 
 function summarizeMarine(
@@ -297,7 +299,10 @@ export function summarizeOpenMeteoWeather(
     .map((index) => ({ speed: speedValues[index], direction: directionValues[index] }))
     .filter(
       (pair): pair is { speed: number; direction: number } =>
-        pair.speed !== null && pair.direction !== null,
+        typeof pair.speed === "number" &&
+        Number.isFinite(pair.speed) &&
+        typeof pair.direction === "number" &&
+        Number.isFinite(pair.direction),
     );
   if (speeds.length === 0 || windPairs.length === 0) {
     throw new Error("Weather service returned no usable wind data during the race window.");

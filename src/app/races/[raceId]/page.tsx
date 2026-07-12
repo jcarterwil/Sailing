@@ -79,28 +79,35 @@ export default async function RaceManagePage({
     };
   });
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
-  const trackStarts = (entries ?? [])
+  const processedEntries = (entries ?? []).filter(
+    (entry) => entry.tracks?.status === "processed",
+  );
+  const trackStarts = processedEntries
     .map((entry) => entry.tracks?.started_at)
     .filter((value): value is string => !!value)
     .map((value) => new Date(value).getTime())
     .filter(Number.isFinite);
-  const trackEnds = (entries ?? [])
+  const trackEnds = processedEntries
     .map((entry) => entry.tracks?.ended_at)
     .filter((value): value is string => !!value)
     .map((value) => new Date(value).getTime())
     .filter(Number.isFinite);
-  const weatherStartMs = race.starts_at
-    ? new Date(race.starts_at).getTime()
-    : trackStarts.length
-      ? Math.min(...trackStarts)
+  const weatherStartMs = trackStarts.length
+    ? Math.min(...trackStarts)
+    : race.starts_at
+      ? new Date(race.starts_at).getTime()
       : new Date(race.created_at).getTime();
   const candidateEndMs = trackEnds.length
     ? Math.max(...trackEnds)
     : weatherStartMs + 2 * 60 * 60 * 1000;
-  const weatherEndMs =
+  const uncappedWeatherEndMs =
     candidateEndMs > weatherStartMs
       ? candidateEndMs
       : weatherStartMs + 2 * 60 * 60 * 1000;
+  const weatherEndMs = Math.min(
+    uncappedWeatherEndMs,
+    weatherStartMs + 24 * 60 * 60 * 1000,
+  );
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-8 sm:px-10 lg:px-12">

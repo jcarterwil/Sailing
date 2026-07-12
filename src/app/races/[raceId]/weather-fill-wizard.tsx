@@ -98,6 +98,11 @@ export function WeatherFillWizard({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setLocation(defaultLocation);
+          setStartsAt(toLocalInputValue(defaultStartsAt));
+          setEndsAt(toLocalInputValue(defaultEndsAt));
+        }
         setOpen(nextOpen);
         if (!nextOpen) {
           setError(null);

@@ -67,6 +67,22 @@ describe("race metadata normalization", () => {
     expect(normalizeConditions({ windMinKts: 8, source })?.source).toMatchObject(source);
   });
 
+  it("rejects non-Open-Meteo marine provenance", () => {
+    const source = {
+      evidence: {
+        provider: "open-meteo",
+        sourceUrl: "https://api.open-meteo.com/example",
+        marineSourceUrl: "https://malicious.example/weather",
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirectionDeg: 280,
+      },
+      ai: null,
+      seaStateBasis: "Untrusted",
+    };
+    expect(normalizeConditions({ windMinKts: 8, source })?.source).toBeNull();
+  });
+
   it("builds the analyze context payload", () => {
     const ctx = buildRaceAnalyzeContext(
       { conditions: { windMinKts: 10, windMaxKts: 14, windDirDeg: 270, seaState: null, notes: null }, tags: ["buoy"] },
