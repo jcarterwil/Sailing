@@ -113,7 +113,11 @@ export async function POST(
       })
       .eq("id", trackId);
 
-    // When the whole fleet is processed, run fleet analysis (shared helper — not a self-fetch).
+    // Any newly processed track invalidates prior fleet analysis. Drop it first so
+    // replay never serves wind/maneuvers computed against an older track set;
+    // then rebuild when the whole fleet is ready.
+    await admin.from("race_analyses").delete().eq("race_id", entry.race_id);
+
     let analyzed: { computedAt: string; trackCount: number } | null = null;
     try {
       if (await raceHasAllTracksProcessed(entry.race_id)) {
@@ -122,6 +126,7 @@ export async function POST(
       }
     } catch (analyzeErr) {
       // Processing succeeded; analysis can be retried from the race page.
+      // race_analyses stays empty after the delete above — no stale row.
       console.error("Auto-analyze after process failed:", analyzeErr);
     }
 
