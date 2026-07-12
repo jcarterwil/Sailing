@@ -44,7 +44,73 @@ describe("race metadata normalization", () => {
       windDirDeg: 280,
       seaState: "chop",
       notes: null,
+      source: null,
     });
+  });
+
+  it("preserves validated weather provenance", () => {
+    const source = {
+      evidence: {
+        provider: "open-meteo",
+        sourceUrl: "https://api.open-meteo.com/example",
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirectionDeg: 280,
+      },
+      ai: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        generatedAt: "2026-07-12T12:00:00Z",
+      },
+      seaStateBasis: "Model wave height.",
+    };
+    expect(
+      normalizeConditions({
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirDeg: 280,
+        source,
+      })?.source,
+    ).toMatchObject(source);
+  });
+
+  it("rejects non-Open-Meteo marine provenance", () => {
+    const source = {
+      evidence: {
+        provider: "open-meteo",
+        sourceUrl: "https://api.open-meteo.com/example",
+        marineSourceUrl: "https://malicious.example/weather",
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirectionDeg: 280,
+      },
+      ai: null,
+      seaStateBasis: "Untrusted",
+    };
+    expect(normalizeConditions({ windMinKts: 8, source })?.source).toBeNull();
+  });
+
+  it("drops provenance when displayed wind fields do not match its evidence", () => {
+    const source = {
+      evidence: {
+        provider: "open-meteo",
+        sourceUrl: "https://api.open-meteo.com/example",
+        marineSourceUrl: null,
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirectionDeg: 280,
+      },
+      ai: null,
+      seaStateBasis: "Model evidence.",
+    };
+    expect(
+      normalizeConditions({
+        windMinKts: 9,
+        windMaxKts: 12,
+        windDirDeg: 280,
+        source,
+      })?.source,
+    ).toBeNull();
   });
 
   it("builds the analyze context payload", () => {

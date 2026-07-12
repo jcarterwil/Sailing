@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/supabase/database.types";
+import type { WeatherEvidence } from "@/lib/weather/open-meteo";
 
 /** One crew member on a race entry. */
 export interface CrewMember {
@@ -7,12 +8,19 @@ export interface CrewMember {
 }
 
 /** Race-day conditions attached to a race. */
+export interface RaceConditionsSource {
+  evidence: WeatherEvidence;
+  ai: { provider: "anthropic"; model: string; generatedAt: string } | null;
+  seaStateBasis: string;
+}
+
 export interface RaceConditions {
   windMinKts: number | null;
   windMaxKts: number | null;
   windDirDeg: number | null;
   seaState: string | null;
   notes: string | null;
+  source?: RaceConditionsSource | null;
 }
 
 export interface EntryMeta {
@@ -74,6 +82,72 @@ function optionalNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeConditionsSource(value: unknown): RaceConditionsSource | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const evidence = record.evidence;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return null;
+  const weather = evidence as Record<string, unknown>;
+  let sourceUrl: URL;
+  try {
+    sourceUrl = new URL(String(weather.sourceUrl ?? ""));
+  } catch {
+    return null;
+  }
+  const allowedWeatherHosts = new Set([
+    "api.open-meteo.com",
+    "historical-forecast-api.open-meteo.com",
+    "archive-api.open-meteo.com",
+  ]);
+  const marineSourceValue = weather.marineSourceUrl;
+  if (marineSourceValue !== null && marineSourceValue !== undefined) {
+    let marineSourceUrl: URL;
+    try {
+      marineSourceUrl = new URL(String(marineSourceValue));
+    } catch {
+      return null;
+    }
+    if (
+      marineSourceUrl.protocol !== "https:" ||
+      marineSourceUrl.hostname !== "marine-api.open-meteo.com"
+    ) {
+      return null;
+    }
+  }
+  if (
+    weather.provider !== "open-meteo" ||
+    sourceUrl.protocol !== "https:" ||
+    !allowedWeatherHosts.has(sourceUrl.hostname) ||
+    typeof weather.windMinKts !== "number" ||
+    !Number.isFinite(weather.windMinKts) ||
+    typeof weather.windMaxKts !== "number" ||
+    !Number.isFinite(weather.windMaxKts) ||
+    typeof weather.windDirectionDeg !== "number" ||
+    !Number.isFinite(weather.windDirectionDeg)
+  ) {
+    return null;
+  }
+  const aiValue = record.ai;
+  const ai =
+    aiValue &&
+    typeof aiValue === "object" &&
+    !Array.isArray(aiValue) &&
+    (aiValue as Record<string, unknown>).provider === "anthropic" &&
+    typeof (aiValue as Record<string, unknown>).model === "string" &&
+    (aiValue as Record<string, unknown>).model !== "" &&
+    String((aiValue as Record<string, unknown>).model).length <= 120 &&
+    typeof (aiValue as Record<string, unknown>).generatedAt === "string" &&
+    Number.isFinite(Date.parse(String((aiValue as Record<string, unknown>).generatedAt)))
+      ? (aiValue as RaceConditionsSource["ai"])
+      : null;
+  const seaStateBasis = String(record.seaStateBasis ?? "").trim().slice(0, 300);
+  return {
+    evidence: evidence as unknown as WeatherEvidence,
+    ai,
+    seaStateBasis,
+  };
+}
+
 export function normalizeConditions(input: unknown): RaceConditions | null {
   if (input === null || input === undefined) return null;
   if (typeof input !== "object" || Array.isArray(input)) return null;
@@ -84,13 +158,27 @@ export function normalizeConditions(input: unknown): RaceConditions | null {
     windDirDeg: optionalNumber(record.windDirDeg),
     seaState: String(record.seaState ?? "").trim() || null,
     notes: String(record.notes ?? "").trim() || null,
+    source: normalizeConditionsSource(record.source),
   };
+  if (conditions.source) {
+    const evidence = conditions.source.evidence;
+    const provenanceMatches =
+      conditions.windMinKts !== null &&
+      conditions.windMaxKts !== null &&
+      conditions.windDirDeg !== null &&
+      Math.abs(conditions.windMinKts - evidence.windMinKts) < 1e-9 &&
+      Math.abs(conditions.windMaxKts - evidence.windMaxKts) < 1e-9 &&
+      Math.abs((((conditions.windDirDeg - evidence.windDirectionDeg) % 360) + 540) % 360 - 180) <
+        1e-9;
+    if (!provenanceMatches) conditions.source = null;
+  }
   const empty =
     conditions.windMinKts === null &&
     conditions.windMaxKts === null &&
     conditions.windDirDeg === null &&
     !conditions.seaState &&
-    !conditions.notes;
+    !conditions.notes &&
+    !conditions.source;
   return empty ? null : conditions;
 }
 
@@ -120,6 +208,7 @@ export function conditionsToJson(conditions: RaceConditions | null): Json | null
     windDirDeg: conditions.windDirDeg,
     seaState: conditions.seaState,
     notes: conditions.notes,
+    source: conditions.source ? (conditions.source as unknown as Json) : null,
   };
 }
 
