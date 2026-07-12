@@ -199,6 +199,8 @@ describe("analyzeRace", () => {
     expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(242);
     expect(analysis.warnings.map((warning) => warning.code)).toContain("duplicate-entry-id");
     expect(analysis.race.legs.every((leg) => leg.type === "upwind")).toBe(true);
+    expect(analysis.fleet.entryCount).toBe(2);
+    expect(analysis.fleet.pointCount).toBe(1_202);
   });
 });
 
