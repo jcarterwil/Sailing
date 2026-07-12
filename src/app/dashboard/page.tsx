@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Bot, CalendarDays, Sailboat, Ticket, UserPlus, Waves } from "lucide-react";
+import { Bot, CalendarDays, Sailboat, Ticket, UserPlus, Users, Waves } from "lucide-react";
 
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
 import { CreateRaceDialog } from "@/app/races/create-race-dialog";
@@ -25,13 +25,18 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [{ data: profile }, { data: races }, { data: boats }] = await Promise.all([
+  const [{ data: profile }, { data: races }, { data: boats }, { data: crewAccess }] =
+    await Promise.all([
     supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
     supabase
       .from("races")
       .select("id, name, venue, starts_at, created_at, organizer_id, race_entries(count)")
       .order("created_at", { ascending: false }),
     supabase.from("boats").select("id, name, sail_number").eq("owner_id", user.id),
+    supabase
+      .from("boat_memberships")
+      .select("role, boats(id, name, sail_number)")
+      .eq("user_id", user.id),
   ]);
   const isAdmin = profile?.is_admin ?? false;
 
@@ -73,6 +78,12 @@ export default async function DashboardPage() {
                   <Link href="/admin/ai">
                     <Bot className="size-4" aria-hidden="true" />
                     AI settings
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/admin/users">
+                    <Users className="size-4" aria-hidden="true" />
+                    Manage users
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
@@ -144,10 +155,13 @@ export default async function DashboardPage() {
           <ul className="mt-4 grid gap-2 text-sm md:grid-cols-3">
             {boats.map((boat) => (
               <li key={boat.id} className="rounded-lg border border-border/70 bg-card/70 px-4 py-3">
-                <span className="font-medium">{boat.name}</span>
+                <Link href={`/boats/${boat.id}/crew`} className="font-medium hover:text-primary">
+                  {boat.name}
+                </Link>
                 {boat.sail_number && (
                   <span className="ml-2 text-muted-foreground">#{boat.sail_number}</span>
                 )}
+                <p className="mt-1 text-xs text-muted-foreground">Owner · manage crew</p>
               </li>
             ))}
           </ul>
@@ -157,6 +171,29 @@ export default async function DashboardPage() {
           </p>
         )}
       </section>
+
+      {(crewAccess ?? []).length > 0 && (
+        <section className="border-t border-border/70 py-8">
+          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <Users className="size-5 text-primary" aria-hidden="true" />
+            Crew access
+          </h2>
+          <ul className="mt-4 grid gap-2 text-sm md:grid-cols-3">
+            {(crewAccess ?? []).map((access) => (
+              <li
+                key={access.boats.id}
+                className="rounded-lg border border-border/70 bg-card/70 px-4 py-3"
+              >
+                <span className="font-medium">{access.boats.name}</span>
+                {access.boats.sail_number && (
+                  <span className="ml-2 text-muted-foreground">#{access.boats.sail_number}</span>
+                )}
+                <p className="mt-1 text-xs capitalize text-muted-foreground">{access.role}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

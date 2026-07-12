@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Copy, Mail, Plus, RefreshCw, Trash2, UserCheck } from "lucide-react";
 
@@ -415,6 +416,9 @@ export function BoatsList({ rows }: { rows: BoatRow[] }) {
             <Badge variant="outline">unclaimed</Badge>
           )}
           {row.claimCode && !row.ownerId && <CopyButton value={row.claimCode} label="Copy claim code" />}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/boats/${row.id}/crew`}>Crew</Link>
+          </Button>
           <EditBoatDialog row={row} />
         </li>
       ))}
