@@ -42,6 +42,14 @@ export function RaceReplay({
           if (last > t1) t1 = last;
         }
         usePlaybackStore.getState().setBounds(t0, t1);
+
+        // Default selection: the user's own boat; else their single added entry;
+        // an organizer who added the whole fleet matches many, so don't guess.
+        const owned = loaded.find((t) => t.ownedByMe);
+        const addedByMe = loaded.filter((t) => t.addedByMe);
+        const defaultSelection = owned?.entryId ?? (addedByMe.length === 1 ? addedByMe[0].entryId : null);
+        usePlaybackStore.getState().setSelectedEntryId(defaultSelection ?? null);
+
         setTracks(loaded);
       })
       .catch((err) => {
@@ -95,7 +103,7 @@ export function RaceReplay({
         </div>
         <PanelTabs tracks={tracks} />
       </div>
-      <div className="border-t border-border/70 bg-background/95 px-4 py-3">
+      <div className="border-t border-border/70 bg-background/95 px-2 py-2 sm:px-4 sm:py-3">
         <div className="flex items-center justify-between gap-4">
           <PlaybackControls
             tzOffsetMinutes={tracks[0]?.tzOffsetMinutes ?? null}
@@ -104,7 +112,7 @@ export function RaceReplay({
           />
           <span className="hidden text-sm text-muted-foreground lg:inline">{raceName}</span>
         </div>
-        <div className="mt-3">
+        <div className="-mx-2 mt-2 sm:mx-0 sm:mt-3">
           <Timeline tracks={tracks} />
         </div>
       </div>

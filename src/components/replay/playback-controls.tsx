@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, X } from "lucide-react";
 
-import { usePlaybackStore, type TrailMode } from "@/components/replay/playback-store";
+import {
+  usePlaybackStore,
+  type CameraMode,
+  type TrailMode,
+} from "@/components/replay/playback-store";
 import type { MapStyleId } from "@/components/replay/map-view";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,10 +37,14 @@ export function PlaybackControls({
   const speed = usePlaybackStore((s) => s.speed);
   const trailMode = usePlaybackStore((s) => s.trailMode);
   const rangeSel = usePlaybackStore((s) => s.rangeSel);
+  const selectedEntryId = usePlaybackStore((s) => s.selectedEntryId);
+  const cameraMode = usePlaybackStore((s) => s.cameraMode);
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const setSpeed = usePlaybackStore((s) => s.setSpeed);
   const setTrailMode = usePlaybackStore((s) => s.setTrailMode);
   const setRange = usePlaybackStore((s) => s.setRange);
+  const setCameraMode = usePlaybackStore((s) => s.setCameraMode);
+  const hasSelection = selectedEntryId !== null;
 
   // Clock display at ~10Hz, not per frame.
   const [clock, setClock] = useState(() =>
@@ -54,7 +62,7 @@ export function PlaybackControls({
   }, [tzOffsetMinutes]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
       <Button
         size="icon"
         onClick={() => setPlaying(!playing)}
@@ -66,7 +74,7 @@ export function PlaybackControls({
       <span className="min-w-24 font-mono text-sm tabular-nums">{clock}</span>
 
       <Select value={String(speed)} onValueChange={(v) => setSpeed(Number(v))}>
-        <SelectTrigger className="w-24" aria-label="Playback speed">
+        <SelectTrigger className="w-20 sm:w-24" aria-label="Playback speed">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -79,7 +87,7 @@ export function PlaybackControls({
       </Select>
 
       <Select value={trailMode} onValueChange={(v) => setTrailMode(v as TrailMode)}>
-        <SelectTrigger className="w-28" aria-label="Trail mode">
+        <SelectTrigger className="w-24 sm:w-28" aria-label="Trail mode">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -90,12 +98,30 @@ export function PlaybackControls({
       </Select>
 
       <Select value={styleId} onValueChange={(v) => onStyleChange(v as MapStyleId)}>
-        <SelectTrigger className="w-28" aria-label="Map style">
+        <SelectTrigger className="w-24 sm:w-28" aria-label="Map style">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="map">Map</SelectItem>
           <SelectItem value="satellite">Satellite</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={cameraMode}
+        onValueChange={(v) => setCameraMode(v as CameraMode)}
+      >
+        <SelectTrigger className="w-28" aria-label="Camera mode">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="north">North-up</SelectItem>
+          <SelectItem value="follow" disabled={!hasSelection}>
+            Follow
+          </SelectItem>
+          <SelectItem value="chase" disabled={!hasSelection}>
+            Chase
+          </SelectItem>
         </SelectContent>
       </Select>
 

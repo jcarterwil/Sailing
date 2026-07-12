@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export type TrailMode = "tail" | "full" | "speed";
+export type CameraMode = "north" | "follow" | "chase";
 
 interface PlaybackState {
   // Fleet time bounds, epoch ms.
@@ -11,12 +12,17 @@ interface PlaybackState {
   speed: number;
   trailMode: TrailMode;
   rangeSel: [number, number] | null;
+  // The entry the user tapped/owns — drives halo, dimming, instruments highlight.
+  selectedEntryId: string | null;
+  cameraMode: CameraMode;
   setBounds: (t0: number, t1: number) => void;
   seek: (timeMs: number) => void;
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: number) => void;
   setTrailMode: (mode: TrailMode) => void;
   setRange: (range: [number, number] | null) => void;
+  setSelectedEntryId: (id: string | null) => void;
+  setCameraMode: (mode: CameraMode) => void;
   tick: (dtMs: number) => void;
 }
 
@@ -31,7 +37,9 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   speed: 10,
   trailMode: "tail",
   rangeSel: null,
-  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0 }),
+  selectedEntryId: null,
+  cameraMode: "north",
+  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0, cameraMode: "north" }),
   seek: (timeMs) => {
     const { t0, t1 } = get();
     set({ timeMs: Math.min(t1, Math.max(t0, timeMs)) });
@@ -40,6 +48,13 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   setSpeed: (speed) => set({ speed }),
   setTrailMode: (trailMode) => set({ trailMode }),
   setRange: (rangeSel) => set({ rangeSel }),
+  setSelectedEntryId: (selectedEntryId) =>
+    set(
+      selectedEntryId === null
+        ? { selectedEntryId: null, cameraMode: "north" }
+        : { selectedEntryId },
+    ),
+  setCameraMode: (cameraMode) => set({ cameraMode }),
   tick: (dtMs) => {
     const { timeMs, t1, speed, playing } = get();
     if (!playing) return;

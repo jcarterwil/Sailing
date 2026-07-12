@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { usePlaybackStore, type TrailMode } from "@/components/replay/playback-store";
+import { usePlaybackStore, type CameraMode, type TrailMode } from "@/components/replay/playback-store";
 import {
   buildSpeedTrackData,
   createFleetSpeedDomain,
@@ -13,6 +13,8 @@ import {
 } from "@/components/replay/speed-track";
 import { indexAt, sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
+import { lerpAngle } from "@/lib/analytics/angles";
+import { MIN_SOG_FOR_COG_KTS } from "@/lib/analytics/constants";
 
 export type MapStyleId = "map" | "satellite";
 
@@ -63,18 +65,28 @@ function makeBoatArrow(): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
-function boatsGeoJson(tracks: LoadedTrack[], timeMs: number) {
+function boatsGeoJson(
+  tracks: LoadedTrack[],
+  timeMs: number,
+  selectedEntryId: string | null,
+) {
   return {
     type: "FeatureCollection" as const,
     features: tracks.map((track) => {
       const s = sampleAt(track, timeMs);
+      const isSelected = selectedEntryId === track.entryId;
+      let opacity = s.inTrack ? 1 : 0.35;
+      // Dim the rest of the fleet when a selection exists.
+      if (selectedEntryId && !isSelected) opacity = Math.min(opacity, 0.55);
       return {
         type: "Feature" as const,
         properties: {
           color: track.color,
+          entryId: track.entryId,
           heading: Number.isNaN(s.hdgDeg) ? 0 : s.hdgDeg,
-          opacity: s.inTrack ? 1 : 0.35,
+          opacity,
           name: track.boatName,
+          selected: isSelected ? 1 : 0,
         },
         geometry: { type: "Point" as const, coordinates: [s.lon, s.lat] },
       };
@@ -112,6 +124,11 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const readyRef = useRef(false);
+  const camBearingRef = useRef(0);
+  const lastCamFrameNowRef = useRef(0);
+  const lastCamTimeMsRef = useRef(0);
+  const prevCameraModeRef = useRef<CameraMode>("north");
+  const skipResetEaseRef = useRef(false);
   const trailMode = usePlaybackStore((state) => state.trailMode);
   const speedDomain = useMemo(() => createFleetSpeedDomain(tracks), [tracks]);
   const speedTracks = useMemo(
@@ -144,7 +161,10 @@ export function MapView({
       fitBoundsOptions: { padding: 60 },
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
+      "top-right",
+    );
     mapRef.current = map;
 
     const addLayers = () => {
@@ -201,14 +221,30 @@ export function MapView({
           },
         });
       });
-      map.addSource("boats", { type: "geojson", data: boatsGeoJson(tracks, timeMs) });
+      map.addSource("boats", {
+        type: "geojson",
+        data: boatsGeoJson(tracks, timeMs, usePlaybackStore.getState().selectedEntryId),
+      });
+      // Halo ring drawn under the selected boat's arrow; recreated on style re-add.
+      map.addLayer({
+        id: "boat-halo",
+        type: "circle",
+        source: "boats",
+        filter: ["==", ["get", "selected"], 1],
+        paint: {
+          "circle-opacity": 0,
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": ["get", "color"],
+          "circle-radius": 16,
+        },
+      });
       map.addLayer({
         id: "boats",
         type: "symbol",
         source: "boats",
         layout: {
           "icon-image": "boat-arrow",
-          "icon-size": 0.42,
+          "icon-size": ["case", ["==", ["get", "selected"], 1], 0.58, 0.42],
           "icon-rotate": ["get", "heading"],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
@@ -224,6 +260,7 @@ export function MapView({
           "text-color": "#ffffff",
           "text-halo-color": "#0f172a",
           "text-halo-width": 1.2,
+          "text-opacity": ["get", "opacity"],
         },
       });
       readyRef.current = true;
@@ -237,6 +274,33 @@ export function MapView({
         addLayers();
       }
     });
+
+    // Delegated layer events register once; they query the "boats" layer at
+    // event time, so they survive setStyle without re-registration.
+    map.on("click", "boats", (e) => {
+      const entryId = e.features?.[0]?.properties?.entryId;
+      if (typeof entryId !== "string") return;
+      const current = usePlaybackStore.getState().selectedEntryId;
+      usePlaybackStore.getState().setSelectedEntryId(current === entryId ? null : entryId);
+    });
+    map.on("mouseenter", "boats", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", "boats", () => {
+      map.getCanvas().style.cursor = "";
+    });
+    // User pan/rotate/pitch breaks follow/chase; skip the north-reset ease so
+    // it doesn't fight the gesture. jumpTo also fires rotatestart/pitchstart
+    // when bearing/pitch change — those lack originalEvent, so ignore them.
+    const breakFollowCamera = (e: maplibregl.MapLibreEvent) => {
+      if (!e.originalEvent) return;
+      if (usePlaybackStore.getState().cameraMode === "north") return;
+      skipResetEaseRef.current = true;
+      usePlaybackStore.getState().setCameraMode("north");
+    };
+    map.on("dragstart", breakFollowCamera);
+    map.on("rotatestart", breakFollowCamera);
+    map.on("pitchstart", breakFollowCamera);
 
     return () => {
       readyRef.current = false;
@@ -278,11 +342,81 @@ export function MapView({
   // Per-frame imperative updates driven by transient store subscription.
   useEffect(() => {
     let lastTrailUpdate = 0;
-    const update = (timeMs: number, trailMode: TrailMode) => {
+    const update = (
+      timeMs: number,
+      trailMode: TrailMode,
+      selectedEntryId: string | null,
+      cameraMode: CameraMode,
+    ) => {
       const map = mapRef.current;
       if (!map || !readyRef.current) return;
+
+      const prevMode = prevCameraModeRef.current;
+      if (
+        (prevMode === "follow" || prevMode === "chase") &&
+        cameraMode === "north"
+      ) {
+        if (!skipResetEaseRef.current) {
+          map.easeTo({ bearing: 0, pitch: 0, duration: 600 });
+        }
+        skipResetEaseRef.current = false;
+      }
+      prevCameraModeRef.current = cameraMode;
+
       const boats = map.getSource<maplibregl.GeoJSONSource>("boats");
-      boats?.setData(boatsGeoJson(tracks, timeMs));
+      boats?.setData(boatsGeoJson(tracks, timeMs, selectedEntryId));
+
+      if (cameraMode !== "north" && selectedEntryId) {
+        const track = tracks.find((t) => t.entryId === selectedEntryId);
+        if (track) {
+          const s = sampleAt(track, timeMs);
+          const center: [number, number] = [s.lon, s.lat];
+          if (cameraMode === "follow") {
+            // North-up follow: lock center only, keep bearing/pitch flat so a
+            // prior chase session cannot leave the camera tilted/rotated.
+            map.jumpTo({ center, bearing: 0, pitch: 0 });
+          } else {
+            let target = Number.NaN;
+            if (!Number.isNaN(s.hdgDeg)) target = s.hdgDeg;
+            else if (
+              !Number.isNaN(s.cogDeg) &&
+              s.sogKts >= MIN_SOG_FOR_COG_KTS
+            ) {
+              target = s.cogDeg;
+            }
+
+            const now = performance.now();
+            const dtSec =
+              lastCamFrameNowRef.current === 0
+                ? 0
+                : Math.min(0.25, (now - lastCamFrameNowRef.current) / 1000);
+            lastCamFrameNowRef.current = now;
+
+            const enteringChase = prevMode !== "chase";
+            const scrubbed =
+              Math.abs(timeMs - lastCamTimeMsRef.current) > 15_000;
+            if (!Number.isNaN(target)) {
+              if (enteringChase || scrubbed) {
+                camBearingRef.current = target;
+              } else if (dtSec > 0) {
+                camBearingRef.current = lerpAngle(
+                  camBearingRef.current,
+                  target,
+                  1 - Math.exp(-dtSec / 2),
+                );
+              }
+            }
+
+            map.jumpTo({
+              center,
+              bearing: camBearingRef.current,
+              pitch: 60,
+            });
+          }
+        }
+      }
+      lastCamTimeMsRef.current = timeMs;
+
       if (trailMode === "speed") return;
       const now = performance.now();
       // Trails are heavier; ~12Hz is visually smooth.
@@ -294,8 +428,11 @@ export function MapView({
         );
       }
     };
-    update(usePlaybackStore.getState().timeMs, usePlaybackStore.getState().trailMode);
-    const unsub = usePlaybackStore.subscribe((state) => update(state.timeMs, state.trailMode));
+    const state = usePlaybackStore.getState();
+    update(state.timeMs, state.trailMode, state.selectedEntryId, state.cameraMode);
+    const unsub = usePlaybackStore.subscribe((s) =>
+      update(s.timeMs, s.trailMode, s.selectedEntryId, s.cameraMode),
+    );
     return unsub;
   }, [tracks]);
 

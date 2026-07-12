@@ -18,6 +18,8 @@ function makeTrack({
     color: "#38bdf8",
     crew: [],
     tags: [],
+    ownedByMe: false,
+    addedByMe: false,
     t0: times[0],
     tzOffsetMinutes: null,
     t: new Float64Array(times),

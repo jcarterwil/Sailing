@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, Sailboat, UserPlus, Waves } from "lucide-react";
+import { CalendarDays, Sailboat, Ticket, UserPlus, Waves } from "lucide-react";
 
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
 import { CreateRaceDialog } from "@/app/races/create-race-dialog";
@@ -67,6 +67,20 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex gap-3">
+            {isAdmin && (
+              <Button variant="outline" asChild>
+                <Link href="/admin/boats">
+                  <Sailboat className="size-4" aria-hidden="true" />
+                  Manage boats
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link href="/claim">
+                <Ticket className="size-4" aria-hidden="true" />
+                Claim a boat
+              </Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href="/races/join">
                 <UserPlus className="size-4" aria-hidden="true" />
