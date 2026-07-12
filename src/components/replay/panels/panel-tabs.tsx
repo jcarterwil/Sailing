@@ -29,9 +29,7 @@ function Placeholder({ title }: { title: string }) {
 
 export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
-  );
+  const [isMobile, setIsMobile] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef<HTMLElement>(null);
@@ -106,21 +104,21 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     setDragOffsetY(0);
   };
 
-  const sheetStyle: CSSProperties | undefined = isMobile
-    ? {
-        transform: mobileOpen
-          ? `translateY(${dragOffsetY}px)`
-          : `translateY(calc(100% - 3.25rem + ${dragOffsetY}px))`,
-        transition: dragging ? "none" : "transform 200ms ease-out",
-      }
-    : undefined;
+  const sheetStyle = {
+    "--sheet-drag-y": `${dragOffsetY}px`,
+    transition: dragging ? "none" : "transform 200ms ease-out",
+  } as CSSProperties;
 
   return (
     <aside
       ref={sheetRef}
       style={sheetStyle}
       aria-label="Race data"
-      className="absolute inset-x-0 bottom-0 z-20 flex h-[min(55dvh,28rem)] flex-col overflow-hidden rounded-t-xl border-t border-border/80 bg-background/95 shadow-xl backdrop-blur will-change-transform md:static md:inset-auto md:z-auto md:h-auto md:w-[340px] md:shrink-0 md:transform-none md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:shadow-none md:will-change-auto"
+      className={`${
+        mobileOpen
+          ? "[transform:translateY(var(--sheet-drag-y))]"
+          : "[transform:translateY(calc(100%_-_3.25rem_+_var(--sheet-drag-y)))]"
+      } absolute inset-x-0 bottom-0 z-20 flex h-[min(55dvh,28rem)] flex-col overflow-hidden rounded-t-xl border-t border-border/80 bg-background/95 shadow-xl backdrop-blur will-change-transform md:static md:inset-auto md:z-auto md:h-auto md:w-[340px] md:shrink-0 md:transform-none md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:shadow-none md:will-change-auto`}
     >
       <Button
         type="button"
