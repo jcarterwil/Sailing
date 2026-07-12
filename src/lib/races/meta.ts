@@ -160,6 +160,18 @@ export function normalizeConditions(input: unknown): RaceConditions | null {
     notes: String(record.notes ?? "").trim() || null,
     source: normalizeConditionsSource(record.source),
   };
+  if (conditions.source) {
+    const evidence = conditions.source.evidence;
+    const provenanceMatches =
+      conditions.windMinKts !== null &&
+      conditions.windMaxKts !== null &&
+      conditions.windDirDeg !== null &&
+      Math.abs(conditions.windMinKts - evidence.windMinKts) < 1e-9 &&
+      Math.abs(conditions.windMaxKts - evidence.windMaxKts) < 1e-9 &&
+      Math.abs((((conditions.windDirDeg - evidence.windDirectionDeg) % 360) + 540) % 360 - 180) <
+        1e-9;
+    if (!provenanceMatches) conditions.source = null;
+  }
   const empty =
     conditions.windMinKts === null &&
     conditions.windMaxKts === null &&

@@ -91,6 +91,21 @@ function deterministicSeaState(evidence: WeatherEvidence): string | null {
   return "Very rough (model waves above 2.5 m)";
 }
 
+function deterministicInterpretation(
+  evidence: WeatherEvidence,
+  warning: string,
+): AiWeatherInterpretation {
+  return {
+    notes: deterministicNotes(evidence),
+    seaState: deterministicSeaState(evidence),
+    seaStateBasis: evidence.waveHeightMaxM === null
+      ? "No marine wave data was available; sea state was left blank."
+      : "Classified deterministically from Open-Meteo model wave height.",
+    model: null,
+    warning,
+  };
+}
+
 function validateInterpretation(value: unknown): Pick<AiWeatherInterpretation, "notes" | "seaState" | "seaStateBasis"> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("AI returned an invalid weather response.");
@@ -108,18 +123,24 @@ function validateInterpretation(value: unknown): Pick<AiWeatherInterpretation, "
 export async function interpretWeatherWithAi(
   evidence: WeatherEvidence,
 ): Promise<AiWeatherInterpretation> {
-  const model = await getConfiguredAiModel();
   const client = anthropicClient();
   if (!client) {
-    return {
-      notes: deterministicNotes(evidence),
-      seaState: deterministicSeaState(evidence),
-      seaStateBasis: evidence.waveHeightMaxM === null
-        ? "No marine wave data was available; sea state was left blank."
-        : "Classified deterministically from Open-Meteo model wave height.",
-      model: null,
-      warning: "AI was unavailable because ANTHROPIC_API_KEY is not configured; weather fields still come from Open-Meteo.",
-    };
+    return deterministicInterpretation(
+      evidence,
+      "AI was unavailable because ANTHROPIC_API_KEY is not configured; weather fields still come from Open-Meteo.",
+    );
+  }
+
+  let model: string;
+  try {
+    model = await getConfiguredAiModel();
+  } catch (error) {
+    return deterministicInterpretation(
+      evidence,
+      error instanceof Error
+        ? `AI configuration was unavailable (${error.message}); weather fields still come from Open-Meteo.`
+        : "AI configuration was unavailable; weather fields still come from Open-Meteo.",
+    );
   }
 
   try {
@@ -155,16 +176,11 @@ export async function interpretWeatherWithAi(
     const parsed = validateInterpretation(JSON.parse(text.text));
     return { ...parsed, model, warning: null };
   } catch (error) {
-    return {
-      notes: deterministicNotes(evidence),
-      seaState: deterministicSeaState(evidence),
-      seaStateBasis: evidence.waveHeightMaxM === null
-        ? "No marine wave data was available; sea state was left blank."
-        : "Classified deterministically from Open-Meteo model wave height.",
-      model: null,
-      warning: error instanceof Error
+    return deterministicInterpretation(
+      evidence,
+      error instanceof Error
         ? `AI summary failed (${error.message}); weather fields still come from Open-Meteo.`
         : "AI summary failed; weather fields still come from Open-Meteo.",
-    };
+    );
   }
 }

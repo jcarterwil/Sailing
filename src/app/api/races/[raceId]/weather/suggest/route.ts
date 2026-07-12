@@ -52,6 +52,12 @@ export async function POST(
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
     return NextResponse.json({ error: "Valid race start and end times are required." }, { status: 400 });
   }
+  if (end <= start) {
+    return NextResponse.json({ error: "Race end must be after race start." }, { status: 400 });
+  }
+  if (end.getTime() - start.getTime() > 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: "The weather window cannot exceed 24 hours." }, { status: 400 });
+  }
   const earliest = Date.UTC(1940, 0, 1);
   const latest = Date.now() + 16 * 24 * 60 * 60 * 1000;
   if (start.getTime() < earliest || end.getTime() > latest) {
