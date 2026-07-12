@@ -11,12 +11,15 @@ interface PlaybackState {
   speed: number;
   trailMode: TrailMode;
   rangeSel: [number, number] | null;
+  // The entry the user tapped/owns — drives halo, dimming, instruments highlight.
+  selectedEntryId: string | null;
   setBounds: (t0: number, t1: number) => void;
   seek: (timeMs: number) => void;
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: number) => void;
   setTrailMode: (mode: TrailMode) => void;
   setRange: (range: [number, number] | null) => void;
+  setSelectedEntryId: (id: string | null) => void;
   tick: (dtMs: number) => void;
 }
 
@@ -31,6 +34,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   speed: 10,
   trailMode: "tail",
   rangeSel: null,
+  selectedEntryId: null,
   setBounds: (t0, t1) => set({ t0, t1, timeMs: t0 }),
   seek: (timeMs) => {
     const { t0, t1 } = get();
@@ -40,6 +44,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   setSpeed: (speed) => set({ speed }),
   setTrailMode: (trailMode) => set({ trailMode }),
   setRange: (rangeSel) => set({ rangeSel }),
+  setSelectedEntryId: (selectedEntryId) => set({ selectedEntryId }),
   tick: (dtMs) => {
     const { timeMs, t1, speed, playing } = get();
     if (!playing) return;

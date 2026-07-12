@@ -42,7 +42,9 @@ export default async function ReplayPage({
 
   const { data: entries } = await supabase
     .from("race_entries")
-    .select("id, color, crew, tags, boats(name), tracks(processed_path, status)")
+    .select(
+      "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status)",
+    )
     .eq("race_id", raceId)
     .order("created_at", { ascending: true });
 
@@ -80,6 +82,8 @@ export default async function ReplayPage({
         url: signed.signedUrl,
         crew: entryMeta.crew,
         tags: entryMeta.tags,
+        ownedByMe: entry.boats?.owner_id === user.id,
+        addedByMe: entry.added_by === user.id,
       });
     }
   }
