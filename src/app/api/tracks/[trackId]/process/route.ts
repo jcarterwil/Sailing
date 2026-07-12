@@ -7,6 +7,10 @@ import { parseVkx } from "@/lib/analytics/parse/vkx";
 import { buildTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { buildProcessedTrack, summarizeTrack } from "@/lib/analytics/track/process";
 import { ParseError } from "@/lib/analytics/types";
+import {
+  analyzeAndPersistRace,
+  raceHasAllTracksProcessed,
+} from "@/lib/races/analyze-race";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -109,11 +113,24 @@ export async function POST(
       })
       .eq("id", trackId);
 
+    // When the whole fleet is processed, run fleet analysis (shared helper — not a self-fetch).
+    let analyzed: { computedAt: string; trackCount: number } | null = null;
+    try {
+      if (await raceHasAllTracksProcessed(entry.race_id)) {
+        const result = await analyzeAndPersistRace(entry.race_id);
+        analyzed = { computedAt: result.computedAt, trackCount: result.trackCount };
+      }
+    } catch (analyzeErr) {
+      // Processing succeeded; analysis can be retried from the race page.
+      console.error("Auto-analyze after process failed:", analyzeErr);
+    }
+
     return NextResponse.json({
       status: "processed",
       pointCount: processed.t.length,
       summary,
       warnings: processed.warnings,
+      analyzed,
     });
   } catch (err) {
     const message =

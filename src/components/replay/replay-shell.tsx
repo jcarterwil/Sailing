@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 
 import type { TrackMeta } from "@/components/replay/track-loader";
+import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -27,6 +28,8 @@ export function ReplayShell(props: {
   raceMeta: RaceMeta;
   /** Full race+entry metadata payload for analyze / dossier consumers. */
   analyzeContext: RaceAnalyzeContext;
+  /** Persisted `race_analyses.analysis` when available. */
+  analysis?: RaceAnalysis | null;
 }) {
   return <RaceReplay {...props} />;
 }

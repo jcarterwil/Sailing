@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
+import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
   buildRaceAnalyzeContext,
   parseEntryMeta,
@@ -14,6 +15,12 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function parseStoredAnalysis(value: unknown): RaceAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { v?: unknown };
+  if (candidate.v !== 1) return null;
+  return value as RaceAnalysis;
+}
 export default async function ReplayPage({
   params,
 }: {
@@ -40,14 +47,22 @@ export default async function ReplayPage({
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags);
 
-  const { data: entries } = await supabase
-    .from("race_entries")
-    .select(
-      "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status)",
-    )
-    .eq("race_id", raceId)
-    .order("created_at", { ascending: true });
+  const [{ data: entries }, { data: analysisRow }] = await Promise.all([
+    supabase
+      .from("race_entries")
+      .select(
+        "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status)",
+      )
+      .eq("race_id", raceId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("race_analyses")
+      .select("analysis, computed_at")
+      .eq("race_id", raceId)
+      .maybeSingle(),
+  ]);
 
+  const analysis = parseStoredAnalysis(analysisRow?.analysis);
   const processed = (entries ?? []).filter(
     (e) => e.tracks?.status === "processed" && e.tracks.processed_path,
   );
@@ -121,6 +136,7 @@ export default async function ReplayPage({
           trackMetas={trackMetas}
           raceMeta={raceMeta}
           analyzeContext={analyzeContext}
+          analysis={analysis}
         />
       </div>
     </main>

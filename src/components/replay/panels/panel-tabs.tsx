@@ -14,19 +14,26 @@ import { Performance } from "@/components/replay/panels/performance";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { RaceAnalysis } from "@/lib/analytics/types";
 
-function Placeholder({ title }: { title: string }) {
+function Placeholder({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="flex h-full min-h-40 items-center justify-center p-6 text-center">
       <div>
         <p className="font-medium">{title}</p>
-        <p className="mt-1 text-xs text-muted-foreground">Available after race analysis is added.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
       </div>
     </div>
   );
 }
 
-export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
+export function PanelTabs({
+  tracks,
+  analysis = null,
+}: {
+  tracks: LoadedTrack[];
+  analysis?: RaceAnalysis | null;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -169,10 +176,24 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
             <Performance tracks={tracks} />
           </TabsContent>
           <TabsContent value="maneuvers" className="min-h-0 overflow-y-auto">
-            <Placeholder title="Maneuver analysis" />
+            <Placeholder
+              title="Maneuver analysis"
+              detail={
+                analysis
+                  ? `${analysis.perEntry.reduce((n, e) => n + e.maneuvers.length, 0)} maneuvers detected — table UI lands in #4.`
+                  : "Run Re-analyze on the race page once all tracks are processed."
+              }
+            />
           </TabsContent>
           <TabsContent value="polars" className="min-h-0 overflow-y-auto">
-            <Placeholder title="Polar comparison" />
+            <Placeholder
+              title="Polar comparison"
+              detail={
+                analysis
+                  ? "Fleet analysis is loaded — polar chart lands in #4."
+                  : "Run Re-analyze on the race page once all tracks are processed."
+              }
+            />
           </TabsContent>
         </Tabs>
       </div>
