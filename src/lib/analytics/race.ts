@@ -1,5 +1,11 @@
 import { circularMean, norm180 } from "@/lib/analytics/angles";
-import { LEG_BIN_MS, LEG_MIN_BINS, TIMER_CONSENSUS_MS } from "@/lib/analytics/constants";
+import {
+  LEG_BIN_MS,
+  LEG_DOWNWIND_MIN_ABS_TWA_DEG,
+  LEG_MIN_BINS,
+  LEG_UPWIND_MAX_ABS_TWA_DEG,
+  TIMER_CONSENSUS_MS,
+} from "@/lib/analytics/constants";
 import { bearingDeg, haversineM } from "@/lib/analytics/geo";
 import {
   columnLength,
@@ -209,8 +215,8 @@ interface LegBin {
 
 function classifyTwa(twaDeg: number): RaceLegType {
   const absolute = Math.abs(twaDeg);
-  if (absolute <= 80) return "upwind";
-  if (absolute >= 100) return "downwind";
+  if (absolute < LEG_UPWIND_MAX_ABS_TWA_DEG) return "upwind";
+  if (absolute > LEG_DOWNWIND_MIN_ABS_TWA_DEG) return "downwind";
   return "reach";
 }
 

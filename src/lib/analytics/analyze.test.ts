@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { angleDiff, norm180, norm360 } from "@/lib/analytics/angles";
 import { analyzeRace } from "@/lib/analytics/analyze";
 import { detectManeuvers } from "@/lib/analytics/maneuvers";
+import { inferRaceLegs } from "@/lib/analytics/race";
 import type {
   ProcessedTrack,
   RaceTimerEvent,
@@ -351,5 +352,39 @@ describe("detectManeuvers", () => {
       maneuvers[0].metersMadeGood,
       maneuvers[0].vmgRetention,
     ].filter((value) => value !== null).every(Number.isFinite)).toBe(true);
+  });
+});
+
+describe("inferRaceLegs", () => {
+  it("uses the documented 90-degree upwind/downwind TWA boundary", () => {
+    const wind: WindAnalysis = {
+      source: "estimated",
+      twdDeg: 283,
+      twsKts: null,
+      samples: [
+        { timeMs: START, twdDeg: 283, twsKts: null, source: "estimated" },
+        { timeMs: START + 180_000, twdDeg: 283, twsKts: null, source: "estimated" },
+      ],
+      provenance: {
+        source: "estimated",
+        method: "fleet-heading-modes",
+        confidence: "high",
+        sensorEntryIds: [],
+        sensorSampleCount: 0,
+        estimatedHeadingSampleCount: 100,
+      },
+    };
+
+    for (const [course, expected] of [[198, "upwind"], [188, "downwind"]] as const) {
+      const legs = inferRaceLegs(
+        [syntheticTrack(expected, new Array(181).fill(course), { t0: START })],
+        START,
+        START + 180_000,
+        wind,
+        [],
+      );
+      expect(legs).toHaveLength(1);
+      expect(legs[0].type).toBe(expected);
+    }
   });
 });
