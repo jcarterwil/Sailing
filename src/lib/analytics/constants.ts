@@ -35,3 +35,9 @@ export const MANEUVER_GYBE_MAX_ABS_TWA_DEG = 178; // exclude unstable values dir
 export const BOTCHED_MAX_DURATION_S = 20; // maneuver duration beyond this is operationally costly
 export const BOTCHED_MIN_SPEED_RATIO = 0.6; // SOG-out / SOG-in threshold
 export const BOTCHED_MIN_VMG_RETENTION = 0.5; // made-good efficiency threshold
+
+// Live ladder / leaderboard (#21).
+export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped boats
+export const LADDER_TREND_WINDOW_MS = 45_000; // lookback for gaining/losing glyph
+export const LADDER_LEG_WINDOW_MS = 60_000; // lookback for upwind/downwind axis flip
+export const LADDER_LEG_FLIP_M = 25; // median raw-DMG delta that flips axisSign

@@ -116,6 +116,7 @@ export default async function ReplayPage({
       </header>
       <div className="min-h-0 flex-1">
         <ReplayShell
+          raceId={raceId}
           raceName={race.name}
           trackMetas={trackMetas}
           raceMeta={raceMeta}
