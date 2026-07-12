@@ -63,20 +63,16 @@ npx supabase link --project-ref mmyogyxvgwfmrqjcsguz
 npm run db:push
 ```
 
-### CI (auto-migrate on merge)
+### Auto-migrate on merge (Supabase GitHub Integration)
 
-Merging a PR that changes `supabase/migrations/**` runs
-[`.github/workflows/supabase-migrate.yml`](.github/workflows/supabase-migrate.yml)
-on `main` and applies pending migrations with `supabase db push`.
+Production migrations are applied by the **Supabase GitHub Integration**, not by Vercel.
+Configure it at [Project Settings → Integrations → GitHub](https://supabase.com/dashboard/project/mmyogyxvgwfmrqjcsguz/settings/integrations):
 
-Required repository secrets (Settings → Secrets and variables → Actions):
+- Connect repo `jcarterwil/Sailing`, working directory `.`
+- Enable **Deploy to production** so merges to `main` run pending files under `supabase/migrations/`
+- Optional: **Automatic branching** for a preview database per PR
 
-| Secret | Where to get it |
-| --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
-| `SUPABASE_DB_PASSWORD` | Project Settings → Database (database password) |
-
-You can also run the workflow manually via Actions → Supabase Migrate → Run workflow.
+Vercel’s Supabase integration only syncs environment variables.
 
 Hosted Auth is configured for localhost, Vercel preview deployments, and the production origin.
 
