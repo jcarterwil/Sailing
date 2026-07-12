@@ -124,6 +124,14 @@ file_size_limit = "50MiB"
 # allowed_mime_types = ["image/png", "image/jpeg"]
 # objects_path = "./images"
 
+[storage.buckets.race-tracks-raw]
+public = false
+file_size_limit = "10MiB"
+
+[storage.buckets.race-tracks-processed]
+public = false
+file_size_limit = "20MiB"
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

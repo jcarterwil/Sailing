@@ -1,0 +1,94 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+
+import { ReplayShell } from "@/components/replay/replay-shell";
+import type { TrackMeta } from "@/components/replay/track-loader";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+
+export default async function ReplayPage({
+  params,
+}: {
+  params: Promise<{ raceId: string }>;
+}) {
+  const { raceId } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  // RLS-visible read proves membership.
+  const { data: race } = await supabase
+    .from("races")
+    .select("id, name")
+    .eq("id", raceId)
+    .maybeSingle();
+  if (!race) {
+    notFound();
+  }
+
+  const { data: entries } = await supabase
+    .from("race_entries")
+    .select("id, color, boats(name), tracks(processed_path, status)")
+    .eq("race_id", raceId)
+    .order("created_at", { ascending: true });
+
+  const processed = (entries ?? []).filter(
+    (e) => e.tracks?.status === "processed" && e.tracks.processed_path,
+  );
+
+  // Signed URLs let the browser pull track JSON straight from Storage.
+  const admin = createAdminClient();
+  const trackMetas: TrackMeta[] = [];
+  for (const entry of processed) {
+    const { data: signed } = await admin.storage
+      .from("race-tracks-processed")
+      .createSignedUrl(entry.tracks!.processed_path!, 3600);
+    if (signed) {
+      trackMetas.push({
+        entryId: entry.id,
+        boatName: entry.boats?.name ?? "Unknown",
+        color: entry.color,
+        url: signed.signedUrl,
+      });
+    }
+  }
+
+  if (trackMetas.length === 0) {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
+        <h1 className="text-xl font-semibold">{race.name}</h1>
+        <p className="text-sm text-muted-foreground">
+          No processed tracks yet. Upload VKX or CSV files from the race page first.
+        </p>
+        <Link href={`/races/${race.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
+          Back to race
+        </Link>
+      </main>
+    );
+  }
+
+  return (
+    <main className="flex h-dvh flex-col">
+      <header className="flex items-center gap-3 border-b border-border/70 px-4 py-2">
+        <Link
+          href={`/races/${race.id}`}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {race.name}
+        </Link>
+        <span className="text-xs text-muted-foreground">{trackMetas.length} boats</span>
+      </header>
+      <div className="min-h-0 flex-1">
+        <ReplayShell raceName={race.name} trackMetas={trackMetas} />
+      </div>
+    </main>
+  );
+}
