@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { parseTrackCsv } from "@/lib/analytics/parse/csv";
 import { parseVkx } from "@/lib/analytics/parse/vkx";
+import { buildTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { buildProcessedTrack, summarizeTrack } from "@/lib/analytics/track/process";
 import { ParseError } from "@/lib/analytics/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -64,7 +65,10 @@ export async function POST(
         : parseTrackCsv(await blob.text());
 
     const processed = buildProcessedTrack(raw, track.entry_id);
-    const summary = summarizeTrack(processed);
+    const summary = {
+      ...summarizeTrack(processed),
+      ...buildTrackImportDigest(processed),
+    };
 
     const processedPath = `${entry.race_id}/${track.entry_id}.json.gz`;
     const body = gzipSync(Buffer.from(JSON.stringify(processed)));

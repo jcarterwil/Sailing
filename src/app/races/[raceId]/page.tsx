@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
 
@@ -68,6 +69,7 @@ export default async function RaceManagePage({
             errorMessage: entry.tracks.error_message,
             pointCount: entry.tracks.point_count,
             filename: entry.tracks.original_filename,
+            importDigest: parseTrackImportDigest(entry.tracks.summary),
           }
         : null,
     };
