@@ -54,3 +54,12 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 - **Anonymous access is server-mediated only.** There are no anon RLS policies; public share pages resolve via the admin client after a slug lookup. Do not add anon policies.
 - **The admin (service-role) client bypasses RLS** — every call site must do its own authorization check first (membership, organizer, or admin).
 - **Post-auth redirects** go through `getSafeNextPath` (`src/lib/auth/redirect.ts`) — an open-redirect guard.
+
+## Review guidelines
+
+- Report only defects introduced by the pull request; do not relitigate pre-existing issues or style.
+- Treat authorization/RLS bypasses, misuse of the admin Supabase client, secret exposure, destructive
+  migration behavior, and broken production deploys as P1 or higher.
+- Treat violations of the replay 60fps model as P1 when they put per-frame state into React rendering
+  or repeatedly scan full fleet tracks during playback.
+- Confirm that behavior changes have proportionate tests and that `npm run verify` remains viable.
