@@ -53,7 +53,7 @@ Migrations live in `supabase/migrations` (declarative diffing via pgdelta, Postg
 
 - **Supabase project:** ref `mmyogyxvgwfmrqjcsguz` (name `sailing`), region `us-east-1`, Postgres 17. Created via the **Vercel–Supabase integration**, so it lives under a Vercel-managed org (`vercel_icfg_…`).
  - Use the **Supabase CLI** for DB work — it's logged in and this project is **linked** (`npm run db:push`, `db:reset`, `npx supabase ...`).
- - **Migrations auto-apply on merge to `main`** via the **Supabase GitHub Integration** (Project Settings → Integrations → GitHub, with **Deploy to production**). Vercel only syncs env vars; it does not run SQL.
+ - **Migrations auto-apply on merge to `main`** via the **Supabase GitHub Integration** (Deploy to production) and/or `.github/workflows/supabase-migrations.yml` (`db push`; skips if Actions secrets are unset). Vercel only syncs env vars; it does not run SQL. Details in `supabase/AGENTS.md`.
  - **The Supabase MCP does NOT see this project** — its token is scoped to a different org (it only lists `HealthSpan`). Don't rely on the Supabase MCP for sailing; use the CLI or the Supabase dashboard.
 - **Vercel project:** `sailing` (`prj_rZgwrmSB1ANVNWDGtHlJKYKIXosT`) under team `carter-williams-projects` (`team_x318gGLYyqJt2rGWkApPx4GA`). Production: https://sailing-performance.vercel.app. Both the **Vercel CLI** (`jcarterwil`) and the **Vercel MCP** work and see this project. Deployment is GitHub-connected (push to the production branch); `vercel deploy --prod` also works locally.
 
