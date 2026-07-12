@@ -1,16 +1,22 @@
 import type { ProcessedTrack } from "@/lib/analytics/types";
+import type { CrewMember, RaceMeta } from "@/lib/races/meta";
 
 export interface TrackMeta {
   entryId: string;
   boatName: string;
   color: string;
   url: string;
+  /** Entry metadata threaded through for analyze / dossier correlation. */
+  crew: CrewMember[];
+  tags: string[];
 }
 
 export interface LoadedTrack {
   entryId: string;
   boatName: string;
   color: string;
+  crew: CrewMember[];
+  tags: string[];
   t0: number; // epoch ms of first point
   tzOffsetMinutes: number | null;
   t: Float64Array; // absolute epoch ms per point
@@ -22,6 +28,8 @@ export interface LoadedTrack {
   heel: Float32Array;
   trim: Float32Array;
 }
+
+export type { RaceMeta };
 
 // JSON round-trip turns NaN into null; coerce back.
 function toFloat32(values: (number | null)[]): Float32Array {
@@ -53,6 +61,8 @@ export async function loadTrack(meta: TrackMeta): Promise<LoadedTrack> {
     entryId: meta.entryId,
     boatName: meta.boatName,
     color: meta.color,
+    crew: meta.crew,
+    tags: meta.tags,
     t0: data.t0,
     tzOffsetMinutes: data.tzOffsetMinutes,
     t,

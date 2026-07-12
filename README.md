@@ -63,6 +63,14 @@ npx supabase link --project-ref mmyogyxvgwfmrqjcsguz
 npm run db:push
 ```
 
+### Auto-migrate on merge
+
+Vercel only syncs env vars — it does **not** run SQL. Migrations under
+`supabase/migrations/` are applied on merge to `main` by:
+
+1. **Supabase GitHub Integration** — [Project Settings → Integrations → GitHub](https://supabase.com/dashboard/project/mmyogyxvgwfmrqjcsguz/settings/integrations) with **Deploy to production** (and optional PR preview branching). Working directory: `.`
+2. **GitHub Actions** — [`.github/workflows/supabase-migrations.yml`](.github/workflows/supabase-migrations.yml) runs `supabase db push` when migrations change. Needs repo secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`; without them it skips cleanly (see `supabase/AGENTS.md`).
+
 Hosted Auth is configured for localhost, Vercel preview deployments, and the production origin.
 
 ### Enable Google sign-in
