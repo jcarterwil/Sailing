@@ -21,6 +21,20 @@ function parseStoredAnalysis(value: unknown): RaceAnalysis | null {
   if (candidate.v !== 1) return null;
   return value as RaceAnalysis;
 }
+
+/** Drop analysis that doesn't match the currently processed entry set. */
+function analysisForProcessedEntries(
+  analysis: RaceAnalysis | null,
+  processedEntryIds: string[],
+): RaceAnalysis | null {
+  if (!analysis) return null;
+  const analyzedIds = new Set(analysis.perEntry.map((e) => e.entryId));
+  if (analyzedIds.size !== processedEntryIds.length) return null;
+  for (const id of processedEntryIds) {
+    if (!analyzedIds.has(id)) return null;
+  }
+  return analysis;
+}
 export default async function ReplayPage({
   params,
 }: {
@@ -117,6 +131,11 @@ export default async function ReplayPage({
     );
   }
 
+  const replayAnalysis = analysisForProcessedEntries(
+    analysis,
+    trackMetas.map((t) => t.entryId),
+  );
+
   return (
     <main className="flex h-dvh flex-col">
       <header className="flex items-center gap-3 border-b border-border/70 px-4 py-2">
@@ -136,7 +155,7 @@ export default async function ReplayPage({
           trackMetas={trackMetas}
           raceMeta={raceMeta}
           analyzeContext={analyzeContext}
-          analysis={analysis}
+          analysis={replayAnalysis}
         />
       </div>
     </main>

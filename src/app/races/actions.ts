@@ -200,6 +200,15 @@ export async function requestTrackUpload(
     .single();
   if (trackError) throw new Error(`Could not record track: ${trackError.message}`);
 
+  // Replacing a track invalidates fleet analysis until the new file is processed.
+  const { error: deleteAnalysisError } = await admin
+    .from("race_analyses")
+    .delete()
+    .eq("race_id", entry.race_id);
+  if (deleteAnalysisError) {
+    throw new Error(`Could not clear stale analysis: ${deleteAnalysisError.message}`);
+  }
+
   const { data: signed, error: signError } = await admin.storage
     .from("race-tracks-raw")
     .createSignedUploadUrl(path, { upsert: true });

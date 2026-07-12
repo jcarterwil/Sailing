@@ -116,7 +116,13 @@ export async function POST(
     // Any newly processed track invalidates prior fleet analysis. Drop it first so
     // replay never serves wind/maneuvers computed against an older track set;
     // then rebuild when the whole fleet is ready.
-    await admin.from("race_analyses").delete().eq("race_id", entry.race_id);
+    const { error: deleteAnalysisError } = await admin
+      .from("race_analyses")
+      .delete()
+      .eq("race_id", entry.race_id);
+    if (deleteAnalysisError) {
+      throw new Error(`Could not clear stale analysis: ${deleteAnalysisError.message}`);
+    }
 
     let analyzed: { computedAt: string; trackCount: number } | null = null;
     try {
