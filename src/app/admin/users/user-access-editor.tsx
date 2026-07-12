@@ -43,6 +43,7 @@ export function UserAccessEditor({
   initialBoatAccess,
   boats,
 }: UserAccessEditorProps) {
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -81,7 +82,14 @@ export function UserAccessEditor({
   }
 
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        setError(null);
+        setNotice(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           <UserCog className="size-3.5" aria-hidden="true" />
