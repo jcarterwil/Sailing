@@ -42,6 +42,8 @@ export type Database = {
       boats: {
         Row: {
           boat_class: string | null
+          claim_code: string | null
+          claim_email: string | null
           created_at: string
           created_by: string
           id: string
@@ -52,6 +54,8 @@ export type Database = {
         }
         Insert: {
           boat_class?: string | null
+          claim_code?: string | null
+          claim_email?: string | null
           created_at?: string
           created_by: string
           id?: string
@@ -62,6 +66,8 @@ export type Database = {
         }
         Update: {
           boat_class?: string | null
+          claim_code?: string | null
+          claim_email?: string | null
           created_at?: string
           created_by?: string
           id?: string
