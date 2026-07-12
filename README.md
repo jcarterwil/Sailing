@@ -63,6 +63,21 @@ npx supabase link --project-ref mmyogyxvgwfmrqjcsguz
 npm run db:push
 ```
 
+### CI (auto-migrate on merge)
+
+Merging a PR that changes `supabase/migrations/**` runs
+[`.github/workflows/supabase-migrate.yml`](.github/workflows/supabase-migrate.yml)
+on `main` and applies pending migrations with `supabase db push`.
+
+Required repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Where to get it |
+| --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_DB_PASSWORD` | Project Settings → Database (database password) |
+
+You can also run the workflow manually via Actions → Supabase Migrate → Run workflow.
+
 Hosted Auth is configured for localhost, Vercel preview deployments, and the production origin.
 
 ### Enable Google sign-in
