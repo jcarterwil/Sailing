@@ -5,8 +5,9 @@ The client-only race replay: a MapLibre map, a zustand playback clock, and a can
 ## The 60fps rule (most important)
 
 - **Per-frame consumers update imperatively, never through React renders.** The map (`map-view.tsx`) and timeline cursor (`timeline.tsx`) subscribe with `usePlaybackStore.subscribe(...)` and mutate the DOM/canvas/`source.setData()` directly. Putting `timeMs` into React state and re-rendering at 60fps would tank performance.
-- **React-rendered widgets subscribe narrowly and throttle** to ~10Hz (see the clock in `playback-controls.tsx`). Use `usePlaybackStore((s) => s.field)` selectors, not the whole store.
+- **React-rendered widgets subscribe narrowly and throttle** to ~10Hz (see the clock in `playback-controls.tsx`, Instruments, and the live `leaderboard.tsx`). Use `usePlaybackStore((s) => s.field)` selectors, not the whole store.
 - The single rAF clock lives in `race-replay.tsx` and calls `store.tick(dt)`. Don't add competing animation loops.
+- **Wind for ladder / future wind indicator:** resolve via `resolveTwdAt(raceMeta)` in `race-replay.tsx` (manual `conditions.windDirDeg` today; TODO #3 for `analysis.wind`). Do not invent a second wind path for #7.
 
 ## Rules
 
