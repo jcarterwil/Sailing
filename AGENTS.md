@@ -46,7 +46,7 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 ## How changes reach production
 
 - **App code:** push to `main` → Vercel builds and deploys automatically. Primary domain `https://sailing-performance.vercel.app`.
-- **Database:** migrations in `supabase/migrations/` are applied by the **`.github/workflows/supabase-migrations.yml`** workflow when a push to `main` changes that folder (it runs `supabase db push`). Locally, run `npm run db:push`. Migrations must be **additive/backward-compatible** so app and schema can deploy in either order. After changing schema, run `npm run db:types` and commit the regenerated types. See `supabase/AGENTS.md`.
+- **Database:** the **Supabase GitHub integration** is connected to this repo with *Deploy to production* enabled on `main`. Supabase applies any new `supabase/migrations/` file automatically when it merges to `main` — no CI secrets, no manual step. (Locally you can still run `npm run db:push` to apply immediately.) Migrations must be **additive/backward-compatible** so app and schema can deploy in either order. After changing schema, run `npm run db:types` and commit the regenerated types. See `supabase/AGENTS.md`.
 
 ## Security must-dos (every endpoint and query)
 

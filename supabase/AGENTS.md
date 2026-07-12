@@ -5,7 +5,7 @@ Postgres 17 + Auth + Storage. Schema lives in `migrations/*.sql`; project config
 ## How a schema change ships (the migration workflow)
 
 1. Add a new timestamped file in `migrations/` (e.g. `20260712180000_add_thing.sql`). Never edit an already-applied migration — append a new one.
-2. Apply it: `npm run db:push` locally, and it also applies automatically when a push to `main` touches `migrations/` via `.github/workflows/supabase-migrations.yml` (which runs `supabase db push`). That workflow needs two repo secrets — `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`; without them it skips cleanly.
+2. Merge it to `main`. The **Supabase GitHub integration** (Project → Settings → Integrations → GitHub, *Deploy to production* enabled on `main`) applies it automatically — no CI secrets or manual step. To apply immediately from a local checkout instead, run `npm run db:push`.
 3. Regenerate types: `npm run db:types`, and **commit the updated `src/lib/supabase/database.types.ts`** in the same PR.
 4. Keep migrations **additive / backward-compatible** (add tables/columns/policies; avoid dropping or renaming things the deployed app still reads). App code and schema can deploy in either order, seconds apart — a non-additive change will break the running app during that window.
 
