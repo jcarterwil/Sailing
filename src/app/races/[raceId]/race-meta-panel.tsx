@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Plus, Save, X } from "lucide-react";
 
 import { updateEntryMeta, updateRaceMeta } from "@/app/races/actions";
+import { WeatherFillWizard } from "@/app/races/[raceId]/weather-fill-wizard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,11 +97,17 @@ export function RaceMetaPanel({
   canEdit,
   initialConditions,
   initialTags,
+  defaultWeatherLocation,
+  defaultWeatherStartsAt,
+  defaultWeatherEndsAt,
 }: {
   raceId: string;
   canEdit: boolean;
   initialConditions: RaceConditions | null;
   initialTags: string[];
+  defaultWeatherLocation: string;
+  defaultWeatherStartsAt: string;
+  defaultWeatherEndsAt: string;
 }) {
   const [conditions, setConditions] = useState<RaceConditions>(
     initialConditions ?? {
@@ -109,6 +116,7 @@ export function RaceMetaPanel({
       windDirDeg: null,
       seaState: null,
       notes: null,
+      source: null,
     },
   );
   const [tags, setTags] = useState(initialTags);
@@ -120,6 +128,7 @@ export function RaceMetaPanel({
     setConditions((c) => ({
       ...c,
       [key]: value !== null && Number.isFinite(value) ? value : null,
+      source: null,
     }));
   }
 
@@ -204,7 +213,7 @@ export function RaceMetaPanel({
             placeholder="Flat / chop / leftover swell"
             value={conditions.seaState ?? ""}
             onChange={(e) =>
-              setConditions((c) => ({ ...c, seaState: e.target.value || null }))
+              setConditions((c) => ({ ...c, seaState: e.target.value || null, source: null }))
             }
           />
         </div>
@@ -216,7 +225,7 @@ export function RaceMetaPanel({
             placeholder="Current, pressure drops, course notes…"
             value={conditions.notes ?? ""}
             onChange={(e) =>
-              setConditions((c) => ({ ...c, notes: e.target.value || null }))
+              setConditions((c) => ({ ...c, notes: e.target.value || null, source: null }))
             }
           />
         </div>
@@ -230,11 +239,36 @@ export function RaceMetaPanel({
           />
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {conditions.source && (
+          <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+            <p>
+              Weather source: {conditions.source.evidence.provider === "open-meteo" ? "Open-Meteo" : conditions.source.evidence.provider}
+              {conditions.source.ai ? ` · summarized by ${conditions.source.ai.model}` : " · deterministic summary"}
+            </p>
+            <a
+              href={conditions.source.evidence.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-primary hover:underline"
+            >
+              View source request
+            </a>
+          </div>
+        )}
         {canEdit && (
-          <Button type="button" onClick={save} disabled={pending}>
-            <Save className="size-4" aria-hidden="true" />
-            {pending ? "Saving…" : "Save conditions"}
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <WeatherFillWizard
+              raceId={raceId}
+              defaultLocation={defaultWeatherLocation}
+              defaultStartsAt={defaultWeatherStartsAt}
+              defaultEndsAt={defaultWeatherEndsAt}
+              onApply={setConditions}
+            />
+            <Button type="button" onClick={save} disabled={pending}>
+              <Save className="size-4" aria-hidden="true" />
+              {pending ? "Saving…" : "Save conditions"}
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

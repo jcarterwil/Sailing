@@ -298,11 +298,14 @@ export async function updateRaceMeta(
     .eq("id", raceId)
     .maybeSingle();
   if (!race) throw new Error("Race not found.");
-  if (race.organizer_id !== user.id) {
-    throw new Error("Only the organizer can edit race metadata.");
+  const isOrganizer = race.organizer_id === user.id;
+  const { data: isAdmin } = isOrganizer ? { data: false } : await supabase.rpc("is_admin");
+  if (!isOrganizer && !isAdmin) {
+    throw new Error("Only the organizer or an admin can edit race metadata.");
   }
 
-  const { error } = await supabase
+  const writer = isAdmin ? createAdminClient() : supabase;
+  const { error } = await writer
     .from("races")
     .update({ conditions: conditionsToJson(conditions), tags })
     .eq("id", raceId);

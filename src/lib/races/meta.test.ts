@@ -44,7 +44,27 @@ describe("race metadata normalization", () => {
       windDirDeg: 280,
       seaState: "chop",
       notes: null,
+      source: null,
     });
+  });
+
+  it("preserves validated weather provenance", () => {
+    const source = {
+      evidence: {
+        provider: "open-meteo",
+        sourceUrl: "https://api.open-meteo.com/example",
+        windMinKts: 8,
+        windMaxKts: 12,
+        windDirectionDeg: 280,
+      },
+      ai: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        generatedAt: "2026-07-12T12:00:00Z",
+      },
+      seaStateBasis: "Model wave height.",
+    };
+    expect(normalizeConditions({ windMinKts: 8, source })?.source).toMatchObject(source);
   });
 
   it("builds the analyze context payload", () => {
