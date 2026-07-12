@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -29,7 +28,6 @@ function Placeholder({ title }: { title: string }) {
 
 export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef<HTMLElement>(null);
@@ -42,16 +40,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
   } | null>(null);
   const suppressClickUntilRef = useRef(0);
 
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsMobile(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (!isMobile) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     gestureRef.current = {
       pointerId: event.pointerId,
@@ -151,9 +140,9 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
 
       <div
         id="replay-data-panel"
-        inert={isMobile && !mobileOpen}
-        aria-hidden={isMobile && !mobileOpen}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/70 md:border-t-0"
+        className={`${
+          mobileOpen || dragging ? "visible" : "invisible md:visible"
+        } flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/70 md:border-t-0`}
       >
         <Tabs defaultValue="instruments" className="min-h-0 flex-1 gap-0 overflow-hidden">
           <TabsList className="m-3 mb-0 grid h-auto w-auto grid-cols-4">
