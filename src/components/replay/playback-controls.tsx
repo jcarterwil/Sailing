@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, X } from "lucide-react";
 
-import { usePlaybackStore, type TrailMode } from "@/components/replay/playback-store";
+import {
+  usePlaybackStore,
+  type CameraMode,
+  type TrailMode,
+} from "@/components/replay/playback-store";
 import type { MapStyleId } from "@/components/replay/map-view";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,10 +37,14 @@ export function PlaybackControls({
   const speed = usePlaybackStore((s) => s.speed);
   const trailMode = usePlaybackStore((s) => s.trailMode);
   const rangeSel = usePlaybackStore((s) => s.rangeSel);
+  const selectedEntryId = usePlaybackStore((s) => s.selectedEntryId);
+  const cameraMode = usePlaybackStore((s) => s.cameraMode);
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const setSpeed = usePlaybackStore((s) => s.setSpeed);
   const setTrailMode = usePlaybackStore((s) => s.setTrailMode);
   const setRange = usePlaybackStore((s) => s.setRange);
+  const setCameraMode = usePlaybackStore((s) => s.setCameraMode);
+  const hasSelection = selectedEntryId !== null;
 
   // Clock display at ~10Hz, not per frame.
   const [clock, setClock] = useState(() =>
@@ -96,6 +104,24 @@ export function PlaybackControls({
         <SelectContent>
           <SelectItem value="map">Map</SelectItem>
           <SelectItem value="satellite">Satellite</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={cameraMode}
+        onValueChange={(v) => setCameraMode(v as CameraMode)}
+      >
+        <SelectTrigger className="w-28" aria-label="Camera mode">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="north">North-up</SelectItem>
+          <SelectItem value="follow" disabled={!hasSelection}>
+            Follow
+          </SelectItem>
+          <SelectItem value="chase" disabled={!hasSelection}>
+            Chase
+          </SelectItem>
         </SelectContent>
       </Select>
 
