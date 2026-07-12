@@ -29,19 +29,34 @@ export async function POST(
   }
 
   // RLS-visible read proves membership; then check trigger rights.
-  const { data: track } = await supabase
+  const { data: track, error: trackError } = await supabase
     .from("tracks")
     .select(
-      "id, entry_id, status, format, raw_path, uploaded_by, race_entries!inner(race_id, added_by, races!inner(organizer_id))",
+      "id, entry_id, status, format, raw_path, race_entries!inner(race_id, boat_id, added_by, races!inner(organizer_id))",
     )
     .eq("id", trackId)
     .maybeSingle();
+  if (trackError) {
+    return NextResponse.json({ error: "Could not load track." }, { status: 500 });
+  }
   if (!track) {
     return NextResponse.json({ error: "Track not found." }, { status: 404 });
   }
   const entry = track.race_entries;
-  const isOrganizer = entry.races.organizer_id === user.id;
-  if (!isOrganizer && entry.added_by !== user.id && track.uploaded_by !== user.id) {
+  const [
+    { data: canOrganize, error: organizerError },
+    { data: canEditBoat, error: editError },
+    { data: canViewBoat, error: viewError },
+  ] = await Promise.all([
+    supabase.rpc("is_race_organizer", { rid: entry.race_id }),
+    supabase.rpc("can_edit_boat", { bid: entry.boat_id }),
+    supabase.rpc("can_view_boat", { bid: entry.boat_id }),
+  ]);
+  if (organizerError || editError || viewError) {
+    return NextResponse.json({ error: "Could not verify track access." }, { status: 500 });
+  }
+  const isLegacyEntryOwner = entry.added_by === user.id && !canViewBoat;
+  if (!canOrganize && !canEditBoat && !isLegacyEntryOwner) {
     return NextResponse.json({ error: "Not allowed." }, { status: 403 });
   }
   if (track.status === "processing" && !force) {

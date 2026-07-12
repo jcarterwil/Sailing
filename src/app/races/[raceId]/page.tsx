@@ -33,28 +33,51 @@ export default async function RaceManagePage({
     redirect("/login");
   }
 
-  const { data: race } = await supabase
+  const { data: race, error: raceError } = await supabase
     .from("races")
     .select("id, name, venue, starts_at, created_at, organizer_id, join_code, conditions, tags")
     .eq("id", raceId)
     .maybeSingle();
+  if (raceError) {
+    throw new Error(`Could not load race: ${raceError.message}`);
+  }
   if (!race) {
     notFound();
   }
 
-  const [{ data: entries }, { data: isAdmin }] = await Promise.all([
-    supabase
-      .from("race_entries")
-      .select(
-        "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at)",
-      )
-      .eq("race_id", raceId)
-      .order("created_at", { ascending: true }),
-    supabase.rpc("is_admin"),
-  ]);
+  const [
+    { data: entries, error: entriesError },
+    { data: canOrganize, error: organizerError },
+    { data: boatMemberships, error: membershipsError },
+  ] = await Promise.all([
+      supabase
+        .from("race_entries")
+        .select(
+          "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at)",
+        )
+        .eq("race_id", raceId)
+        .order("created_at", { ascending: true }),
+      supabase.rpc("is_race_organizer", { rid: raceId }),
+      supabase
+        .from("boat_memberships")
+        .select("boat_id, role")
+        .eq("user_id", user.id),
+    ]);
+  if (entriesError) {
+    throw new Error(`Could not load race entries: ${entriesError.message}`);
+  }
+  if (organizerError) {
+    throw new Error(`Could not check race permissions: ${organizerError.message}`);
+  }
+  if (membershipsError) {
+    throw new Error(`Could not load boat access: ${membershipsError.message}`);
+  }
 
-  const isOrganizer = race.organizer_id === user.id;
-  const canManageRace = isOrganizer || !!isAdmin;
+  const isOrganizer = canOrganize ?? false;
+  const canManageRace = isOrganizer;
+  const membershipByBoatId = new Map(
+    (boatMemberships ?? []).map((membership) => [membership.boat_id, membership.role]),
+  );
   const raceMeta = parseRaceMeta(race.conditions, race.tags);
   const panelEntries = (entries ?? []).map((entry) => {
     const entryMeta = parseEntryMeta(entry.crew, entry.tags);
@@ -62,8 +85,18 @@ export default async function RaceManagePage({
       entryId: entry.id,
       boatName: entry.boats?.name ?? "Unknown",
       color: entry.color,
-      canUpload: isOrganizer || entry.added_by === user.id,
-      canEditMeta: isOrganizer || entry.added_by === user.id,
+      canUpload:
+        isOrganizer ||
+        entry.boats?.owner_id === user.id ||
+        (!!entry.boats && membershipByBoatId.get(entry.boats.id) === "editor") ||
+        (entry.added_by === user.id &&
+          (!entry.boats || !membershipByBoatId.has(entry.boats.id))),
+      canEditMeta:
+        isOrganizer ||
+        entry.boats?.owner_id === user.id ||
+        (!!entry.boats && membershipByBoatId.get(entry.boats.id) === "editor") ||
+        (entry.added_by === user.id &&
+          (!entry.boats || !membershipByBoatId.has(entry.boats.id))),
       crew: entryMeta.crew,
       tags: entryMeta.tags,
       track: entry.tracks

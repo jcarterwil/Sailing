@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { findAuthUserByEmail } from "@/lib/supabase/users-admin";
 
 // Ambiguous characters (O/0, 1/I) excluded so codes read cleanly over the phone.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -156,16 +157,6 @@ export async function clearClaim(boatId: string) {
   revalidatePath("/admin/boats");
 }
 
-// Find an existing auth user by email. supabase-js has no getUserByEmail, so we
-// scan listUsers (club-scale: a single page is plenty). Returns null if not on
-// the first page.
-async function findUserIdByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (error) throw new Error(`Could not look up users: ${error.message}`);
-  const match = data.users.find((u) => (u.email ?? "").toLowerCase() === email);
-  return match?.id ?? null;
-}
-
 export async function inviteBoatOwner(boatId: string) {
   await requireAdmin();
   const admin = createAdminClient();
@@ -189,11 +180,11 @@ export async function inviteBoatOwner(boatId: string) {
     // Already registered: the auto-claim trigger only fires on signup, so claim
     // the boat for the existing user now (idempotent — only if still unclaimed).
     if (/already registered|already exists|user.*exists/i.test(inviteError.message)) {
-      const existingId = await findUserIdByEmail(admin, boat.claim_email);
-      if (existingId) {
+      const existingUser = await findAuthUserByEmail(boat.claim_email);
+      if (existingUser) {
         const { data: updated } = await admin
           .from("boats")
-          .update({ owner_id: existingId, updated_at: new Date().toISOString() })
+          .update({ owner_id: existingUser.id, updated_at: new Date().toISOString() })
           .eq("id", boatId)
           .is("owner_id", null)
           .select("id");

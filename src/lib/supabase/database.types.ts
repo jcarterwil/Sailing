@@ -71,6 +71,55 @@ export type Database = {
           },
         ]
       }
+      boat_memberships: {
+        Row: {
+          boat_id: string
+          created_at: string
+          invited_by: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          boat_id: string
+          created_at?: string
+          invited_by: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          boat_id?: string
+          created_at?: string
+          invited_by?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_memberships_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_memberships_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boats: {
         Row: {
           boat_class: string | null
@@ -417,6 +466,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_edit_boat: { Args: { bid: string }; Returns: boolean }
+      can_manage_boat: { Args: { bid: string }; Returns: boolean }
+      can_view_boat: { Args: { bid: string }; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }
       is_race_organizer: { Args: { rid: string }; Returns: boolean }

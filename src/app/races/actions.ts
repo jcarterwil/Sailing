@@ -149,19 +149,39 @@ export async function requestTrackUpload(
   }
 
   // RLS-visible read proves the caller may act on this entry.
-  const { data: entry } = await supabase
+  const { data: entry, error: entryError } = await supabase
     .from("race_entries")
-    .select("id, race_id, added_by, races!inner(organizer_id)")
+    .select("id, race_id, boat_id, added_by, races!inner(organizer_id)")
     .eq("id", entryId)
     .maybeSingle();
+  if (entryError) throw new Error(`Could not load entry: ${entryError.message}`);
   if (!entry) throw new Error("Entry not found.");
-  const isOrganizer = entry.races.organizer_id === user.id;
-  if (!isOrganizer && entry.added_by !== user.id) {
-    throw new Error("Only the organizer or the entry owner can upload a track.");
+  const [
+    { data: canOrganize, error: organizerError },
+    { data: canEditBoat, error: editError },
+    { data: canViewBoat, error: viewError },
+  ] = await Promise.all([
+    supabase.rpc("is_race_organizer", { rid: entry.race_id }),
+    supabase.rpc("can_edit_boat", { bid: entry.boat_id }),
+    supabase.rpc("can_view_boat", { bid: entry.boat_id }),
+  ]);
+  if (organizerError) {
+    throw new Error(`Could not check race permissions: ${organizerError.message}`);
+  }
+  if (editError || viewError) {
+    throw new Error(`Could not check boat permissions: ${(editError ?? viewError)?.message}`);
+  }
+  const isLegacyEntryOwner = entry.added_by === user.id && !canViewBoat;
+  if (!canOrganize && !canEditBoat && !isLegacyEntryOwner) {
+    throw new Error("Only the organizer, boat owner, or a boat editor can upload a track.");
   }
 
   const path = `${entry.race_id}/${entryId}/raw.${ext}`;
-  const { data: track, error: trackError } = await supabase
+  // Service role: track writes are server-mediated so authenticated clients
+  // cannot tamper with processed_path, status, summary, or other server-owned
+  // fields. Authorization was completed above before escalating.
+  const admin = createAdminClient();
+  const { data: track, error: trackError } = await admin
     .from("tracks")
     .upsert(
       {
@@ -180,7 +200,6 @@ export async function requestTrackUpload(
     .single();
   if (trackError) throw new Error(`Could not record track: ${trackError.message}`);
 
-  const admin = createAdminClient();
   const { data: signed, error: signError } = await admin.storage
     .from("race-tracks-raw")
     .createSignedUploadUrl(path, { upsert: true });
@@ -262,15 +281,31 @@ export async function updateEntryMeta(
   const tags = normalizeTags(meta.tags);
 
   // RLS-visible read proves the caller may act on this entry.
-  const { data: entry } = await supabase
+  const { data: entry, error: entryError } = await supabase
     .from("race_entries")
-    .select("id, race_id, added_by, races!inner(organizer_id)")
+    .select("id, race_id, boat_id, added_by, races!inner(organizer_id)")
     .eq("id", entryId)
     .maybeSingle();
+  if (entryError) throw new Error(`Could not load entry: ${entryError.message}`);
   if (!entry) throw new Error("Entry not found.");
-  const isOrganizer = entry.races.organizer_id === user.id;
-  if (!isOrganizer && entry.added_by !== user.id) {
-    throw new Error("Only the organizer or the entry owner can edit entry metadata.");
+  const [
+    { data: canOrganize, error: organizerError },
+    { data: canEditBoat, error: editError },
+    { data: canViewBoat, error: viewError },
+  ] = await Promise.all([
+    supabase.rpc("is_race_organizer", { rid: entry.race_id }),
+    supabase.rpc("can_edit_boat", { bid: entry.boat_id }),
+    supabase.rpc("can_view_boat", { bid: entry.boat_id }),
+  ]);
+  if (organizerError) {
+    throw new Error(`Could not check race permissions: ${organizerError.message}`);
+  }
+  if (editError || viewError) {
+    throw new Error(`Could not check boat permissions: ${(editError ?? viewError)?.message}`);
+  }
+  const isLegacyEntryOwner = entry.added_by === user.id && !canViewBoat;
+  if (!canOrganize && !canEditBoat && !isLegacyEntryOwner) {
+    throw new Error("Only the organizer, boat owner, or a boat editor can edit entry metadata.");
   }
 
   const { error } = await supabase
@@ -286,26 +321,31 @@ export async function updateRaceMeta(
   raceId: string,
   meta: { conditions: RaceConditions | null; tags: string[] },
 ) {
-  const { supabase, user } = await requireUser();
+  const { supabase } = await requireUser();
 
   const conditions = normalizeConditions(meta.conditions);
   const tags = normalizeTags(meta.tags);
 
   // RLS-visible read proves membership; organizer check is app-level.
-  const { data: race } = await supabase
+  const { data: race, error: raceError } = await supabase
     .from("races")
     .select("id, organizer_id")
     .eq("id", raceId)
     .maybeSingle();
+  if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
   if (!race) throw new Error("Race not found.");
-  const isOrganizer = race.organizer_id === user.id;
-  const { data: isAdmin } = isOrganizer ? { data: false } : await supabase.rpc("is_admin");
-  if (!isOrganizer && !isAdmin) {
-    throw new Error("Only the organizer or an admin can edit race metadata.");
+  const { data: canOrganize, error: organizerError } = await supabase.rpc(
+    "is_race_organizer",
+    { rid: raceId },
+  );
+  if (organizerError) {
+    throw new Error(`Could not check race permissions: ${organizerError.message}`);
+  }
+  if (!canOrganize) {
+    throw new Error("Only the organizer can edit race metadata.");
   }
 
-  const writer = isAdmin ? createAdminClient() : supabase;
-  const { error } = await writer
+  const { error } = await supabase
     .from("races")
     .update({ conditions: conditionsToJson(conditions), tags })
     .eq("id", raceId);
