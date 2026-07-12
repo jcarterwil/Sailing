@@ -43,20 +43,19 @@ export function UserAccessEditor({
   initialBoatAccess,
   boats,
 }: UserAccessEditorProps) {
-  const [isAdmin, setIsAdmin] = useState(initialIsAdmin);
-  const [boatAccess, setBoatAccess] = useState(initialBoatAccess);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const isCurrentUser = currentUserId === userId;
+  const isAdmin = initialIsAdmin;
+  const boatAccess = initialBoatAccess;
 
-  function run(action: () => Promise<void>, success: string, onSuccess: () => void) {
+  function run(action: () => Promise<void>, success: string) {
     setError(null);
     setNotice(null);
     startTransition(async () => {
       try {
         await action();
-        onSuccess();
         setNotice(success);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not update user access.");
@@ -70,7 +69,6 @@ export function UserAccessEditor({
     run(
       () => updateUserAdminAccess(userId, makeAdmin),
       makeAdmin ? "Administrator access granted." : "Administrator access removed.",
-      () => setIsAdmin(makeAdmin),
     );
   }
 
@@ -79,13 +77,6 @@ export function UserAccessEditor({
     run(
       () => updateUserBoatAccess(userId, boatId, role),
       role ? `Boat access changed to ${role}.` : "Boat access removed.",
-      () =>
-        setBoatAccess((current) => {
-          const next = { ...current };
-          if (role) next[boatId] = role;
-          else delete next[boatId];
-          return next;
-        }),
     );
   }
 
