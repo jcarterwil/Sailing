@@ -164,6 +164,11 @@ describe("analyzeRace", () => {
     expect(analysis.fleet.entryCount).toBe(0);
     expect(analysis.warnings.map((warning) => warning.code)).toContain("no-tracks");
     expect(() => JSON.stringify(analysis)).not.toThrow();
+
+    const csv = syntheticTrack("csv", new Array(180).fill(240), { t0: START });
+    csv.source = "csv";
+    csv.extras = null;
+    expect(() => analyzeRace([csv])).not.toThrow();
   });
 
   it("uses the shortest complete column and warns about recoverable shape damage", () => {
@@ -183,15 +188,17 @@ describe("analyzeRace", () => {
       { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
     ];
     const port = syntheticTrack("port", new Array(661).fill(238), { extras: extras(timerEvents) });
-    const duplicateNoise = syntheticTrack("port", new Array(500).fill(100), { extras: extras(timerEvents) });
+    const duplicateNoise = [650, 640, 630].map((length) =>
+      syntheticTrack("port", new Array(length).fill(100), { extras: extras(timerEvents) }));
     const starboard = syntheticTrack("starboard", new Array(661).fill(328), {
       extras: extras(timerEvents),
     });
 
-    const analysis = analyzeRace([port, duplicateNoise, starboard]);
+    const analysis = analyzeRace([port, ...duplicateNoise, starboard]);
     expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
     expect(analysis.wind.provenance.estimatedHeadingSampleCount).toBe(242);
     expect(analysis.warnings.map((warning) => warning.code)).toContain("duplicate-entry-id");
+    expect(analysis.race.legs.every((leg) => leg.type === "upwind")).toBe(true);
   });
 });
 

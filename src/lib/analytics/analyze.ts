@@ -61,13 +61,13 @@ export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
   validateTracks(ordered, warnings);
 
   const window = detectRaceWindow(ordered, warnings);
-  const windTracks = [...ordered.reduce((byEntry, track) => {
+  const fleetTracks = [...ordered.reduce((byEntry, track) => {
     const current = byEntry.get(track.entryId);
     if (!current || columnLength(track) > columnLength(current)) byEntry.set(track.entryId, track);
     return byEntry;
   }, new Map<string, ProcessedTrack>()).values()];
-  const wind = analyzeWind(windTracks, window.start.timeMs, window.finish.timeMs, warnings);
-  const race = buildRaceStructure(ordered, window, wind, warnings);
+  const wind = analyzeWind(fleetTracks, window.start.timeMs, window.finish.timeMs, warnings);
+  const race = buildRaceStructure(fleetTracks, window, wind, warnings);
   const perEntry: EntryAnalysis[] = ordered.map((track) => {
     const maneuvers = detectManeuvers(
       track,
