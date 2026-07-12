@@ -85,6 +85,7 @@ export function PlaybackControls({
         <SelectContent>
           <SelectItem value="tail">Tail</SelectItem>
           <SelectItem value="full">Full tail</SelectItem>
+          <SelectItem value="speed">Speed</SelectItem>
         </SelectContent>
       </Select>
 
