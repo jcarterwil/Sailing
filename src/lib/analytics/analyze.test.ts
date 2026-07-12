@@ -222,6 +222,26 @@ describe("analyzeRace", () => {
     expect(analysis.fleet.entryCount).toBe(2);
     expect(analysis.fleet.pointCount).toBe(1_202);
   });
+
+  it("prefers the metadata-rich track when duplicate entries have equal lengths", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const incomplete = syntheticTrack("port", new Array(661).fill(100));
+    const corrected = syntheticTrack("port", new Array(661).fill(238), {
+      extras: extras(timerEvents),
+    });
+    const starboard = syntheticTrack("starboard", new Array(661).fill(328), {
+      extras: extras(timerEvents),
+    });
+
+    const analysis = analyzeRace([incomplete, starboard, corrected]);
+    expect(analysis.race.start.timeMs).toBe(START);
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(4);
+    expect(analysis.fleet.entryCount).toBe(2);
+    expect(analyzeRace([corrected, starboard, incomplete])).toEqual(analysis);
+  });
 });
 
 describe("detectManeuvers", () => {
@@ -289,5 +309,47 @@ describe("detectManeuvers", () => {
       START + 63_000,
       START + 130_000,
     )).toHaveLength(0);
+  });
+
+  it("ignores invalid timestamps without producing non-finite maneuver fields", () => {
+    const courses = [
+      ...new Array(60).fill(240),
+      ...Array.from({ length: 11 }, (_, index) => 240 + (86 * index) / 10),
+      ...new Array(60).fill(326),
+    ];
+    const track = syntheticTrack("damaged-turn", courses, { t0: START });
+    track.t[65] = NaN;
+    const wind: WindAnalysis = {
+      source: "estimated",
+      twdDeg: 283,
+      twsKts: null,
+      samples: [
+        { timeMs: START, twdDeg: 283, twsKts: null, source: "estimated" },
+        { timeMs: START + 130_000, twdDeg: 283, twsKts: null, source: "estimated" },
+      ],
+      provenance: {
+        source: "estimated",
+        method: "fleet-heading-modes",
+        confidence: "high",
+        sensorEntryIds: [],
+        sensorSampleCount: 0,
+        estimatedHeadingSampleCount: 100,
+      },
+    };
+
+    const maneuvers = detectManeuvers(track, wind, START, START + 130_000);
+    expect(maneuvers).toHaveLength(1);
+    expect(maneuvers[0].type).toBe("tack");
+    expect([
+      maneuvers[0].tMs,
+      maneuvers[0].window.startMs,
+      maneuvers[0].window.endMs,
+      maneuvers[0].turnAngleDeg,
+      maneuvers[0].sogInKts,
+      maneuvers[0].sogOutKts,
+      maneuvers[0].durationSec,
+      maneuvers[0].metersMadeGood,
+      maneuvers[0].vmgRetention,
+    ].filter((value) => value !== null).every(Number.isFinite)).toBe(true);
   });
 });

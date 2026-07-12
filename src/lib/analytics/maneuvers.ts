@@ -50,6 +50,26 @@ interface Candidate {
   after: StableState;
 }
 
+function withoutInvalidTimes(track: ProcessedTrack, length: number): ProcessedTrack | null {
+  const indices: number[] = [];
+  for (let i = 0; i < length; i++) {
+    if (finite(epochAt(track, i))) indices.push(i);
+  }
+  if (indices.length === length) return track;
+  if (indices.length < 5) return null;
+  return {
+    ...track,
+    t: indices.map((index) => track.t[index]),
+    lat: indices.map((index) => track.lat[index]),
+    lon: indices.map((index) => track.lon[index]),
+    sog: indices.map((index) => track.sog[index]),
+    cog: indices.map((index) => track.cog[index]),
+    hdg: indices.map((index) => track.hdg[index]),
+    heel: indices.map((index) => track.heel[index]),
+    trim: indices.map((index) => track.trim[index]),
+  };
+}
+
 function stableState(
   track: ProcessedTrack,
   wind: WindAnalysis,
@@ -62,6 +82,7 @@ function stableState(
   const start = lowerBoundEpoch(track, fromMs, length);
   for (let i = start; i < length; i++) {
     const timeMs = epochAt(track, i);
+    if (!finite(timeMs)) continue;
     if (timeMs > toMs) break;
     if (finite(track.cog[i]) && finite(track.sog[i]) && track.sog[i] >= MANEUVER_MIN_SOG_KTS) {
       courses.push(track.cog[i]);
@@ -111,6 +132,7 @@ function turnCenter(
   const start = lowerBoundEpoch(track, fromMs, length);
   for (let i = start; i < length; i++) {
     const timeMs = epochAt(track, i);
+    if (!finite(timeMs)) continue;
     if (timeMs > toMs) break;
     const twdDeg = windDirectionAt(wind, timeMs);
     const course = track.cog[i];
@@ -185,7 +207,7 @@ function madeGood(
   let durationSec = 0;
   for (let i = startIndex + 1; i <= endIndex; i++) {
     const dtSec = (track.t[i] - track.t[i - 1]) / 1_000;
-    if (dtSec <= 0 || dtSec > 5) continue;
+    if (!finite(dtSec) || dtSec <= 0 || dtSec > 5) continue;
     const sog = finite(track.sog[i]) && finite(track.sog[i - 1])
       ? (track.sog[i] + track.sog[i - 1]) / 2
       : NaN;
@@ -278,7 +300,11 @@ export function detectManeuvers(
   startTimeMs: number | null,
   finishTimeMs: number | null,
 ): Maneuver[] {
-  const length = columnLength(track);
+  const originalLength = columnLength(track);
+  const validTrack = withoutInvalidTimes(track, originalLength);
+  if (validTrack === null) return [];
+  if (validTrack !== track) return detectManeuvers(validTrack, wind, startTimeMs, finishTimeMs);
+  const length = originalLength;
   if (length < 5 || wind.twdDeg === null) return [];
   const firstTime = epochAt(track, 0);
   const lastTime = epochAt(track, length - 1);
@@ -293,6 +319,7 @@ export function detectManeuvers(
   const firstIndex = lowerBoundEpoch(track, start, length);
   for (let i = firstIndex; i < length; i += step) {
     const centerMs = epochAt(track, i);
+    if (!finite(centerMs)) continue;
     if (centerMs > finish) break;
     const before = stableState(
       track,
