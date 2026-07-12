@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -10,10 +10,13 @@ import { buildProcessedTrack } from "@/lib/analytics/track/process";
 // Golden tests against the real July 7 2026 fleet logs in Examples/.
 const EXAMPLES = path.resolve(import.meta.dirname, "../../../../Examples");
 const RACE_START_UTC = Date.UTC(2026, 6, 7, 22, 10, 0);
+const hasExamples = existsSync(EXAMPLES);
 
-const vkxFiles = readdirSync(EXAMPLES).filter((f) => f.endsWith(".vkx"));
+const vkxFiles = hasExamples
+  ? readdirSync(EXAMPLES).filter((f) => f.endsWith(".vkx"))
+  : [];
 
-describe("parseVkx", () => {
+describe.skipIf(!hasExamples)("parseVkx", () => {
   it("finds all five example logs", () => {
     expect(vkxFiles).toHaveLength(5);
   });
@@ -65,10 +68,9 @@ describe("parseVkx", () => {
   });
 });
 
-describe("parseTrackCsv", () => {
-  const csvText = readFileSync(path.join(EXAMPLES, "Blessed 7-7-2026.csv"), "utf8");
-
+describe.skipIf(!hasExamples)("parseTrackCsv", () => {
   it("parses the Blessed export", () => {
+    const csvText = readFileSync(path.join(EXAMPLES, "Blessed 7-7-2026.csv"), "utf8");
     const raw = parseTrackCsv(csvText);
     expect(raw.points.length).toBeGreaterThan(15_000);
     expect(raw.tzOffsetMinutes).toBe(-300);
@@ -84,9 +86,10 @@ describe("parseTrackCsv", () => {
   });
 });
 
-describe("buildProcessedTrack", () => {
+describe.skipIf(!hasExamples)("buildProcessedTrack", () => {
   it("cleans the CSV attitude outliers", () => {
-    const processed = buildProcessedTrack(parseTrackCsv(csvOnce()), "entry-1");
+    const csvText = readFileSync(path.join(EXAMPLES, "Blessed 7-7-2026.csv"), "utf8");
+    const processed = buildProcessedTrack(parseTrackCsv(csvText), "entry-1");
     let extremeHeel = 0;
     for (const h of processed.heel) {
       if (!Number.isNaN(h) && Math.abs(h) > 45) extremeHeel++;
@@ -94,10 +97,4 @@ describe("buildProcessedTrack", () => {
     expect(extremeHeel).toBe(0);
     expect(processed.t[0]).toBe(0);
   });
-
-  let cached: string | null = null;
-  function csvOnce() {
-    cached ??= readFileSync(path.join(EXAMPLES, "Blessed 7-7-2026.csv"), "utf8");
-    return cached;
-  }
 });

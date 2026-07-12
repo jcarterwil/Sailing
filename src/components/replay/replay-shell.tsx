@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 
 import type { TrackMeta } from "@/components/replay/track-loader";
+import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // maplibre-gl is browser-only; load the whole replay client-side.
@@ -19,6 +20,12 @@ const RaceReplay = dynamic(
   },
 );
 
-export function ReplayShell(props: { raceName: string; trackMetas: TrackMeta[] }) {
+export function ReplayShell(props: {
+  raceName: string;
+  trackMetas: TrackMeta[];
+  raceMeta: RaceMeta;
+  /** Full race+entry metadata payload for analyze / dossier consumers. */
+  analyzeContext: RaceAnalyzeContext;
+}) {
   return <RaceReplay {...props} />;
 }

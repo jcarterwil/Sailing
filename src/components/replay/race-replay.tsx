@@ -9,8 +9,21 @@ import { usePlaybackStore } from "@/components/replay/playback-store";
 import { Timeline } from "@/components/replay/timeline";
 import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay/track-loader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 
-export function RaceReplay({ raceName, trackMetas }: { raceName: string; trackMetas: TrackMeta[] }) {
+export function RaceReplay({
+  raceName,
+  trackMetas,
+  raceMeta,
+  analyzeContext,
+}: {
+  raceName: string;
+  trackMetas: TrackMeta[];
+  /** Race-level conditions/tags; carried for analyze / dossier correlation. */
+  raceMeta: RaceMeta;
+  /** Same metadata shape the analyze/report path will consume. */
+  analyzeContext: RaceAnalyzeContext;
+}) {
   const [tracks, setTracks] = useState<LoadedTrack[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
@@ -69,7 +82,12 @@ export function RaceReplay({ raceName, trackMetas }: { raceName: string; trackMe
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-race-tags={raceMeta.tags.join(",")}
+      data-has-conditions={raceMeta.conditions ? "1" : "0"}
+      data-entry-count={String(analyzeContext.entries.length)}
+    >
       <div className="min-h-0 flex-1">
         <MapView tracks={tracks} styleId={styleId} />
       </div>

@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CircleAlert, FileUp, Loader2 } from "lucide-react";
 
+import { EntryMetaEditor } from "@/app/races/[raceId]/race-meta-panel";
 import { createEntryFromFile, requestTrackUpload } from "@/app/races/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { CrewMember } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/client";
 
 interface EntryRow {
@@ -14,6 +16,9 @@ interface EntryRow {
   boatName: string;
   color: string;
   canUpload: boolean;
+  canEditMeta: boolean;
+  crew: CrewMember[];
+  tags: string[];
   track: {
     id: string;
     status: string;
@@ -172,39 +177,48 @@ export function UploadPanel({
           </li>
         )}
         {entries.map((entry) => (
-          <li key={entry.entryId} className="flex items-center gap-3 px-4 py-3 text-sm">
-            <span
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: entry.color }}
-              aria-hidden="true"
+          <li key={entry.entryId} className="px-4 py-3 text-sm">
+            <div className="flex items-center gap-3">
+              <span
+                className="size-3 shrink-0 rounded-full"
+                style={{ backgroundColor: entry.color }}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate font-medium">{entry.boatName}</span>
+              {entry.track ? (
+                <>
+                  <TrackStatusBadge status={entry.track.status} />
+                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                    {entry.track.status === "error"
+                      ? entry.track.errorMessage
+                      : entry.track.pointCount
+                        ? `${entry.track.pointCount.toLocaleString()} pts`
+                        : entry.track.filename}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">no track</span>
+              )}
+              {entry.canUpload && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setTargetEntry(entry.entryId);
+                    entryUploadRef.current?.click();
+                  }}
+                >
+                  {entry.track ? "Replace" : "Upload"}
+                </Button>
+              )}
+            </div>
+            <EntryMetaEditor
+              key={`${entry.entryId}:${entry.tags.join("|")}:${entry.crew.map((c) => `${c.name}|${c.role}`).join(";")}`}
+              entryId={entry.entryId}
+              canEdit={entry.canEditMeta}
+              initialCrew={entry.crew}
+              initialTags={entry.tags}
             />
-            <span className="min-w-0 flex-1 truncate font-medium">{entry.boatName}</span>
-            {entry.track ? (
-              <>
-                <TrackStatusBadge status={entry.track.status} />
-                <span className="hidden text-xs text-muted-foreground sm:inline">
-                  {entry.track.status === "error"
-                    ? entry.track.errorMessage
-                    : entry.track.pointCount
-                      ? `${entry.track.pointCount.toLocaleString()} pts`
-                      : entry.track.filename}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">no track</span>
-            )}
-            {entry.canUpload && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setTargetEntry(entry.entryId);
-                  entryUploadRef.current?.click();
-                }}
-              >
-                {entry.track ? "Replace" : "Upload"}
-              </Button>
-            )}
           </li>
         ))}
       </ul>
