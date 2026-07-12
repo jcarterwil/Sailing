@@ -174,12 +174,18 @@ describe("analyzeRace", () => {
   it("uses the shortest complete column and warns about recoverable shape damage", () => {
     const track = syntheticTrack("short-column", new Array(180).fill(240), { t0: START });
     track.cog = track.cog.slice(0, 120);
+    track.t[50] = NaN;
     const analysis = analyzeRace([track]);
-    expect(analysis.perEntry[0].aggregates.pointCount).toBe(120);
+    expect(analysis.perEntry[0].aggregates.pointCount).toBe(119);
     expect(analysis.warnings).toContainEqual(expect.objectContaining({
       code: "mismatched-track-columns",
       entryId: "short-column",
     }));
+    expect(analysis.warnings).toContainEqual(expect.objectContaining({
+      code: "invalid-track-points",
+      entryId: "short-column",
+    }));
+    expect(JSON.parse(JSON.stringify(analysis))).toEqual(analysis);
   });
 
   it("does not double-weight duplicate entry IDs in fleet wind", () => {

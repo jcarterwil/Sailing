@@ -4,12 +4,16 @@ import {
   BOTCHED_MIN_SPEED_RATIO,
   BOTCHED_MIN_VMG_RETENTION,
   MANEUVER_CONTEXT_MS,
+  MANEUVER_GYBE_MAX_ABS_TWA_DEG,
+  MANEUVER_GYBE_MIN_ABS_TWA_DEG,
   MANEUVER_MAX_TURN_DEG,
   MANEUVER_MAX_WINDOW_MS,
   MANEUVER_MIN_SEPARATION_MS,
   MANEUVER_MIN_SOG_KTS,
   MANEUVER_MIN_TURN_DEG,
   MANEUVER_STABLE_GAP_MS,
+  MANEUVER_TACK_MAX_ABS_TWA_DEG,
+  MANEUVER_TACK_MIN_ABS_TWA_DEG,
 } from "@/lib/analytics/constants";
 import {
   columnLength,
@@ -75,8 +79,22 @@ function maneuverType(beforeTwa: number, afterTwa: number): ManeuverType | null 
   if (Math.sign(beforeTwa) === Math.sign(afterTwa) || beforeTwa === 0 || afterTwa === 0) return null;
   const beforeAbs = Math.abs(beforeTwa);
   const afterAbs = Math.abs(afterTwa);
-  if (beforeAbs >= 20 && beforeAbs <= 90 && afterAbs >= 20 && afterAbs <= 90) return "tack";
-  if (beforeAbs >= 90 && beforeAbs <= 178 && afterAbs >= 90 && afterAbs <= 178) return "gybe";
+  if (
+    beforeAbs >= MANEUVER_TACK_MIN_ABS_TWA_DEG &&
+    beforeAbs <= MANEUVER_TACK_MAX_ABS_TWA_DEG &&
+    afterAbs >= MANEUVER_TACK_MIN_ABS_TWA_DEG &&
+    afterAbs <= MANEUVER_TACK_MAX_ABS_TWA_DEG
+  ) {
+    return "tack";
+  }
+  if (
+    beforeAbs >= MANEUVER_GYBE_MIN_ABS_TWA_DEG &&
+    beforeAbs <= MANEUVER_GYBE_MAX_ABS_TWA_DEG &&
+    afterAbs >= MANEUVER_GYBE_MIN_ABS_TWA_DEG &&
+    afterAbs <= MANEUVER_GYBE_MAX_ABS_TWA_DEG
+  ) {
+    return "gybe";
+  }
   return null;
 }
 

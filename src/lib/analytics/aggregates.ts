@@ -29,6 +29,7 @@ export function aggregateEntry(
 
   for (let i = 0; i < length; i++) {
     const timeMs = epochAt(track, i);
+    if (!finite(timeMs)) continue;
     if ((raceStartMs !== null && timeMs < raceStartMs) || (raceFinishMs !== null && timeMs > raceFinishMs)) {
       continue;
     }
