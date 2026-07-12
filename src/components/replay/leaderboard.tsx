@@ -16,8 +16,8 @@ import {
 import {
   applyRankHysteresis,
   estimateAxisSign,
+  fleetMedianDmgDelta,
   ladderRungs,
-  medianFinite,
   type LadderBoat,
   type LadderRung,
 } from "@/lib/analytics/ladder";
@@ -85,15 +85,10 @@ function computeBoard(
   const boatsLeg = sampleBoats(tracks, timeMs - LADDER_LEG_WINDOW_MS);
   const rawNow = ladderRungs(boatsNow, twd, origin, 1);
   const rawLeg = ladderRungs(boatsLeg, twd, origin, 1);
-  const pastDmg = new Map(rawLeg.map((r) => [r.entryId, r.dmgM]));
-  const deltas: number[] = [];
-  for (const r of rawNow) {
-    if (!r.inTrack) continue;
-    const prev = pastDmg.get(r.entryId);
-    if (prev === undefined || !Number.isFinite(prev)) continue;
-    deltas.push(r.dmgM - prev);
-  }
-  const axisSign = estimateAxisSign(prevSign, medianFinite(deltas));
+  const axisSign = estimateAxisSign(
+    prevSign,
+    fleetMedianDmgDelta(rawNow, rawLeg),
+  );
   const raw = ladderRungs(boatsNow, twd, origin, axisSign);
   const rungs = applyRankHysteresis(raw, prevOrder);
   const boatsTrend = sampleBoats(tracks, timeMs - LADDER_TREND_WINDOW_MS);

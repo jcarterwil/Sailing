@@ -5,6 +5,7 @@ import { LADDER_LEG_FLIP_M, RANK_HYSTERESIS_M } from "@/lib/analytics/constants"
 import {
   applyRankHysteresis,
   estimateAxisSign,
+  fleetMedianDmgDelta,
   ladderRungs,
   type LadderBoat,
 } from "@/lib/analytics/ladder";
@@ -114,6 +115,37 @@ describe("applyRankHysteresis", () => {
     const held = applyRankHysteresis(next, prev.map((r) => r.entryId));
     expect(held[0].entryId).toBe("B");
     expect(held[1].entryId).toBe("A");
+  });
+
+  it("keeps gap-to-leader non-negative when hysteresis holds a slightly behind leader", () => {
+    const prev = ladderRungs([boat("A", 100, 0), boat("B", 90, 0)], 0, ORIGIN);
+    const next = ladderRungs([boat("A", 100, 0), boat("B", 103, 0)], 0, ORIGIN);
+    const held = applyRankHysteresis(next, prev.map((r) => r.entryId));
+    expect(held[0].entryId).toBe("A");
+    expect(held[1].dmgM).toBeGreaterThan(held[0].dmgM);
+    expect(held[1].gapToLeaderM).toBeGreaterThanOrEqual(0);
+    expect(held[1].gapAheadM).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("fleetMedianDmgDelta", () => {
+  it("ignores boats that were out of track at the lookback sample", () => {
+    const now = ladderRungs(
+      [boat("A", 100, 0), boat("B", 50, 0), boat("C", 200, 0)],
+      0,
+      ORIGIN,
+    );
+    const past = ladderRungs(
+      [
+        boat("A", 70, 0),
+        boat("B", 20, 0),
+        boat("C", 0, 0, { inTrack: false }), // clamped start — must not enter the median
+      ],
+      0,
+      ORIGIN,
+    );
+    // A:+30, B:+30; C excluded → median 30
+    expect(fleetMedianDmgDelta(now, past)).toBeCloseTo(30, 1);
   });
 });
 

@@ -49,11 +49,13 @@ function assignRanksAndGaps(
     return {
       ...row,
       rank: i + 1,
-      gapToLeaderM: isLeader || !row.inTrack ? Number.NaN : leaderDmg - row.dmgM,
+      // Clamp: hysteresis can leave rank-1 slightly behind on raw DMG.
+      gapToLeaderM:
+        isLeader || !row.inTrack ? Number.NaN : Math.max(0, leaderDmg - row.dmgM),
       gapAheadM:
         isLeader || !row.inTrack || !ahead || !ahead.inTrack
           ? Number.NaN
-          : ahead.dmgM - row.dmgM,
+          : Math.max(0, ahead.dmgM - row.dmgM),
     };
   });
 }
@@ -112,6 +114,22 @@ export function estimateAxisSign(prevSign: 1 | -1, medianDmgDeltaM: number): 1 |
     return prevSign === 1 ? -1 : 1;
   }
   return prevSign;
+}
+
+/** Median raw-DMG delta for boats in-track at both samples. */
+export function fleetMedianDmgDelta(
+  now: LadderRung[],
+  past: LadderRung[],
+): number {
+  const pastById = new Map(past.map((r) => [r.entryId, r]));
+  const deltas: number[] = [];
+  for (const r of now) {
+    if (!r.inTrack) continue;
+    const prev = pastById.get(r.entryId);
+    if (!prev?.inTrack || !Number.isFinite(prev.dmgM)) continue;
+    deltas.push(r.dmgM - prev.dmgM);
+  }
+  return medianFinite(deltas);
 }
 
 /** Median of a numeric array; NaN when empty or all non-finite. */
