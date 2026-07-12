@@ -92,18 +92,21 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          is_admin: boolean
           updated_at: string
         }
         Insert: {
           created_at?: string
           display_name?: string | null
           id: string
+          is_admin?: boolean
           updated_at?: string
         }
         Update: {
           created_at?: string
           display_name?: string | null
           id?: string
+          is_admin?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -364,6 +367,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }
       is_race_organizer: { Args: { rid: string }; Returns: boolean }
     }
