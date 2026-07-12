@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { usePlaybackStore } from "@/components/replay/playback-store";
+import { usePlaybackStore, type TrailMode } from "@/components/replay/playback-store";
+import {
+  buildSpeedTrackData,
+  createFleetSpeedDomain,
+  lineGradientExpression,
+  SPEED_COLORS,
+} from "@/components/replay/speed-track";
 import { indexAt, sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 
@@ -30,6 +36,14 @@ const SATELLITE_STYLE: maplibregl.StyleSpecification = {
 };
 
 const TAIL_SECONDS = 60;
+
+function speedSourceId(index: number): string {
+  return `speed-track-source-${index}`;
+}
+
+function speedLayerId(index: number): string {
+  return `speed-track-layer-${index}`;
+}
 
 // A 64px boat arrow drawn as an SDF so icon-color can tint it per boat.
 function makeBoatArrow(): ImageData {
@@ -98,6 +112,12 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const readyRef = useRef(false);
+  const trailMode = usePlaybackStore((state) => state.trailMode);
+  const speedDomain = useMemo(() => createFleetSpeedDomain(tracks), [tracks]);
+  const speedTracks = useMemo(
+    () => tracks.map((track) => buildSpeedTrackData(track, speedDomain)),
+    [speedDomain, tracks],
+  );
 
   // Map lifecycle: one instance; sources/layers re-added on style change.
   useEffect(() => {
@@ -146,7 +166,40 @@ export function MapView({
           "line-width": 2,
           "line-opacity": 0.85,
         },
-        layout: { "line-cap": "round", "line-join": "round" },
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+          visibility: trailMode === "speed" ? "none" : "visible",
+        },
+      });
+      speedTracks.forEach((speedTrack, index) => {
+        if (speedTrack.coordinates.length < 2 || speedTrack.stops.length < 2) return;
+        map.addSource(speedSourceId(index), {
+          type: "geojson",
+          lineMetrics: true,
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: speedTrack.coordinates },
+          },
+        });
+        map.addLayer({
+          id: speedLayerId(index),
+          type: "line",
+          source: speedSourceId(index),
+          paint: {
+            "line-gradient": lineGradientExpression(
+              speedTrack.stops,
+            ) as maplibregl.ExpressionSpecification,
+            "line-width": 3,
+            "line-opacity": 0.9,
+          },
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+            visibility: trailMode === "speed" ? "visible" : "none",
+          },
+        });
       });
       map.addSource("boats", { type: "geojson", data: boatsGeoJson(tracks, timeMs) });
       map.addLayer({
@@ -190,7 +243,7 @@ export function MapView({
       mapRef.current = null;
       map.remove();
     };
-  }, [tracks]);
+  }, [speedTracks, tracks]);
 
   // Style switching.
   useEffect(() => {
@@ -200,14 +253,37 @@ export function MapView({
     map.setStyle(styleId === "satellite" ? SATELLITE_STYLE : LIBERTY_STYLE);
   }, [styleId]);
 
+  // Trail mode changes are infrequent: toggle static speed layers and refresh
+  // the normal trail once, without rebuilding full tracks on playback frames.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+
+    const speedVisibility = trailMode === "speed" ? "visible" : "none";
+    const trailVisibility = trailMode === "speed" ? "none" : "visible";
+    if (map.getLayer("trails")) map.setLayoutProperty("trails", "visibility", trailVisibility);
+    speedTracks.forEach((_, index) => {
+      const layerId = speedLayerId(index);
+      if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", speedVisibility);
+    });
+
+    if (trailMode !== "speed") {
+      const timeMs = usePlaybackStore.getState().timeMs;
+      map
+        .getSource<maplibregl.GeoJSONSource>("trails")
+        ?.setData(trailGeoJson(tracks, timeMs, trailMode === "tail" ? TAIL_SECONDS * 1000 : null));
+    }
+  }, [speedTracks, tracks, trailMode]);
+
   // Per-frame imperative updates driven by transient store subscription.
   useEffect(() => {
     let lastTrailUpdate = 0;
-    const update = (timeMs: number, trailMode: string) => {
+    const update = (timeMs: number, trailMode: TrailMode) => {
       const map = mapRef.current;
       if (!map || !readyRef.current) return;
       const boats = map.getSource<maplibregl.GeoJSONSource>("boats");
       boats?.setData(boatsGeoJson(tracks, timeMs));
+      if (trailMode === "speed") return;
       const now = performance.now();
       // Trails are heavier; ~12Hz is visually smooth.
       if (now - lastTrailUpdate > 80) {
@@ -223,5 +299,29 @@ export function MapView({
     return unsub;
   }, [tracks]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {trailMode === "speed" && (
+        <div
+          className="absolute bottom-5 left-5 z-10 w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur"
+          aria-label={`Speed scale from ${speedDomain.minKts.toFixed(1)} to ${speedDomain.maxKts.toFixed(1)} knots`}
+        >
+          <div className="mb-1.5 text-xs font-medium">Speed (knots)</div>
+          <div
+            className="h-2 rounded-full"
+            style={{
+              background: `linear-gradient(to right, ${SPEED_COLORS.slow}, ${SPEED_COLORS.intermediate}, ${SPEED_COLORS.fast})`,
+            }}
+            aria-hidden="true"
+          />
+          <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums">
+            <span>{speedDomain.minKts.toFixed(1)}</span>
+            <span>{speedDomain.midKts.toFixed(1)}</span>
+            <span>{speedDomain.maxKts.toFixed(1)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
