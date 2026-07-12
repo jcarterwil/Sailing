@@ -9,6 +9,10 @@ export interface TrackMeta {
   /** Entry metadata threaded through for analyze / dossier correlation. */
   crew: CrewMember[];
   tags: string[];
+  /** True when the signed-in user owns this boat (boats.owner_id). */
+  ownedByMe: boolean;
+  /** True when the signed-in user added this entry (race_entries.added_by). */
+  addedByMe: boolean;
 }
 
 export interface LoadedTrack {
@@ -17,6 +21,8 @@ export interface LoadedTrack {
   color: string;
   crew: CrewMember[];
   tags: string[];
+  ownedByMe: boolean;
+  addedByMe: boolean;
   t0: number; // epoch ms of first point
   tzOffsetMinutes: number | null;
   t: Float64Array; // absolute epoch ms per point
@@ -63,6 +69,8 @@ export async function loadTrack(meta: TrackMeta): Promise<LoadedTrack> {
     color: meta.color,
     crew: meta.crew,
     tags: meta.tags,
+    ownedByMe: meta.ownedByMe,
+    addedByMe: meta.addedByMe,
     t0: data.t0,
     tzOffsetMinutes: data.tzOffsetMinutes,
     t,

@@ -42,6 +42,14 @@ export function RaceReplay({
           if (last > t1) t1 = last;
         }
         usePlaybackStore.getState().setBounds(t0, t1);
+
+        // Default selection: the user's own boat; else their single added entry;
+        // an organizer who added the whole fleet matches many, so don't guess.
+        const owned = loaded.find((t) => t.ownedByMe);
+        const addedByMe = loaded.filter((t) => t.addedByMe);
+        const defaultSelection = owned?.entryId ?? (addedByMe.length === 1 ? addedByMe[0].entryId : null);
+        usePlaybackStore.getState().setSelectedEntryId(defaultSelection ?? null);
+
         setTracks(loaded);
       })
       .catch((err) => {

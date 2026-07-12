@@ -63,18 +63,28 @@ function makeBoatArrow(): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
-function boatsGeoJson(tracks: LoadedTrack[], timeMs: number) {
+function boatsGeoJson(
+  tracks: LoadedTrack[],
+  timeMs: number,
+  selectedEntryId: string | null,
+) {
   return {
     type: "FeatureCollection" as const,
     features: tracks.map((track) => {
       const s = sampleAt(track, timeMs);
+      const isSelected = selectedEntryId === track.entryId;
+      let opacity = s.inTrack ? 1 : 0.35;
+      // Dim the rest of the fleet when a selection exists.
+      if (selectedEntryId && !isSelected) opacity = Math.min(opacity, 0.55);
       return {
         type: "Feature" as const,
         properties: {
           color: track.color,
+          entryId: track.entryId,
           heading: Number.isNaN(s.hdgDeg) ? 0 : s.hdgDeg,
-          opacity: s.inTrack ? 1 : 0.35,
+          opacity,
           name: track.boatName,
+          selected: isSelected ? 1 : 0,
         },
         geometry: { type: "Point" as const, coordinates: [s.lon, s.lat] },
       };
@@ -201,14 +211,30 @@ export function MapView({
           },
         });
       });
-      map.addSource("boats", { type: "geojson", data: boatsGeoJson(tracks, timeMs) });
+      map.addSource("boats", {
+        type: "geojson",
+        data: boatsGeoJson(tracks, timeMs, usePlaybackStore.getState().selectedEntryId),
+      });
+      // Halo ring drawn under the selected boat's arrow; recreated on style re-add.
+      map.addLayer({
+        id: "boat-halo",
+        type: "circle",
+        source: "boats",
+        filter: ["==", ["get", "selected"], 1],
+        paint: {
+          "circle-opacity": 0,
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": ["get", "color"],
+          "circle-radius": 16,
+        },
+      });
       map.addLayer({
         id: "boats",
         type: "symbol",
         source: "boats",
         layout: {
           "icon-image": "boat-arrow",
-          "icon-size": 0.42,
+          "icon-size": ["case", ["==", ["get", "selected"], 1], 0.58, 0.42],
           "icon-rotate": ["get", "heading"],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
@@ -224,6 +250,7 @@ export function MapView({
           "text-color": "#ffffff",
           "text-halo-color": "#0f172a",
           "text-halo-width": 1.2,
+          "text-opacity": ["get", "opacity"],
         },
       });
       readyRef.current = true;
@@ -236,6 +263,21 @@ export function MapView({
         readyRef.current = false;
         addLayers();
       }
+    });
+
+    // Delegated layer events register once; they query the "boats" layer at
+    // event time, so they survive setStyle without re-registration.
+    map.on("click", "boats", (e) => {
+      const entryId = e.features?.[0]?.properties?.entryId;
+      if (typeof entryId !== "string") return;
+      const current = usePlaybackStore.getState().selectedEntryId;
+      usePlaybackStore.getState().setSelectedEntryId(current === entryId ? null : entryId);
+    });
+    map.on("mouseenter", "boats", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", "boats", () => {
+      map.getCanvas().style.cursor = "";
     });
 
     return () => {
@@ -278,11 +320,11 @@ export function MapView({
   // Per-frame imperative updates driven by transient store subscription.
   useEffect(() => {
     let lastTrailUpdate = 0;
-    const update = (timeMs: number, trailMode: TrailMode) => {
+    const update = (timeMs: number, trailMode: TrailMode, selectedEntryId: string | null) => {
       const map = mapRef.current;
       if (!map || !readyRef.current) return;
       const boats = map.getSource<maplibregl.GeoJSONSource>("boats");
-      boats?.setData(boatsGeoJson(tracks, timeMs));
+      boats?.setData(boatsGeoJson(tracks, timeMs, selectedEntryId));
       if (trailMode === "speed") return;
       const now = performance.now();
       // Trails are heavier; ~12Hz is visually smooth.
@@ -294,8 +336,11 @@ export function MapView({
         );
       }
     };
-    update(usePlaybackStore.getState().timeMs, usePlaybackStore.getState().trailMode);
-    const unsub = usePlaybackStore.subscribe((state) => update(state.timeMs, state.trailMode));
+    const state = usePlaybackStore.getState();
+    update(state.timeMs, state.trailMode, state.selectedEntryId);
+    const unsub = usePlaybackStore.subscribe((s) =>
+      update(s.timeMs, s.trailMode, s.selectedEntryId),
+    );
     return unsub;
   }, [tracks]);
 
