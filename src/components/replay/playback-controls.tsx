@@ -62,7 +62,7 @@ export function PlaybackControls({
   }, [tzOffsetMinutes]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
       <Button
         size="icon"
         onClick={() => setPlaying(!playing)}
@@ -74,7 +74,7 @@ export function PlaybackControls({
       <span className="min-w-24 font-mono text-sm tabular-nums">{clock}</span>
 
       <Select value={String(speed)} onValueChange={(v) => setSpeed(Number(v))}>
-        <SelectTrigger className="w-24" aria-label="Playback speed">
+        <SelectTrigger className="w-20 sm:w-24" aria-label="Playback speed">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -87,7 +87,7 @@ export function PlaybackControls({
       </Select>
 
       <Select value={trailMode} onValueChange={(v) => setTrailMode(v as TrailMode)}>
-        <SelectTrigger className="w-28" aria-label="Trail mode">
+        <SelectTrigger className="w-24 sm:w-28" aria-label="Trail mode">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -98,7 +98,7 @@ export function PlaybackControls({
       </Select>
 
       <Select value={styleId} onValueChange={(v) => onStyleChange(v as MapStyleId)}>
-        <SelectTrigger className="w-28" aria-label="Map style">
+        <SelectTrigger className="w-24 sm:w-28" aria-label="Map style">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
