@@ -55,7 +55,7 @@ function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWar
 // I/O, or depend on wall-clock time, and its result is safe to JSON.stringify.
 export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
   const ordered = [...tracks].sort(
-    (a, b) => a.entryId.localeCompare(b.entryId) || a.t0 - b.t0,
+    (a, b) => (a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : a.t0 - b.t0),
   );
   const warnings: AnalysisWarning[] = [];
   validateTracks(ordered, warnings);

@@ -159,6 +159,8 @@ function trueWindVector(
 function collectSensorVectors(
   tracks: readonly ProcessedTrack[],
   estimatedTwdDeg: number | null,
+  startTimeMs: number | null,
+  finishTimeMs: number | null,
 ): { vectors: SensorVector[]; entryIds: string[]; strength: number } | null {
   const conventions = ["relative-plus", "relative-minus", "absolute"] as const;
   let best: { vectors: SensorVector[]; strength: number; score: number } | null = null;
@@ -169,6 +171,12 @@ function collectSensorVectors(
       const length = columnLength(track);
       for (const sample of track.extras?.windSamples ?? []) {
         if (!finite(sample.t) || !finite(sample.awaDeg) || !finite(sample.awsMs)) continue;
+        if (
+          (startTimeMs !== null && sample.t < startTimeMs) ||
+          (finishTimeMs !== null && sample.t > finishTimeMs)
+        ) {
+          continue;
+        }
         if (sample.awsMs <= 0 || sample.awsMs > 40) continue;
         const index = nearestIndex(track, sample.t, length);
         if (index < 0 || Math.abs(epochAt(track, index) - sample.t) > WIND_SENSOR_MATCH_MS) continue;
@@ -224,7 +232,12 @@ export function analyzeWind(
   warnings: AnalysisWarning[],
 ): WindAnalysis {
   const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs);
-  const sensor = collectSensorVectors(tracks, estimated?.twdDeg ?? null);
+  const sensor = collectSensorVectors(
+    tracks,
+    estimated?.twdDeg ?? null,
+    startTimeMs,
+    finishTimeMs,
+  );
 
   if (sensor) {
     const twdDeg = circularMean(sensor.vectors.map((vector) => vector.twdDeg));

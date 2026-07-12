@@ -115,18 +115,19 @@ describe("analyzeRace", () => {
   });
 
   it("uses aligned apparent-wind vectors with explicit sensor provenance", () => {
-    const courses = new Array(181).fill(238);
-    const apparent = trueToApparent(283, 10, 238, 238, 6);
+    const courses = new Array(301).fill(238);
+    const raceApparent = trueToApparent(283, 10, 238, 238, 6);
+    const outsideApparent = trueToApparent(100, 18, 238, 238, 6);
     const windSamples = courses.map((_, index) => ({
-      t: START + index * 1_000,
-      ...apparent,
+      t: START - 60_000 + index * 1_000,
+      ...(index >= 60 && index <= 240 ? raceApparent : outsideApparent),
     }));
     const timerEvents: RaceTimerEvent[] = [
       { t: START, event: "race_start", timerSec: 0 },
       { t: START + 180_000, event: "race_end", timerSec: 0 },
     ];
     const track = syntheticTrack("sensor-boat", courses, {
-      t0: START,
+      t0: START - 60_000,
       extras: extras(timerEvents, windSamples),
     });
 
@@ -137,6 +138,23 @@ describe("analyzeRace", () => {
     expect(analysis.wind.provenance.sensorSampleCount).toBe(181);
     expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 283))).toBeLessThan(0.2);
     expect(analysis.wind.twsKts).toBeCloseTo(10, 1);
+  });
+
+  it("pairs real tack modes across north using shortest-arc separation", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 10 * 60_000, event: "race_end", timerSec: 0 },
+    ];
+    const westOfNorth = syntheticTrack("west", new Array(661).fill(315), {
+      extras: extras(timerEvents),
+    });
+    const eastOfNorth = syntheticTrack("east", new Array(661).fill(45), {
+      extras: extras(timerEvents),
+    });
+
+    const analysis = analyzeRace([westOfNorth, eastOfNorth]);
+    expect(analysis.wind.source).toBe("estimated");
+    expect(Math.abs(angleDiff(analysis.wind.twdDeg ?? NaN, 0))).toBeLessThan(4);
   });
 
   it("returns typed limitations rather than throwing on absent data", () => {
