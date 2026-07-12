@@ -132,3 +132,109 @@
     @apply font-sans;
   }
 }
+
+@layer components {
+  .report-document {
+    @apply mx-auto max-w-4xl text-[15px] leading-7 text-foreground;
+  }
+  .report-document h1 {
+    @apply mb-8 text-4xl font-semibold tracking-tight;
+  }
+  .report-document h2 {
+    @apply mt-12 mb-5 border-b border-border pb-3 text-2xl font-semibold tracking-tight;
+  }
+  .report-document h3 {
+    @apply mt-8 mb-3 text-xl font-semibold tracking-tight;
+  }
+  .report-document p {
+    @apply my-4;
+  }
+  .report-document ul,
+  .report-document ol {
+    @apply my-4 space-y-2 pl-6;
+  }
+  .report-document ul {
+    @apply list-disc;
+  }
+  .report-document ol {
+    @apply list-decimal;
+  }
+  .report-document strong {
+    @apply font-semibold;
+  }
+  .report-document blockquote {
+    @apply my-5 border-l-4 border-primary/50 pl-4 text-muted-foreground;
+  }
+  .report-document code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em];
+  }
+  .report-table-wrap {
+    @apply my-6 overflow-x-auto rounded-lg border border-border;
+  }
+  .report-document table {
+    @apply w-full border-collapse text-sm;
+  }
+  .report-document th {
+    @apply bg-muted px-3 py-2 text-left font-semibold;
+  }
+  .report-document td {
+    @apply border-t border-border px-3 py-2 align-top;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0.65in;
+  }
+  html.dark,
+  body,
+  .report-print-page {
+    background: white !important;
+    color: black !important;
+  }
+  body {
+    background-image: none !important;
+  }
+  .print-hidden,
+  nav {
+    display: none !important;
+  }
+  .report-print-page {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .report-document {
+    max-width: none !important;
+    padding: 0 !important;
+    color: black !important;
+  }
+  .report-document h1,
+  .report-document h2,
+  .report-document h3,
+  .report-document p,
+  .report-document li,
+  .report-document footer {
+    color: black !important;
+  }
+  .report-document h2,
+  .report-document footer,
+  .report-table-wrap,
+  .report-document td,
+  .report-document th {
+    border-color: #bbb !important;
+  }
+  .report-document th,
+  .report-document code {
+    background: #eee !important;
+  }
+  .report-part-two {
+    break-before: page;
+    page-break-before: always;
+  }
+  .report-document h2,
+  .report-document h3,
+  .report-document tr {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}
