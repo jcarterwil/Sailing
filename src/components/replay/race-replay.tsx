@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
@@ -11,6 +11,10 @@ import { usePlaybackStore } from "@/components/replay/playback-store";
 import { Timeline } from "@/components/replay/timeline";
 import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay/track-loader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  fleetStarts,
+  startLineAt,
+} from "@/lib/analytics/start-line";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import { windDirectionAt } from "@/lib/analytics/wind";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
@@ -82,6 +86,18 @@ export function RaceReplay({
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
   const twdAt = resolveTwdAt(raceMeta, analysis);
+
+  const startsMs = useMemo(
+    () => (tracks ? fleetStarts(tracks.map((t) => t.extras)) : []),
+    [tracks],
+  );
+  const startLine = useMemo(() => {
+    if (!tracks || startsMs.length === 0) return null;
+    return startLineAt(
+      tracks.map((t) => t.extras),
+      startsMs[0],
+    );
+  }, [tracks, startsMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +171,7 @@ export function RaceReplay({
     >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-w-0 flex-1">
-          <MapView tracks={tracks} styleId={styleId} />
+          <MapView tracks={tracks} styleId={styleId} startLine={startLine} />
           <Leaderboard
             tracks={tracks}
             twdAt={twdAt}
@@ -171,11 +187,14 @@ export function RaceReplay({
             tzOffsetMinutes={tracks[0]?.tzOffsetMinutes ?? null}
             styleId={styleId}
             onStyleChange={setStyleId}
+            startsMs={startsMs}
+            startLine={startLine}
+            tracks={tracks}
           />
           <span className="hidden text-sm text-muted-foreground lg:inline">{raceName}</span>
         </div>
         <div className="-mx-2 mt-2 sm:mx-0 sm:mt-3">
-          <Timeline tracks={tracks} />
+          <Timeline tracks={tracks} startsMs={startsMs} />
         </div>
       </div>
     </div>

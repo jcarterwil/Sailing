@@ -15,6 +15,7 @@ import { indexAt, sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
 import { MIN_SOG_FOR_COG_KTS } from "@/lib/analytics/constants";
+import type { StartLine } from "@/lib/analytics/start-line";
 
 export type MapStyleId = "map" | "satellite";
 
@@ -38,6 +39,41 @@ const SATELLITE_STYLE: maplibregl.StyleSpecification = {
 };
 
 const TAIL_SECONDS = 60;
+
+function startLineGeoJson(line: StartLine) {
+  return {
+    type: "FeatureCollection" as const,
+    features: [
+      {
+        type: "Feature" as const,
+        properties: {},
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [line.pin.lon, line.pin.lat],
+            [line.boat.lon, line.boat.lat],
+          ],
+        },
+      },
+      {
+        type: "Feature" as const,
+        properties: { end: "pin", label: "Pin" },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [line.pin.lon, line.pin.lat],
+        },
+      },
+      {
+        type: "Feature" as const,
+        properties: { end: "boat", label: "RC" },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [line.boat.lon, line.boat.lat],
+        },
+      },
+    ],
+  };
+}
 
 function speedSourceId(index: number): string {
   return `speed-track-source-${index}`;
@@ -117,9 +153,11 @@ function trailGeoJson(tracks: LoadedTrack[], timeMs: number, tailMs: number | nu
 export function MapView({
   tracks,
   styleId,
+  startLine = null,
 }: {
   tracks: LoadedTrack[];
   styleId: MapStyleId;
+  startLine?: StartLine | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -221,6 +259,54 @@ export function MapView({
           },
         });
       });
+      if (startLine) {
+        map.addSource("start-line", {
+          type: "geojson",
+          data: startLineGeoJson(startLine),
+        });
+        map.addLayer({
+          id: "start-line",
+          type: "line",
+          source: "start-line",
+          filter: ["==", ["geometry-type"], "LineString"],
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+            "line-opacity": 0.9,
+          },
+        });
+        map.addLayer({
+          id: "start-line-ends",
+          type: "circle",
+          source: "start-line",
+          filter: ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#ffffff",
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#0f172a",
+          },
+        });
+        map.addLayer({
+          id: "start-line-labels",
+          type: "symbol",
+          source: "start-line",
+          filter: ["==", ["geometry-type"], "Point"],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 11,
+            "text-offset": [0, 1.1],
+            "text-anchor": "top",
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": "#0f172a",
+            "text-halo-width": 1.2,
+          },
+        });
+      }
       map.addSource("boats", {
         type: "geojson",
         data: boatsGeoJson(tracks, timeMs, usePlaybackStore.getState().selectedEntryId),
@@ -307,7 +393,7 @@ export function MapView({
       mapRef.current = null;
       map.remove();
     };
-  }, [speedTracks, tracks]);
+  }, [speedTracks, tracks, startLine]);
 
   // Style switching.
   useEffect(() => {
