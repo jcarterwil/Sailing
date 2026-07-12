@@ -62,7 +62,10 @@ export function ReportPageClient({
           setRequestError(result.error ?? "Could not refresh report status.");
           return;
         }
-        setSnapshot(result);
+        setSnapshot((current) => ({
+          report: result.report,
+          latestComplete: result.latestComplete ?? current.latestComplete,
+        }));
         setRequestError(null);
       } catch {
         if (!cancelled) setRequestError("Could not refresh report status.");

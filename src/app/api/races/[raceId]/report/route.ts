@@ -196,20 +196,31 @@ export async function POST(
     return json({ report, latestComplete: report });
   } catch (error) {
     const errorMessage = safeErrorMessage(error);
-    const { data: failed } = await admin
+    const failedAt = new Date().toISOString();
+    const { data: failed, error: failureUpdateError } = await admin
       .from("race_reports")
       .update({
         status: "error",
         error_message: errorMessage,
-        completed_at: new Date().toISOString(),
+        completed_at: failedAt,
       })
       .eq("id", inserted.id)
       .select(REPORT_SUMMARY_COLUMNS)
       .maybeSingle();
+    const report = failed
+      ? toReportSummary(failed)
+      : {
+          ...toReportSummary(inserted),
+          status: "error" as const,
+          errorMessage: failureUpdateError
+            ? `${errorMessage} The failure status could not be persisted.`
+            : errorMessage,
+          completedAt: failedAt,
+        };
     return json(
       {
         error: errorMessage,
-        report: failed ? toReportSummary(failed) : toReportSummary(inserted),
+        report,
         latestComplete: null,
       },
       500,

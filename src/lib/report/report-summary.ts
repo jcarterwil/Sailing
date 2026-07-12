@@ -19,11 +19,13 @@ export interface ReportSnapshot {
 
 export const REPORT_SUMMARY_COLUMNS =
   "id, status, markdown, model, input_tokens, output_tokens, error_message, created_at, completed_at" as const;
+export const REPORT_STATUS_COLUMNS =
+  "id, status, model, input_tokens, output_tokens, error_message, created_at, completed_at" as const;
 
 interface ReportRow {
   id: string;
   status: string;
-  markdown: string | null;
+  markdown?: string | null;
   model: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -39,7 +41,7 @@ export function toReportSummary(row: ReportRow): ReportSummary {
   return {
     id: row.id,
     status: row.status,
-    markdown: row.markdown,
+    markdown: row.markdown ?? null,
     model: row.model,
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,

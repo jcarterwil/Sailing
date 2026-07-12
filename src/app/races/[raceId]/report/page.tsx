@@ -25,7 +25,7 @@ export default async function RaceReportPage({
       .eq("id", raceId)
       .maybeSingle(),
     supabase.rpc("is_race_organizer", { rid: raceId }),
-    loadReportSnapshot(supabase, raceId),
+    loadReportSnapshot(supabase, raceId, { includePreviousComplete: true }),
   ]);
   if (raceResult.error) throw new Error(`Could not load race: ${raceResult.error.message}`);
   if (!raceResult.data) notFound();
