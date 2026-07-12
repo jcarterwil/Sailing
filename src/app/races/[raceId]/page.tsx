@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, PlayCircle, Waves } from "lucide-react";
 
+import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +34,7 @@ export default async function RaceManagePage({
 
   const { data: race } = await supabase
     .from("races")
-    .select("id, name, venue, starts_at, created_at, organizer_id, join_code")
+    .select("id, name, venue, starts_at, created_at, organizer_id, join_code, conditions, tags")
     .eq("id", raceId)
     .maybeSingle();
   if (!race) {
@@ -42,27 +44,34 @@ export default async function RaceManagePage({
   const { data: entries } = await supabase
     .from("race_entries")
     .select(
-      "id, color, added_by, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary)",
+      "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary)",
     )
     .eq("race_id", raceId)
     .order("created_at", { ascending: true });
 
   const isOrganizer = race.organizer_id === user.id;
-  const panelEntries = (entries ?? []).map((entry) => ({
-    entryId: entry.id,
-    boatName: entry.boats?.name ?? "Unknown",
-    color: entry.color,
-    canUpload: isOrganizer || entry.added_by === user.id,
-    track: entry.tracks
-      ? {
-          id: entry.tracks.id,
-          status: entry.tracks.status,
-          errorMessage: entry.tracks.error_message,
-          pointCount: entry.tracks.point_count,
-          filename: entry.tracks.original_filename,
-        }
-      : null,
-  }));
+  const raceMeta = parseRaceMeta(race.conditions, race.tags);
+  const panelEntries = (entries ?? []).map((entry) => {
+    const entryMeta = parseEntryMeta(entry.crew, entry.tags);
+    return {
+      entryId: entry.id,
+      boatName: entry.boats?.name ?? "Unknown",
+      color: entry.color,
+      canUpload: isOrganizer || entry.added_by === user.id,
+      canEditMeta: isOrganizer || entry.added_by === user.id,
+      crew: entryMeta.crew,
+      tags: entryMeta.tags,
+      track: entry.tracks
+        ? {
+            id: entry.tracks.id,
+            status: entry.tracks.status,
+            errorMessage: entry.tracks.error_message,
+            pointCount: entry.tracks.point_count,
+            filename: entry.tracks.original_filename,
+          }
+        : null,
+    };
+  });
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
 
   return (
@@ -90,6 +99,15 @@ export default async function RaceManagePage({
                 </>
               )}
             </p>
+            {raceMeta.tags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {raceMeta.tags.map((tag) => (
+                  <Badge key={tag} variant="outline">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
           <Button asChild disabled={processedCount === 0}>
             <Link href={`/races/${race.id}/replay`}>
@@ -100,7 +118,15 @@ export default async function RaceManagePage({
         </div>
       </header>
 
-      <section className="py-8">
+      <section className="space-y-6 py-8">
+        <RaceMetaPanel
+          key={`${race.id}:${raceMeta.tags.join("|")}:${JSON.stringify(raceMeta.conditions)}`}
+          raceId={race.id}
+          canEdit={isOrganizer}
+          initialConditions={raceMeta.conditions}
+          initialTags={raceMeta.tags}
+        />
+
         <Card className="bg-card/70">
           <CardHeader>
             <div className="flex items-center justify-between">

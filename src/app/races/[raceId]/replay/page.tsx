@@ -4,6 +4,11 @@ import { ArrowLeft } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
+import {
+  buildRaceAnalyzeContext,
+  parseEntryMeta,
+  parseRaceMeta,
+} from "@/lib/races/meta";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,16 +31,18 @@ export default async function ReplayPage({
   // RLS-visible read proves membership.
   const { data: race } = await supabase
     .from("races")
-    .select("id, name")
+    .select("id, name, conditions, tags")
     .eq("id", raceId)
     .maybeSingle();
   if (!race) {
     notFound();
   }
 
+  const raceMeta = parseRaceMeta(race.conditions, race.tags);
+
   const { data: entries } = await supabase
     .from("race_entries")
-    .select("id, color, boats(name), tracks(processed_path, status)")
+    .select("id, color, crew, tags, boats(name), tracks(processed_path, status)")
     .eq("race_id", raceId)
     .order("created_at", { ascending: true });
 
@@ -46,7 +53,22 @@ export default async function ReplayPage({
   // Signed URLs let the browser pull track JSON straight from Storage.
   const admin = createAdminClient();
   const trackMetas: TrackMeta[] = [];
+  const analyzeEntries: Parameters<typeof buildRaceAnalyzeContext>[1] = [];
+  for (const entry of entries ?? []) {
+    const entryMeta = parseEntryMeta(entry.crew, entry.tags);
+    analyzeEntries.push({
+      entryId: entry.id,
+      boatName: entry.boats?.name ?? "Unknown",
+      color: entry.color,
+      crew: entryMeta.crew,
+      tags: entryMeta.tags,
+    });
+  }
+  // Built for the analyze/report path (#3/#5); same shape those routes will read.
+  const analyzeContext = buildRaceAnalyzeContext(raceMeta, analyzeEntries);
+
   for (const entry of processed) {
+    const entryMeta = parseEntryMeta(entry.crew, entry.tags);
     const { data: signed } = await admin.storage
       .from("race-tracks-processed")
       .createSignedUrl(entry.tracks!.processed_path!, 3600);
@@ -56,6 +78,8 @@ export default async function ReplayPage({
         boatName: entry.boats?.name ?? "Unknown",
         color: entry.color,
         url: signed.signedUrl,
+        crew: entryMeta.crew,
+        tags: entryMeta.tags,
       });
     }
   }
@@ -87,7 +111,12 @@ export default async function ReplayPage({
         <span className="text-xs text-muted-foreground">{trackMetas.length} boats</span>
       </header>
       <div className="min-h-0 flex-1">
-        <ReplayShell raceName={race.name} trackMetas={trackMetas} />
+        <ReplayShell
+          raceName={race.name}
+          trackMetas={trackMetas}
+          raceMeta={raceMeta}
+          analyzeContext={analyzeContext}
+        />
       </div>
     </main>
   );

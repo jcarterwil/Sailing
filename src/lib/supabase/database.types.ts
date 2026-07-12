@@ -146,24 +146,30 @@ export type Database = {
           boat_id: string
           color: string
           created_at: string
+          crew: Json
           id: string
           race_id: string
+          tags: string[]
         }
         Insert: {
           added_by: string
           boat_id: string
           color?: string
           created_at?: string
+          crew?: Json
           id?: string
           race_id: string
+          tags?: string[]
         }
         Update: {
           added_by?: string
           boat_id?: string
           color?: string
           created_at?: string
+          crew?: Json
           id?: string
           race_id?: string
+          tags?: string[]
         }
         Relationships: [
           {
@@ -251,6 +257,7 @@ export type Database = {
       }
       races: {
         Row: {
+          conditions: Json | null
           created_at: string
           id: string
           join_code: string
@@ -258,10 +265,12 @@ export type Database = {
           organizer_id: string
           share_slug: string | null
           starts_at: string | null
+          tags: string[]
           updated_at: string
           venue: string | null
         }
         Insert: {
+          conditions?: Json | null
           created_at?: string
           id?: string
           join_code?: string
@@ -269,10 +278,12 @@ export type Database = {
           organizer_id: string
           share_slug?: string | null
           starts_at?: string | null
+          tags?: string[]
           updated_at?: string
           venue?: string | null
         }
         Update: {
+          conditions?: Json | null
           created_at?: string
           id?: string
           join_code?: string
@@ -280,6 +291,7 @@ export type Database = {
           organizer_id?: string
           share_slug?: string | null
           starts_at?: string | null
+          tags?: string[]
           updated_at?: string
           venue?: string | null
         }

@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import {
+  conditionsToJson,
+  crewToJson,
+  normalizeConditions,
+  normalizeCrew,
+  normalizeTags,
+  type RaceConditions,
+} from "@/lib/races/meta";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -193,4 +201,63 @@ export async function claimBoat(boatId: string) {
     .is("owner_id", null);
   if (error) throw new Error(`Could not claim boat: ${error.message}`);
   revalidatePath("/dashboard");
+}
+
+export async function updateEntryMeta(
+  entryId: string,
+  meta: { crew: { name: string; role: string }[]; tags: string[] },
+) {
+  const { supabase, user } = await requireUser();
+
+  const crew = normalizeCrew(meta.crew);
+  const tags = normalizeTags(meta.tags);
+
+  // RLS-visible read proves the caller may act on this entry.
+  const { data: entry } = await supabase
+    .from("race_entries")
+    .select("id, race_id, added_by, races!inner(organizer_id)")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!entry) throw new Error("Entry not found.");
+  const isOrganizer = entry.races.organizer_id === user.id;
+  if (!isOrganizer && entry.added_by !== user.id) {
+    throw new Error("Only the organizer or the entry owner can edit entry metadata.");
+  }
+
+  const { error } = await supabase
+    .from("race_entries")
+    .update({ crew: crewToJson(crew), tags })
+    .eq("id", entryId);
+  if (error) throw new Error(`Could not update entry metadata: ${error.message}`);
+
+  revalidatePath(`/races/${entry.race_id}`);
+}
+
+export async function updateRaceMeta(
+  raceId: string,
+  meta: { conditions: RaceConditions | null; tags: string[] },
+) {
+  const { supabase, user } = await requireUser();
+
+  const conditions = normalizeConditions(meta.conditions);
+  const tags = normalizeTags(meta.tags);
+
+  // RLS-visible read proves membership; organizer check is app-level.
+  const { data: race } = await supabase
+    .from("races")
+    .select("id, organizer_id")
+    .eq("id", raceId)
+    .maybeSingle();
+  if (!race) throw new Error("Race not found.");
+  if (race.organizer_id !== user.id) {
+    throw new Error("Only the organizer can edit race metadata.");
+  }
+
+  const { error } = await supabase
+    .from("races")
+    .update({ conditions: conditionsToJson(conditions), tags })
+    .eq("id", raceId);
+  if (error) throw new Error(`Could not update race metadata: ${error.message}`);
+
+  revalidatePath(`/races/${raceId}`);
 }

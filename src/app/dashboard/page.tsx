@@ -25,13 +25,15 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [{ data: races }, { data: boats }] = await Promise.all([
+  const [{ data: profile }, { data: races }, { data: boats }] = await Promise.all([
+    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
     supabase
       .from("races")
       .select("id, name, venue, starts_at, created_at, organizer_id, race_entries(count)")
       .order("created_at", { ascending: false }),
     supabase.from("boats").select("id, name, sail_number").eq("owner_id", user.id),
   ]);
+  const isAdmin = profile?.is_admin ?? false;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-8 sm:px-10 lg:px-12">
@@ -41,7 +43,12 @@ export default async function DashboardPage() {
             <Waves className="size-5 text-primary" aria-hidden="true" />
             Sailing
           </Link>
-          <h1 className="text-3xl font-semibold tracking-tight">Racer dashboard</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {isAdmin ? "Admin dashboard" : "Racer dashboard"}
+            </h1>
+            {isAdmin && <Badge>Admin</Badge>}
+          </div>
           <p className="mt-2 text-sm text-muted-foreground">{user.email}</p>
         </div>
         <SignOutButton />
@@ -50,9 +57,13 @@ export default async function DashboardPage() {
       <section className="py-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">My races</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {isAdmin ? "All races" : "My races"}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create a race and upload the fleet&apos;s tracks, or join one with a code.
+              {isAdmin
+                ? "As an admin you can open, upload to, and generate reports for every race."
+                : "Create a race and upload the fleet's tracks, or join one with a code."}
             </p>
           </div>
           <div className="flex gap-3">

@@ -2,7 +2,7 @@
 
 Sailing is a club-racing application for comparing sailboat performance and giving racers a secure place to access race data. The current release is the production-ready foundation for boat data, comparisons, fleets, regattas, and collegiate racing.
 
-Production: https://sailing-gold-omega.vercel.app
+Production: https://sailing-performance.vercel.app
 
 ## What works now
 
@@ -62,6 +62,14 @@ npx supabase login
 npx supabase link --project-ref mmyogyxvgwfmrqjcsguz
 npm run db:push
 ```
+
+### Auto-migrate on merge
+
+Vercel only syncs env vars — it does **not** run SQL. Migrations under
+`supabase/migrations/` are applied on merge to `main` by:
+
+1. **Supabase GitHub Integration** — [Project Settings → Integrations → GitHub](https://supabase.com/dashboard/project/mmyogyxvgwfmrqjcsguz/settings/integrations) with **Deploy to production** (and optional PR preview branching). Working directory: `.`
+2. **GitHub Actions** — [`.github/workflows/supabase-migrations.yml`](.github/workflows/supabase-migrations.yml) runs `supabase db push` when migrations change. Needs repo secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`; without them it skips cleanly (see `supabase/AGENTS.md`).
 
 Hosted Auth is configured for localhost, Vercel preview deployments, and the production origin.
 

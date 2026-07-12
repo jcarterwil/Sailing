@@ -16,6 +16,8 @@ function makeTrack({
     entryId: "entry-1",
     boatName: "Test Boat",
     color: "#38bdf8",
+    crew: [],
+    tags: [],
     t0: times[0],
     tzOffsetMinutes: null,
     t: new Float64Array(times),
