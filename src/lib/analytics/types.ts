@@ -72,4 +72,166 @@ export interface ProcessedTrack {
   warnings: ParseWarning[];
 }
 
+export type AnalysisWarningCode =
+  | "no-tracks"
+  | "duplicate-entry-id"
+  | "empty-track"
+  | "mismatched-track-columns"
+  | "invalid-track-points"
+  | "start-timer-disagreement"
+  | "start-inferred-from-tracks"
+  | "finish-timer-disagreement"
+  | "finish-inferred-from-tracks"
+  | "wind-unavailable"
+  | "wind-speed-unavailable"
+  | "wind-direction-ambiguous"
+  | "sensor-wind-unusable"
+  | "race-window-unavailable"
+  | "leg-structure-limited";
+
+export interface AnalysisWarning {
+  code: AnalysisWarningCode;
+  message: string;
+  entryId: string | null;
+}
+
+export type WindSource = "sensor-derived" | "estimated" | "unavailable";
+
+export interface WindPoint {
+  timeMs: number;
+  twdDeg: number;
+  twsKts: number | null;
+  source: Exclude<WindSource, "unavailable">;
+}
+
+export interface WindProvenance {
+  source: WindSource;
+  method: "apparent-wind-vector" | "fleet-heading-modes" | "none";
+  confidence: "high" | "medium" | "low" | "unavailable";
+  sensorEntryIds: string[];
+  sensorSampleCount: number;
+  estimatedHeadingSampleCount: number;
+}
+
+export interface WindAnalysis {
+  source: WindSource;
+  twdDeg: number | null;
+  twsKts: number | null;
+  samples: WindPoint[];
+  provenance: WindProvenance;
+}
+
+export interface RaceCoordinate {
+  lat: number;
+  lon: number;
+}
+
+export interface RaceLine {
+  pin: RaceCoordinate;
+  boat: RaceCoordinate;
+  bearingDeg: number;
+  lengthM: number;
+  source: "vkx-line-pings";
+  entryIds: string[];
+}
+
+export interface RaceBoundary {
+  timeMs: number | null;
+  source: "vkx-race-timer" | "vkx-countdown" | "track-overlap" | "unavailable";
+  confidence: "high" | "medium" | "low" | "unavailable";
+}
+
+export type RaceLegType = "upwind" | "downwind" | "reach" | "unknown";
+
+export interface RaceLeg {
+  index: number;
+  type: RaceLegType;
+  startTimeMs: number;
+  endTimeMs: number;
+  meanCourseDeg: number | null;
+  mark: RaceCoordinate | null;
+}
+
+export interface RaceStructure {
+  start: RaceBoundary;
+  finish: RaceBoundary;
+  durationMs: number | null;
+  startLine: RaceLine | null;
+  legs: RaceLeg[];
+}
+
+export type ManeuverType = "tack" | "gybe";
+export type ManeuverTurnDirection = "port" | "starboard";
+export type BotchedReason =
+  | "excessive-duration"
+  | "speed-loss"
+  | "poor-vmg-retention"
+  | "negative-made-good";
+
+export interface ManeuverWindow {
+  startMs: number;
+  endMs: number;
+}
+
+export interface Maneuver {
+  type: ManeuverType;
+  tMs: number;
+  window: ManeuverWindow;
+  turnAngleDeg: number;
+  turnDirection: ManeuverTurnDirection;
+  sogInKts: number;
+  sogOutKts: number;
+  durationSec: number;
+  metersMadeGood: number;
+  vmgRetention: number | null;
+  botched: boolean;
+  botchedReason: BotchedReason | null;
+}
+
+export interface EntryAggregates {
+  pointCount: number;
+  startTimeMs: number | null;
+  endTimeMs: number | null;
+  distanceNm: number;
+  avgSogKts: number | null;
+  maxSogKts: number | null;
+  avgAbsVmgKts: number | null;
+  tackCount: number;
+  gybeCount: number;
+  botchedCount: number;
+  avgVmgRetention: number | null;
+  inputWarningCount: number;
+}
+
+export interface EntryAnalysis {
+  entryId: string;
+  maneuvers: Maneuver[];
+  aggregates: EntryAggregates;
+}
+
+export interface FleetAggregates {
+  entryCount: number;
+  pointCount: number;
+  avgDistanceNm: number | null;
+  avgSogKts: number | null;
+  maxSogKts: number | null;
+  avgAbsVmgKts: number | null;
+  maneuverCount: number;
+  tackCount: number;
+  gybeCount: number;
+  botchedCount: number;
+  avgVmgRetention: number | null;
+}
+
+// Pure, deterministic and JSON-safe fleet analysis. All unavailable numeric
+// values are null rather than NaN so this object can be persisted as jsonb.
+export interface RaceAnalysis {
+  v: 1;
+  race: RaceStructure;
+  wind: WindAnalysis;
+  perEntry: EntryAnalysis[];
+  fleet: FleetAggregates;
+  warnings: AnalysisWarning[];
+}
+
 export class ParseError extends Error {}
