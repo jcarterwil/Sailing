@@ -2,7 +2,7 @@
 
 Sailing is a club-racing application for comparing sailboat performance and giving racers a secure place to access race data. The current release is the production-ready foundation for boat data, comparisons, fleets, regattas, and collegiate racing.
 
-Production: https://sailing-gold-omega.vercel.app
+Production: https://sailing-performance.vercel.app
 
 ## What works now
 
