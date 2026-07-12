@@ -48,6 +48,20 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 - **App code:** push to `main` → Vercel builds and deploys automatically. Primary domain `https://sailing-performance.vercel.app`.
 - **Database:** the **Supabase GitHub integration** is connected to this repo with *Deploy to production* enabled on `main`. Supabase applies any new `supabase/migrations/` file automatically when it merges to `main` — no CI secrets, no manual step. (Locally you can still run `npm run db:push` to apply immediately.) Migrations must be **additive/backward-compatible** so app and schema can deploy in either order. After changing schema, run `npm run db:types` and commit the regenerated types. See `supabase/AGENTS.md`.
 
+## Pull request review gate
+
+Every code change must complete this sequence before merge:
+
+1. Run `npm run verify` and fix failures attributable to the change.
+2. Open the pull request and mark it ready for review.
+3. Request the installed native Codex reviewer by posting the exact PR comment `@codex review`.
+4. Wait for Codex to finish. An eyes reaction means the request was accepted, not that the review is complete.
+5. Address every material finding, rerun relevant checks, and request another Codex review after substantive fixes.
+6. Merge only after Codex has posted its completed review and no material finding remains unresolved.
+
+Do not replace the installed GitHub integration with a custom API-key GitHub Action. If Codex does not
+respond or cannot run, report that blocker explicitly rather than silently merging without the review.
+
 ## Security must-dos (every endpoint and query)
 
 - **RLS on every table**, scoped with the `(select auth.uid())` idiom. New tables follow the pattern in `supabase/migrations`.
