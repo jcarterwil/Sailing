@@ -98,6 +98,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
     "--sheet-drag-y": `${dragOffsetY}px`,
     transition: dragging ? "none" : "transform 200ms ease-out",
   } as CSSProperties;
+  const panelExposed = mobileOpen || dragging;
 
   return (
     <aside
@@ -114,7 +115,7 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
         type="button"
         variant="ghost"
         className="relative flex h-[3.25rem] w-full touch-none flex-col gap-1 rounded-none px-4 py-1 md:hidden"
-        aria-expanded={mobileOpen}
+        aria-expanded={panelExposed}
         aria-controls="replay-data-panel"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -142,8 +143,8 @@ export function PanelTabs({ tracks }: { tracks: LoadedTrack[] }) {
       <div
         id="replay-data-panel"
         className={`${
-          mobileOpen || dragging ? "visible" : "invisible md:visible"
-        } flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/70 md:border-t-0`}
+          panelExposed ? "flex" : "hidden md:flex"
+        } min-h-0 flex-1 flex-col overflow-hidden border-t border-border/70 md:border-t-0`}
       >
         <Tabs defaultValue="instruments" className="min-h-0 flex-1 gap-0 overflow-hidden">
           <TabsList className="m-3 mb-0 grid h-auto w-auto grid-cols-4">
