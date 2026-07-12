@@ -29,11 +29,17 @@ export function aggregateEntry(
 
   for (let i = 0; i < length; i++) {
     const timeMs = epochAt(track, i);
-    if (!finite(timeMs)) continue;
+    if (!finite(timeMs)) {
+      previousIndex = -1;
+      continue;
+    }
     if ((raceStartMs !== null && timeMs < raceStartMs) || (raceFinishMs !== null && timeMs > raceFinishMs)) {
       continue;
     }
-    if (!finite(track.lat[i]) || !finite(track.lon[i])) continue;
+    if (!finite(track.lat[i]) || !finite(track.lon[i])) {
+      previousIndex = -1;
+      continue;
+    }
     pointCount++;
     firstTime ??= timeMs;
     lastTime = timeMs;

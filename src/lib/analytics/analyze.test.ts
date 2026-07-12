@@ -188,6 +188,20 @@ describe("analyzeRace", () => {
     expect(JSON.parse(JSON.stringify(analysis))).toEqual(analysis);
   });
 
+  it("does not bridge distance across an invalid GPS fix", () => {
+    const clean = syntheticTrack("clean", new Array(120).fill(240), { t0: START });
+    const damaged = syntheticTrack("damaged", new Array(120).fill(240), { t0: START });
+    damaged.lat[60] = NaN;
+
+    const cleanDistance = analyzeRace([clean]).perEntry[0].aggregates.distanceNm;
+    const damagedAnalysis = analyzeRace([damaged]);
+    expect(damagedAnalysis.perEntry[0].aggregates.distanceNm).toBeLessThan(cleanDistance);
+    expect(damagedAnalysis.warnings).toContainEqual(expect.objectContaining({
+      code: "invalid-track-points",
+      entryId: "damaged",
+    }));
+  });
+
   it("does not double-weight duplicate entry IDs in fleet wind", () => {
     const timerEvents: RaceTimerEvent[] = [
       { t: START, event: "race_start", timerSec: 0 },
