@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 // Ambiguous characters (O/0, 1/I) excluded so codes read cleanly over the phone.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 8;
+const MAX_CODE_ATTEMPTS = 8;
 
 function generateClaimCode(): string {
   const bytes = randomBytes(CODE_LENGTH);
@@ -18,6 +19,22 @@ function generateClaimCode(): string {
     out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
   }
   return out;
+}
+
+// Verify the generated code is unused before returning it. Service role because
+// claim_code is hidden from the authenticated role (column-level grant).
+async function uniqueClaimCode(): Promise<string> {
+  const admin = createAdminClient();
+  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
+    const code = generateClaimCode();
+    const { data } = await admin
+      .from("boats")
+      .select("id")
+      .eq("claim_code", code)
+      .maybeSingle();
+    if (!data) return code;
+  }
+  throw new Error("Could not generate a unique claim code. Try again.");
 }
 
 async function requireUser() {
@@ -51,25 +68,15 @@ export interface BoatInput {
 }
 
 export async function createBoat(input: BoatInput & { sendInvite?: boolean }) {
-  const { supabase, user } = await requireAdmin();
+  const { user } = await requireAdmin();
 
   const name = input.name.trim();
   if (!name) throw new Error("Boat name is required.");
   const claimEmail = normalizeEmail(input.claimEmail);
+  const claimCode = await uniqueClaimCode();
 
-  // Generate a unique claim code (retry on the rare collision).
-  let claimCode = generateClaimCode();
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { data: existing } = await supabase
-      .from("boats")
-      .select("id")
-      .eq("claim_code", claimCode)
-      .maybeSingle();
-    if (!existing) break;
-    claimCode = generateClaimCode();
-  }
-
-  const { data: boat, error } = await supabase
+  const admin = createAdminClient();
+  const { data: boat, error } = await admin
     .from("boats")
     .insert({
       name,
@@ -80,16 +87,22 @@ export async function createBoat(input: BoatInput & { sendInvite?: boolean }) {
       claim_email: claimEmail,
       claim_code: claimCode,
     })
-    .select("id, claim_code")
+    .select("id")
     .single();
   if (error) throw new Error(`Could not create boat: ${error.message}`);
 
   if (input.sendInvite && claimEmail) {
-    await inviteBoatOwner(boat.id);
+    try {
+      await inviteBoatOwner(boat.id);
+    } catch (err) {
+      // Compensate: don't leave an orphaned boat the UI reports as failed.
+      await admin.from("boats").delete().eq("id", boat.id);
+      throw err;
+    }
   }
 
   revalidatePath("/admin/boats");
-  return { id: boat.id, claimCode: boat.claim_code };
+  return { id: boat.id, claimCode };
 }
 
 export async function updateBoat(boatId: string, input: BoatInput) {
@@ -115,19 +128,10 @@ export async function updateBoat(boatId: string, input: BoatInput) {
 }
 
 export async function regenerateClaimCode(boatId: string) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const admin = createAdminClient();
 
-  let claimCode = generateClaimCode();
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { data: existing } = await supabase
-      .from("boats")
-      .select("id")
-      .eq("claim_code", claimCode)
-      .maybeSingle();
-    if (!existing) break;
-    claimCode = generateClaimCode();
-  }
+  const claimCode = await uniqueClaimCode();
 
   const { error } = await admin
     .from("boats")
@@ -152,11 +156,22 @@ export async function clearClaim(boatId: string) {
   revalidatePath("/admin/boats");
 }
 
+// Find an existing auth user by email. supabase-js has no getUserByEmail, so we
+// scan listUsers (club-scale: a single page is plenty). Returns null if not on
+// the first page.
+async function findUserIdByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {
+  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw new Error(`Could not look up users: ${error.message}`);
+  const match = data.users.find((u) => (u.email ?? "").toLowerCase() === email);
+  return match?.id ?? null;
+}
+
 export async function inviteBoatOwner(boatId: string) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const admin = createAdminClient();
 
-  const { data: boat } = await supabase
+  // Service role: claim_email is hidden from the authenticated role.
+  const { data: boat } = await admin
     .from("boats")
     .select("id, claim_email, owner_id")
     .eq("id", boatId)
@@ -166,18 +181,25 @@ export async function inviteBoatOwner(boatId: string) {
     throw new Error("Add a claim email before sending an invite.");
   }
   if (boat.owner_id) {
-    // Already claimed; the trigger assigned it on the owner's signup.
     return { alreadyClaimed: true };
   }
 
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    boat.claim_email,
-  );
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(boat.claim_email);
   if (inviteError) {
-    // User already registered: the auto-claim trigger fired on their original
-    // signup, so the boat will be theirs on next login. Treat as success.
+    // Already registered: the auto-claim trigger only fires on signup, so claim
+    // the boat for the existing user now (idempotent — only if still unclaimed).
     if (/already registered|already exists|user.*exists/i.test(inviteError.message)) {
-      return { alreadyRegistered: true };
+      const existingId = await findUserIdByEmail(admin, boat.claim_email);
+      if (existingId) {
+        const { data: updated } = await admin
+          .from("boats")
+          .update({ owner_id: existingId, updated_at: new Date().toISOString() })
+          .eq("id", boatId)
+          .is("owner_id", null)
+          .select("id");
+        return { alreadyRegistered: true, claimedNow: !!updated?.length };
+      }
+      return { alreadyRegistered: true, claimedNow: false };
     }
     throw new Error(`Could not send invite: ${inviteError.message}`);
   }

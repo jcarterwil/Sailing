@@ -193,29 +193,35 @@ export async function requestTrackUpload(
 }
 
 export async function claimBoat(boatId: string) {
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
 
-  // Reserved boats can only be claimed by the person the admin pre-registered.
-  const { data: boat } = await supabase
+  // Service role: claim_email/claim_code are hidden from the authenticated role,
+  // and the tightened UPDATE policy blocks the claimant (not owner/admin).
+  const admin = createAdminClient();
+  const { data: boat } = await admin
     .from("boats")
-    .select("id, claim_email, owner_id")
+    .select("id, claim_email, claim_code, owner_id")
     .eq("id", boatId)
     .maybeSingle();
   if (!boat) throw new Error("Boat not found.");
   if (boat.owner_id) throw new Error("Boat already claimed.");
+  // Admin-pre-registered boats are reserved. UUID claim only works for boats
+  // with no claim_email AND no claim_code (legacy/organic boats).
+  if (boat.claim_code) {
+    throw new Error("This boat is reserved. Claim it with your claim code at /claim.");
+  }
   if (boat.claim_email && boat.claim_email !== (user.email ?? "").toLowerCase()) {
     throw new Error("This boat is reserved for another racer. Use your claim code.");
   }
 
-  // Update via service role: the tightened boats UPDATE policy only permits
-  // the owner or an admin, and the claimant is neither yet.
-  const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("boats")
     .update({ owner_id: user.id, updated_at: new Date().toISOString() })
     .eq("id", boatId)
-    .is("owner_id", null);
+    .is("owner_id", null)
+    .select("id");
   if (error) throw new Error(`Could not claim boat: ${error.message}`);
+  if (!updated?.length) throw new Error("Boat was just claimed by someone else.");
   revalidatePath("/dashboard");
 }
 
@@ -235,12 +241,14 @@ export async function claimBoatByCode(code: string) {
     .maybeSingle();
   if (!boat) throw new Error("Invalid or already-claimed code.");
 
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("boats")
     .update({ owner_id: user.id, updated_at: new Date().toISOString() })
     .eq("id", boat.id)
-    .is("owner_id", null);
+    .is("owner_id", null)
+    .select("id");
   if (error) throw new Error(`Could not claim boat: ${error.message}`);
+  if (!updated?.length) throw new Error("Code was just claimed by someone else.");
   revalidatePath("/dashboard");
 }
 

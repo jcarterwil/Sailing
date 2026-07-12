@@ -3,6 +3,7 @@ import { Sailboat } from "lucide-react";
 
 import { BoatsList, CreateBoatButton } from "@/app/admin/boats/boat-editor";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,10 @@ export default async function AdminBoatsPage() {
   const { data: isAdmin } = await supabase.rpc("is_admin");
   if (!isAdmin) redirect("/dashboard");
 
-  const { data: boats } = await supabase
+  // Service role: claim_email/claim_code are hidden from the authenticated role
+  // (column-level grant), and profiles RLS would null out other users' names.
+  const admin = createAdminClient();
+  const { data: boats } = await admin
     .from("boats")
     .select(
       "id, name, sail_number, boat_class, claim_email, claim_code, owner_id, created_at, owner:profiles!owner_id(display_name), creator:profiles!created_by(display_name)",

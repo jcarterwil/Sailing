@@ -228,6 +228,11 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // inviteBoatOwner reads the saved claim_email, so require Save first when the
+  // field is dirty — otherwise the invite could go to the wrong address.
+  const emailDirty =
+    form.claimEmail.trim().toLowerCase() !== (row.claimEmail ?? "").toLowerCase();
+
   function reset() {
     setError(null);
     setNotice(null);
@@ -288,8 +293,10 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
       try {
         const res = await inviteBoatOwner(row.id);
         if (res?.alreadyClaimed) setNotice("Boat already claimed.");
+        else if (res?.alreadyRegistered && res?.claimedNow)
+          setNotice("User already registered — boat claimed for them.");
         else if (res?.alreadyRegistered)
-          setNotice("User already registered — boat will be claimed on their next login.");
+          setNotice("User already registered but could not be located. Share the claim code.");
         else setNotice("Invite sent.");
       } catch (err) {
         if (err instanceof Error) setError(err.message);
@@ -333,6 +340,11 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
           }}
         >
           <BoatFormFields form={form} onChange={setForm} />
+          {emailDirty && form.claimEmail.trim() && (
+            <p className="text-xs text-muted-foreground">
+              Save the new email before sending an invite.
+            </p>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
           <DialogFooter>
@@ -349,7 +361,8 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
               type="button"
               variant="outline"
               onClick={invite}
-              disabled={pending || !form.claimEmail.trim() || !!row.ownerId}
+              disabled={pending || !form.claimEmail.trim() || !!row.ownerId || emailDirty}
+              title={emailDirty ? "Save the new email first" : undefined}
             >
               <Mail className="size-3.5" aria-hidden="true" />
               Send invite
