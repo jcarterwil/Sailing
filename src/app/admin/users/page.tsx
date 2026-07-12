@@ -2,13 +2,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ShieldCheck, Users } from "lucide-react";
 
+import { UserAccessEditor } from "@/app/admin/users/user-access-editor";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { listAllAuthUsers } from "@/lib/supabase/users-admin";
-import { accountStatusLabel, getAccountStatus } from "@/lib/users/access";
+import {
+  accountStatusLabel,
+  getAccountStatus,
+  isBoatCrewRole,
+  type BoatCrewRole,
+} from "@/lib/users/access";
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +34,19 @@ export default async function AdminUsersPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: isAdmin } = await supabase.rpc("is_admin");
+  const { data: isAdmin, error: adminError } = await supabase.rpc("is_admin");
+  if (adminError) throw new Error(`Could not check administrator access: ${adminError.message}`);
   if (!isAdmin) redirect("/dashboard");
 
   // Auth email and sign-in fields are intentionally admin-only. The service
   // client is used only after the global-admin check above.
   const admin = createAdminClient();
   const [authUsers, profilesResult, boatsResult, membershipsResult] = await Promise.all([
-      listAllAuthUsers(),
-      admin.from("profiles").select("id, display_name, is_admin"),
-      admin.from("boats").select("id, name, owner_id"),
-      admin.from("boat_memberships").select("user_id, role, boats(id, name)"),
-    ]);
+    listAllAuthUsers(),
+    admin.from("profiles").select("id, display_name, is_admin"),
+    admin.from("boats").select("id, name, owner_id"),
+    admin.from("boat_memberships").select("user_id, role, boats(id, name)"),
+  ]);
   if (profilesResult.error) {
     throw new Error(`Could not load profiles: ${profilesResult.error.message}`);
   }
@@ -60,6 +67,7 @@ export default async function AdminUsersPage() {
     ownedByUser.set(boat.owner_id, names);
   }
   const crewByUser = new Map<string, { id: string; name: string; role: string }[]>();
+  const crewRoleByUser = new Map<string, Record<string, BoatCrewRole>>();
   for (const membership of memberships ?? []) {
     if (!membership.boats) continue;
     const access = crewByUser.get(membership.user_id) ?? [];
@@ -69,7 +77,16 @@ export default async function AdminUsersPage() {
       role: membership.role,
     });
     crewByUser.set(membership.user_id, access);
+    if (isBoatCrewRole(membership.role)) {
+      const roles = crewRoleByUser.get(membership.user_id) ?? {};
+      roles[membership.boats.id] = membership.role;
+      crewRoleByUser.set(membership.user_id, roles);
+    }
   }
+
+  const accessBoats = (boats ?? [])
+    .map((boat) => ({ id: boat.id, name: boat.name, ownerId: boat.owner_id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const rows = authUsers
     .map((authUser) => ({
@@ -77,6 +94,7 @@ export default async function AdminUsersPage() {
       profile: profileById.get(authUser.id),
       ownedBoats: ownedByUser.get(authUser.id) ?? [],
       crewAccess: crewByUser.get(authUser.id) ?? [],
+      boatAccess: crewRoleByUser.get(authUser.id) ?? {},
       status: getAccountStatus(authUser.email_confirmed_at, authUser.last_sign_in_at),
     }))
     .sort((a, b) => (a.authUser.email ?? "").localeCompare(b.authUser.email ?? ""));
@@ -95,8 +113,8 @@ export default async function AdminUsersPage() {
           Users
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Every Supabase Auth account with login state and boat-level access. This directory does
-          not delete or suspend accounts.
+          Every Supabase Auth account with editable administrator and boat-level access. This
+          directory does not delete or suspend accounts.
         </p>
       </header>
 
@@ -118,10 +136,11 @@ export default async function AdminUsersPage() {
                   <TableHead>Crew access</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last sign-in</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map(({ authUser, profile, ownedBoats, crewAccess, status }) => (
+                {rows.map(({ authUser, profile, ownedBoats, crewAccess, boatAccess, status }) => (
                   <TableRow key={authUser.id}>
                     <TableCell className="min-w-56">
                       <div className="flex items-center gap-2 font-medium">
@@ -162,6 +181,16 @@ export default async function AdminUsersPage() {
                     </TableCell>
                     <TableCell>{formatDate(authUser.created_at)}</TableCell>
                     <TableCell>{formatDate(authUser.last_sign_in_at)}</TableCell>
+                    <TableCell className="text-right">
+                      <UserAccessEditor
+                        userId={authUser.id}
+                        userLabel={profile?.display_name ?? authUser.email ?? "Unknown user"}
+                        currentUserId={user.id}
+                        initialIsAdmin={profile?.is_admin ?? false}
+                        initialBoatAccess={boatAccess}
+                        boats={accessBoats}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
