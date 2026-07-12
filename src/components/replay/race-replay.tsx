@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
+import { Leaderboard } from "@/components/replay/leaderboard";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
 import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
@@ -12,12 +13,43 @@ import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 
+/**
+ * Resolve true-wind direction at a scrub time for ladder / wind UI.
+ * TODO(#3): prefer time-varying `analysis.wind` once RaceAnalysis is loaded
+ * into the replay. Keep this seam so #7's wind indicator can share it.
+ */
+export function resolveTwdAt(
+  raceMeta: RaceMeta,
+): ((timeMs: number) => number) | null {
+  const windDirDeg = raceMeta.conditions?.windDirDeg;
+  if (windDirDeg == null || !Number.isFinite(windDirDeg)) return null;
+  return () => windDirDeg;
+}
+
+function fleetOrigin(tracks: LoadedTrack[]): { lat: number; lon: number } {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const track of tracks) {
+    for (let i = 0; i < track.lat.length; i += 25) {
+      if (track.lon[i] < west) west = track.lon[i];
+      if (track.lon[i] > east) east = track.lon[i];
+      if (track.lat[i] < south) south = track.lat[i];
+      if (track.lat[i] > north) north = track.lat[i];
+    }
+  }
+  return { lat: (south + north) / 2, lon: (west + east) / 2 };
+}
+
 export function RaceReplay({
+  raceId,
   raceName,
   trackMetas,
   raceMeta,
   analyzeContext,
 }: {
+  raceId: string;
   raceName: string;
   trackMetas: TrackMeta[];
   /** Race-level conditions/tags; carried for analyze / dossier correlation. */
@@ -26,8 +58,10 @@ export function RaceReplay({
   analyzeContext: RaceAnalyzeContext;
 }) {
   const [tracks, setTracks] = useState<LoadedTrack[] | null>(null);
+  const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
+  const twdAt = resolveTwdAt(raceMeta);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +84,7 @@ export function RaceReplay({
         const defaultSelection = owned?.entryId ?? (addedByMe.length === 1 ? addedByMe[0].entryId : null);
         usePlaybackStore.getState().setSelectedEntryId(defaultSelection ?? null);
 
+        setOrigin(fleetOrigin(loaded));
         setTracks(loaded);
       })
       .catch((err) => {
@@ -81,7 +116,7 @@ export function RaceReplay({
       </Alert>
     );
   }
-  if (!tracks) {
+  if (!tracks || !origin) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
         <Loader2 className="size-5 animate-spin" aria-hidden="true" />
@@ -98,8 +133,14 @@ export function RaceReplay({
       data-entry-count={String(analyzeContext.entries.length)}
     >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <MapView tracks={tracks} styleId={styleId} />
+          <Leaderboard
+            tracks={tracks}
+            twdAt={twdAt}
+            origin={origin}
+            raceId={raceId}
+          />
         </div>
         <PanelTabs tracks={tracks} />
       </div>

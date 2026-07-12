@@ -21,6 +21,7 @@ const RaceReplay = dynamic(
 );
 
 export function ReplayShell(props: {
+  raceId: string;
   raceName: string;
   trackMetas: TrackMeta[];
   raceMeta: RaceMeta;
