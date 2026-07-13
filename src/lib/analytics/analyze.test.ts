@@ -678,4 +678,18 @@ describe("analyzeRace corrections", () => {
     expect(a).toEqual(b);
     expect(a.appliedCorrections).toBeUndefined();
   });
+
+  it("attaches windQuality when sensor vectors are present", () => {
+    const { good, bad: badTrack } = sensorFleet();
+    const analysis = analyzeRace([good, badTrack]);
+    expect(analysis.windQuality).toBeDefined();
+    expect(analysis.windQuality!.boats.map((boat) => boat.entryId).sort()).toEqual([
+      "bad-boat",
+      "good-boat",
+    ]);
+    const badBoat = analysis.windQuality!.boats.find((boat) => boat.entryId === "bad-boat");
+    expect(
+      badBoat?.findings.some((f) => f.code === "direction-outlier" || f.code === "dominates-fleet"),
+    ).toBe(true);
+  });
 });

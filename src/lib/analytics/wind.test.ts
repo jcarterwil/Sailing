@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { angleDiff, norm180, norm360 } from "@/lib/analytics/angles";
+import { angleDiff } from "@/lib/analytics/angles";
 import { analyzeRace } from "@/lib/analytics/analyze";
 import { combineBoats, summarizePerBoat } from "@/lib/analytics/wind";
 import type {
@@ -9,6 +9,7 @@ import type {
   VkxExtras,
   WindSample,
 } from "@/lib/analytics/types";
+import { norm180, norm360 } from "@/lib/analytics/angles";
 
 const START = Date.UTC(2026, 6, 7, 22, 10, 0);
 
