@@ -74,10 +74,19 @@ export async function explainWindQuality(
     return { items: fallback, model: null, fallback: true };
   }
 
+  // This extraction needs no reasoning. Sonnet 5 and peers run adaptive thinking
+  // by default when `thinking` is omitted, which spends the max_tokens budget on
+  // reasoning and starves the JSON answer (#52); disable it so the full budget
+  // goes to the output. Fable 5 / Mythos 5 always think and reject an explicit
+  // `{ type: "disabled" }` (400), so omit the field for them instead.
+  const alwaysThinks = /^claude-(fable|mythos)/.test(model);
+  const thinking = alwaysThinks ? null : ({ type: "disabled" } as const);
+
   try {
     const response = await client.messages.create({
       model,
-      max_tokens: 500,
+      max_tokens: 2000,
+      ...(thinking ? { thinking } : {}),
       system:
         "You explain sailboat race wind-sensor quality findings for an organizer. Use concise plain English. Do not invent numbers. Do not recommend excluding boats from fleet stats — only wind-sensor caveats. One short sentence per boat.",
       messages: [
