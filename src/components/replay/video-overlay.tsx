@@ -14,6 +14,7 @@ import { usePlaybackStore } from "@/components/replay/playback-store";
 import type { VideoMeta } from "@/components/replay/video-meta";
 import { Button } from "@/components/ui/button";
 import {
+  VIDEO_DRIFT_THRESHOLD_MS,
   clipMsToSeconds,
   planVideoSync,
 } from "@/lib/videos/replay-sync";
@@ -26,6 +27,15 @@ const SIZE_CLASS: Record<OverlaySize, string> = {
   large: "w-72 sm:w-96",
 };
 
+/** Only retry signed-URL refresh once per src generation on media errors. */
+const MAX_ERROR_URL_REFRESHES = 1;
+
+/** Near-expiry proactive refresh window. */
+const URL_REFRESH_LEAD_MS = 60_000;
+
+/** Min drift before applying a paused scrub-follow seek (avoids 60fps seeks). */
+const SCRUB_SEEK_FLOOR_MS = 120;
+
 function nextSize(size: OverlaySize): OverlaySize {
   if (size === "compact") return "medium";
   if (size === "medium") return "large";
@@ -37,14 +47,22 @@ function applyVideoPlayback(
   action: Exclude<ReturnType<typeof planVideoSync>, { type: "hide" }>,
 ) {
   const targetSec = clipMsToSeconds(action.clipMs);
+  const driftMs = Math.abs(video.currentTime * 1000 - action.clipMs);
+
   try {
     video.playbackRate = action.playbackRate;
   } catch {
-    // Some browsers reject extreme rates; leave previous rate.
+    // Some browsers reject extreme rates; planner already clamps.
   }
 
   if (action.type === "hard-seek" || action.type === "soft-correct") {
-    if (Number.isFinite(targetSec)) {
+    const seekFloor =
+      action.type === "soft-correct"
+        ? VIDEO_DRIFT_THRESHOLD_MS
+        : action.shouldPlay
+          ? 0
+          : SCRUB_SEEK_FLOOR_MS;
+    if (Number.isFinite(targetSec) && driftMs >= seekFloor) {
       try {
         video.currentTime = Math.max(0, targetSec);
       } catch {
@@ -73,16 +91,18 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
   const [size, setSize] = useState<OverlaySize>("medium");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [outsideClip, setOutsideClip] = useState(true);
   /** Overrides for refreshed signed URLs (async only — not synced in an effect). */
   const [urlOverrides, setUrlOverrides] = useState<Record<string, string>>({});
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const outsideRef = useRef<HTMLDivElement | null>(null);
   const expiresAtByIdRef = useRef(new Map<string, number>());
   const metaByIdRef = useRef(new Map<string, VideoMeta>());
   const prevFleetTimeRef = useRef<number | null>(null);
   const selectedIdRef = useRef<string | null>(selectedId);
   const refreshInFlightRef = useRef(false);
+  const errorRefreshCountRef = useRef(0);
+  const outsideClipRef = useRef(true);
 
   const selected =
     videos.find((v) => v.videoId === selectedId) ?? videos[0] ?? null;
@@ -92,10 +112,14 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
     setSelectedId(videoId);
     selectedIdRef.current = videoId;
     prevFleetTimeRef.current = null;
+    errorRefreshCountRef.current = 0;
     setLoadError(null);
   };
 
-  const refreshUrl = async (videoId: string): Promise<string | null> => {
+  const refreshUrl = async (
+    videoId: string,
+    opts?: { fromError?: boolean },
+  ): Promise<string | null> => {
     if (refreshInFlightRef.current) return null;
     refreshInFlightRef.current = true;
     setRefreshing(true);
@@ -108,15 +132,20 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
         const resumeSec = el.currentTime;
         el.src = grant.signedUrl;
         el.load();
-        const onLoaded = () => {
-          try {
-            el.currentTime = resumeSec;
-          } catch {
-            // ignore
-          }
-          el.removeEventListener("loadedmetadata", onLoaded);
-        };
-        el.addEventListener("loadedmetadata", onLoaded);
+        el.addEventListener(
+          "loadedmetadata",
+          () => {
+            try {
+              el.currentTime = resumeSec;
+            } catch {
+              // ignore
+            }
+          },
+          { once: true },
+        );
+      }
+      if (!opts?.fromError) {
+        errorRefreshCountRef.current = 0;
       }
       setLoadError(null);
       return grant.signedUrl;
@@ -143,10 +172,10 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
       }
     }
 
-    const setOutsideVisible = (visible: boolean) => {
-      const el = outsideRef.current;
-      if (!el) return;
-      el.hidden = !visible;
+    const publishOutside = (visible: boolean) => {
+      if (outsideClipRef.current === visible) return;
+      outsideClipRef.current = visible;
+      setOutsideClip(visible);
       const video = videoRef.current;
       if (video) {
         video.style.opacity = visible ? "0.4" : "1";
@@ -162,7 +191,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
       const meta = id ? metaByIdRef.current.get(id) : undefined;
       const video = videoRef.current;
       if (!id || !meta || !video) {
-        setOutsideVisible(true);
+        publishOutside(true);
         return;
       }
 
@@ -179,15 +208,15 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
 
       if (action.type === "hide") {
         if (!video.paused) video.pause();
-        setOutsideVisible(true);
+        publishOutside(true);
         return;
       }
 
-      setOutsideVisible(false);
+      publishOutside(false);
       applyVideoPlayback(video, action);
 
       const expiresAt = expiresAtByIdRef.current.get(id);
-      if (expiresAt !== undefined && expiresAt - Date.now() < 60_000) {
+      if (expiresAt !== undefined && expiresAt - Date.now() < URL_REFRESH_LEAD_MS) {
         void refreshUrl(id);
       }
     };
@@ -296,55 +325,66 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
         </Button>
       </div>
 
-      {!minimized && (
-        <div className="relative bg-black">
-          <video
-            ref={videoRef}
-            key={selected?.videoId}
-            className="block aspect-video w-full bg-black object-contain"
-            src={src}
-            muted
-            playsInline
-            preload="metadata"
-            onError={() => {
-              const id = selectedIdRef.current;
-              if (!id) {
-                setLoadError("Video failed to load.");
-                return;
-              }
-              void refreshUrl(id).then((url) => {
-                if (!url) setLoadError("Video failed to load.");
-              });
-            }}
-          />
-          <div
-            ref={outsideRef}
-            hidden
-            className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 px-2 text-center text-[11px] text-white/85"
-          >
-            Outside clip time
-          </div>
-          {loadError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-3 text-center">
-              <p className="text-[11px] text-white/90">{loadError}</p>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-7 gap-1 text-xs"
-                disabled={refreshing}
-                onClick={() => {
-                  const id = selectedIdRef.current;
-                  if (id) void refreshUrl(id);
-                }}
-              >
-                <RefreshCw className="size-3" aria-hidden="true" />
-                Retry
-              </Button>
-            </div>
-          )}
+      {/* Keep <video> mounted while minimized so sync survives expand. */}
+      <div className={minimized ? "hidden" : "relative bg-black"}>
+        <video
+          ref={videoRef}
+          key={selected?.videoId}
+          className="block aspect-video w-full bg-black object-contain"
+          src={src}
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedData={() => {
+            errorRefreshCountRef.current = 0;
+          }}
+          onError={() => {
+            const id = selectedIdRef.current;
+            if (!id) {
+              setLoadError("Video failed to load.");
+              return;
+            }
+            const expiresAt = expiresAtByIdRef.current.get(id);
+            const nearExpiry =
+              expiresAt !== undefined && expiresAt - Date.now() < URL_REFRESH_LEAD_MS;
+            if (!nearExpiry || errorRefreshCountRef.current >= MAX_ERROR_URL_REFRESHES) {
+              setLoadError("Video failed to load.");
+              return;
+            }
+            errorRefreshCountRef.current += 1;
+            void refreshUrl(id, { fromError: true }).then((url) => {
+              if (!url) setLoadError("Video failed to load.");
+            });
+          }}
+        />
+        <div
+          hidden={!outsideClip}
+          className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 px-2 text-center text-[11px] text-white/85"
+        >
+          Outside clip time
         </div>
-      )}
+        {loadError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-3 text-center">
+            <p className="text-[11px] text-white/90">{loadError}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1 text-xs"
+              disabled={refreshing}
+              onClick={() => {
+                const id = selectedIdRef.current;
+                if (!id) return;
+                errorRefreshCountRef.current = 0;
+                void refreshUrl(id);
+              }}
+            >
+              <RefreshCw className="size-3" aria-hidden="true" />
+              Retry
+            </Button>
+          </div>
+        )}
+      </div>
 
       {!minimized && selected && (
         <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/65">

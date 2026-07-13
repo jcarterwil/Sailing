@@ -146,8 +146,7 @@ export default async function ReplayPage({
     }
   }
 
-  const videoMetas: VideoMeta[] = [];
-  for (const row of videoRows ?? []) {
+  const readyVideos = (videoRows ?? []).flatMap((row) => {
     const startUtcMs = row.start_utc_ms;
     const durationMs = row.duration_ms;
     const provenance = parseTimingProvenance(row.timing_provenance);
@@ -157,26 +156,42 @@ export default async function ReplayPage({
       !provenance ||
       !isValidVideoTiming({ startUtcMs, durationMs })
     ) {
-      continue;
+      return [];
     }
-    if (!parseVideoUploadSummary(row.summary)?.confirmed) continue;
+    if (!parseVideoUploadSummary(row.summary)?.confirmed) return [];
+    return [
+      {
+        videoId: row.id,
+        filename: row.original_filename,
+        entryId: row.entry_id,
+        rawPath: row.raw_path,
+        startUtcMs,
+        durationMs,
+        timingProvenance: provenance,
+      },
+    ];
+  });
 
-    const { data: signed } = await admin.storage
-      .from(VIDEO_BUCKET)
-      .createSignedUrl(row.raw_path, VIDEO_READ_URL_TTL_SECONDS);
-    if (!signed) continue;
-
-    videoMetas.push({
-      videoId: row.id,
-      filename: row.original_filename,
-      entryId: row.entry_id,
-      url: signed.signedUrl,
-      urlTtlSeconds: VIDEO_READ_URL_TTL_SECONDS,
-      startUtcMs,
-      durationMs,
-      timingProvenance: provenance,
-    });
-  }
+  const videoMetas: VideoMeta[] = (
+    await Promise.all(
+      readyVideos.map(async (row) => {
+        const { data: signed } = await admin.storage
+          .from(VIDEO_BUCKET)
+          .createSignedUrl(row.rawPath, VIDEO_READ_URL_TTL_SECONDS);
+        if (!signed) return null;
+        return {
+          videoId: row.videoId,
+          filename: row.filename,
+          entryId: row.entryId,
+          url: signed.signedUrl,
+          urlTtlSeconds: VIDEO_READ_URL_TTL_SECONDS,
+          startUtcMs: row.startUtcMs,
+          durationMs: row.durationMs,
+          timingProvenance: row.timingProvenance,
+        } satisfies VideoMeta;
+      }),
+    )
+  ).filter((meta): meta is VideoMeta => meta !== null);
 
   if (trackMetas.length === 0) {
     return (

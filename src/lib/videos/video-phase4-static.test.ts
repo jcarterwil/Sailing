@@ -15,6 +15,7 @@ describe("video phase 4 replay integration invariants", () => {
     expect(page).toContain("VIDEO_READ_URL_TTL_SECONDS");
     expect(page).toContain("videoMetas");
     expect(page).toContain("createSignedUrl");
+    expect(page).toContain("Promise.all");
   });
 
   it("keeps public share replay free of race_videos loading", () => {
@@ -42,5 +43,8 @@ describe("video phase 4 replay integration invariants", () => {
   it("recovers expired signed URLs through the authorized read action", () => {
     const overlay = read("src/components/replay/video-overlay.tsx");
     expect(overlay).toContain("requestVideoReadUrl");
+    expect(overlay).toContain("MAX_ERROR_URL_REFRESHES");
+    expect(overlay).toContain("{ once: true }");
+    expect(overlay).toContain('className={minimized ? "hidden"');
   });
 });

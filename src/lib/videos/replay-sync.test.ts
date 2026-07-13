@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_VIDEO_PLAYBACK_RATE,
   VIDEO_DRIFT_THRESHOLD_MS,
   VIDEO_HARD_SEEK_DELTA_MS,
+  clampVideoPlaybackRate,
   clipMsToSeconds,
   fleetTimeToClipMs,
   isValidVideoTiming,
@@ -61,6 +63,14 @@ describe("fleetTimeToClipMs / clipMsToSeconds", () => {
         prevFleetTimeMs: START + 4_900,
       }).type,
     ).toBe("follow");
+  });
+});
+
+describe("clampVideoPlaybackRate", () => {
+  it("clamps to the HTML media ceiling", () => {
+    expect(clampVideoPlaybackRate(100)).toBe(MAX_VIDEO_PLAYBACK_RATE);
+    expect(clampVideoPlaybackRate(10)).toBe(10);
+    expect(clampVideoPlaybackRate(0)).toBe(1);
   });
 });
 
@@ -160,6 +170,24 @@ describe("planVideoSync", () => {
     if (action.type !== "hide") {
       expect(action.playbackRate).toBe(1);
     }
+  });
+
+  it("scrub-follows when fleet speed exceeds supported video playbackRate", () => {
+    const action = planVideoSync({
+      timeMs: START + 5_000,
+      playing: true,
+      speed: 100,
+      startUtcMs: START,
+      durationMs: DURATION,
+      videoCurrentTimeMs: 4_000,
+      prevFleetTimeMs: START + 4_900,
+    });
+    expect(action).toEqual({
+      type: "hard-seek",
+      clipMs: 5_000,
+      shouldPlay: false,
+      playbackRate: 1,
+    });
   });
 
   it("hard-seeks on first sample (unknown previous fleet time)", () => {
