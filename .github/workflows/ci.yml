@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Only the newest run per branch/PR needs to finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # lint -> typecheck -> test -> build. The build only needs the public env
+      # vars to be *present* (see src/lib/supabase/env.ts); these are inert
+      # placeholders, never real credentials. Server secrets are read at request
+      # time, not during the build, so none are needed here. The Examples-gated
+      # golden test is skipped in CI (the Examples/ dir is git-ignored).
+      - run: npm run verify
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          NEXT_PUBLIC_SITE_URL: https://sailing-performance.vercel.app
+          NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: "false"
