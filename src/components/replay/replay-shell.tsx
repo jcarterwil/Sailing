@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 
 import type { TrackMeta } from "@/components/replay/track-loader";
+import type { VideoMeta } from "@/components/replay/video-meta";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +26,8 @@ export function ReplayShell(props: {
   raceId: string;
   raceName: string;
   trackMetas: TrackMeta[];
+  /** Ready race videos with short-lived signed URLs (authenticated replay only). */
+  videoMetas?: VideoMeta[];
   raceMeta: RaceMeta;
   /** Full race+entry metadata payload for analyze / dossier consumers. */
   analyzeContext: RaceAnalyzeContext;
