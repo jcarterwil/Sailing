@@ -680,16 +680,16 @@ describe("analyzeRace corrections", () => {
   });
 
   it("attaches windQuality when sensor vectors are present", () => {
-    const { good, bad } = sensorFleet();
-    const analysis = analyzeRace([good, bad]);
+    const { good, bad: badTrack } = sensorFleet();
+    const analysis = analyzeRace([good, badTrack]);
     expect(analysis.windQuality).toBeDefined();
     expect(analysis.windQuality!.boats.map((boat) => boat.entryId).sort()).toEqual([
       "bad-boat",
       "good-boat",
     ]);
-    const bad = analysis.windQuality!.boats.find((boat) => boat.entryId === "bad-boat");
-    expect(bad?.findings.some((f) => f.code === "direction-outlier" || f.code === "dominates-fleet")).toBe(
-      true,
-    );
+    const badBoat = analysis.windQuality!.boats.find((boat) => boat.entryId === "bad-boat");
+    expect(
+      badBoat?.findings.some((f) => f.code === "direction-outlier" || f.code === "dominates-fleet"),
+    ).toBe(true);
   });
 });
