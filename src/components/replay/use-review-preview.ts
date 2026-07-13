@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import { analyzeRace } from "@/lib/analytics/analyze";
-import type { RaceCorrections } from "@/lib/analytics/corrections";
+import {
+  clampCorrectionsToTrackSpan,
+  type RaceCorrections,
+} from "@/lib/analytics/corrections";
+import { columnLength, epochAt, finite } from "@/lib/analytics/internal";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
 
 type ReviewPreviewRequest = {
@@ -18,6 +22,21 @@ type ReviewPreviewResponse = {
 };
 
 const DEBOUNCE_MS = 200;
+
+function trackSpan(tracks: readonly ProcessedTrack[]): { startMs: number; endMs: number } | null {
+  let startMs = Infinity;
+  let endMs = -Infinity;
+  for (const track of tracks) {
+    const length = columnLength(track);
+    if (length === 0) continue;
+    const first = epochAt(track, 0);
+    const last = epochAt(track, length - 1);
+    if (finite(first)) startMs = Math.min(startMs, first);
+    if (finite(last)) endMs = Math.max(endMs, last);
+  }
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  return { startMs, endMs };
+}
 
 /**
  * Debounced live preview of `analyzeRace(tracks, { corrections })`.
@@ -55,23 +74,28 @@ export function useReviewPreview(
     const id = ++requestId.current;
     const timer = window.setTimeout(() => {
       setPreviewing(true);
+      const span = trackSpan(tracks);
+      const clamped = span
+        ? clampCorrectionsToTrackSpan(corrections, span)
+        : corrections;
       const worker = workerRef.current;
       if (worker) {
         const onMessage = (event: MessageEvent<ReviewPreviewResponse>) => {
-          if (event.data.id !== id) return;
+          if (event.data.id !== id || requestId.current !== id) return;
           worker.removeEventListener("message", onMessage);
           setPreview(event.data.analysis);
           setPreviewing(false);
         };
         worker.addEventListener("message", onMessage);
-        const payload: ReviewPreviewRequest = { id, tracks, corrections };
+        const payload: ReviewPreviewRequest = { id, tracks, corrections: clamped };
         worker.postMessage(payload);
         return;
       }
       try {
-        setPreview(analyzeRace(tracks, { corrections }));
+        const next = analyzeRace(tracks, { corrections: clamped });
+        if (requestId.current === id) setPreview(next);
       } catch {
-        setPreview(baseline);
+        if (requestId.current === id) setPreview(baseline);
       } finally {
         if (requestId.current === id) setPreviewing(false);
       }

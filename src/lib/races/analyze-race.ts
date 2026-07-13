@@ -31,6 +31,18 @@ export type LoadedRaceCorrections = {
   updatedAt: string | null;
 };
 
+/** True when PostgREST/Postgres reports the race_corrections relation is absent. */
+function isMissingRaceCorrectionsRelation(error: {
+  code?: string;
+  message?: string;
+  details?: string;
+}): boolean {
+  const code = error.code ?? "";
+  if (code === "42P01" || code === "PGRST205") return true;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  return /race_corrections/i.test(text) && /does not exist|could not find the table/i.test(text);
+}
+
 /** Load persisted organizer corrections (empty document when none). */
 export async function loadRaceCorrections(raceId: string): Promise<LoadedRaceCorrections> {
   const admin = createAdminClient();
@@ -40,6 +52,14 @@ export async function loadRaceCorrections(raceId: string): Promise<LoadedRaceCor
     .eq("race_id", raceId)
     .maybeSingle();
   if (error) {
+    // App may deploy before the migration; treat as no corrections so analysis
+    // and track processing keep working during that window.
+    if (isMissingRaceCorrectionsRelation(error)) {
+      return {
+        corrections: normalizeCorrections(null),
+        updatedAt: null,
+      };
+    }
     throw new AnalyzeRaceError(`Could not load race corrections: ${error.message}`);
   }
   return {

@@ -80,6 +80,21 @@ describe("assessWindQuality", () => {
     expect(report.boats.map((boat) => boat.entryId)).toEqual(["bad", "good"]);
   });
 
+  it("ignores excluded boats in leave-one-out consensus", () => {
+    const report = assessWindQuality(
+      [
+        ...vectorsFor("excluded-outlier", 20, 40),
+        ...vectorsFor("a", 280, 20),
+        ...vectorsFor("b", 280, 20),
+      ],
+      null,
+      { excludedEntryIds: ["excluded-outlier"] },
+    );
+    const a = report.boats.find((boat) => boat.entryId === "a");
+    expect(a?.deviationFromConsensusDeg).toBeLessThan(1);
+    expect(a?.findings.some((f) => f.code === "direction-outlier")).toBe(false);
+  });
+
   it("returns stable empty report for no vectors", () => {
     expect(assessWindQuality([], 283)).toEqual({
       boats: [],

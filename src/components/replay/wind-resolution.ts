@@ -84,10 +84,29 @@ export function createReplayWindResolver(
       };
     }
     const speed = windSpeedAt(wind, timeMs);
+    const twsKts =
+      speed != null && Number.isFinite(speed) && speed >= 0 ? speed : null;
+    // Preserve organizer manual TWS ranges when analysis has direction-only / range wind.
+    let twsRangeKts: ReplayWindReading["twsRangeKts"] = null;
+    if (wind.source === "manual") {
+      const correction = analysis?.appliedCorrections?.manualWind;
+      if (correction?.enabled) {
+        const validSpeed = (value: number | null | undefined) =>
+          value != null && Number.isFinite(value) && value >= 0 ? value : null;
+        const minimum = validSpeed(correction.twsMinKts);
+        const maximum = validSpeed(correction.twsMaxKts);
+        if (minimum != null || maximum != null) {
+          twsRangeKts =
+            minimum != null && maximum != null
+              ? ([Math.min(minimum, maximum), Math.max(minimum, maximum)] as const)
+              : ([minimum, maximum] as const);
+        }
+      }
+    }
     return {
       twdDeg: norm360(direction),
-      twsKts: speed != null && Number.isFinite(speed) && speed >= 0 ? speed : null,
-      twsRangeKts: null,
+      twsKts,
+      twsRangeKts,
       source,
       confidence,
     };

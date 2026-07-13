@@ -472,7 +472,12 @@ export function ReviewPageClient({
                     value={corrections.startOverride?.timeMs ?? ""}
                     placeholder={String(preview?.race.start.timeMs ?? "")}
                     onChange={(event) => {
-                      const timeMs = Number(event.target.value);
+                      const raw = event.target.value.trim();
+                      if (raw === "") {
+                        updateCorrections({ startOverride: null });
+                        return;
+                      }
+                      const timeMs = Number(raw);
                       updateCorrections({
                         startOverride: Number.isFinite(timeMs) ? { timeMs } : null,
                       });
@@ -524,9 +529,10 @@ export function ReviewPageClient({
                               (row) =>
                                 !(row.atMs >= leg.startTimeMs && row.atMs <= leg.endTimeMs),
                             );
+                            const autoType = leg.detectedType ?? (!leg.relabeled ? leg.type : null);
                             updateCorrections({
                               legRelabels:
-                                type === leg.type && !leg.relabeled
+                                autoType != null && type === autoType
                                   ? others
                                   : [...others, { atMs, type }],
                             });

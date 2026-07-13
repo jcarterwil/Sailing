@@ -32,9 +32,10 @@ function severityStatus(findings: readonly WindQualityFinding[]): BoatWindQualit
 function leaveOneOutConsensus(
   boats: readonly { entryId: string; twdDeg: number }[],
   entryId: string,
+  excluded: ReadonlySet<string>,
 ): number | null {
   const others = boats
-    .filter((boat) => boat.entryId !== entryId)
+    .filter((boat) => boat.entryId !== entryId && !excluded.has(boat.entryId))
     .map((boat) => boat.twdDeg);
   if (others.length === 0) return null;
   const consensus = circularMean(others);
@@ -65,7 +66,7 @@ export function assessWindQuality(
   const reportBoats: BoatWindQuality[] = boats.map((boat) => {
     const isExcluded = excluded.has(boat.entryId);
     const dominancePct = totalSamples > 0 ? boat.sampleCount / totalSamples : 0;
-    const loo = leaveOneOutConsensus(boats, boat.entryId);
+    const loo = leaveOneOutConsensus(boats, boat.entryId, excluded);
     const deviationFromConsensusDeg =
       loo != null && finite(boat.twdDeg)
         ? round(Math.abs(angleDiff(boat.twdDeg, loo)), 2)

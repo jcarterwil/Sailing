@@ -145,6 +145,24 @@ export async function POST(
     );
   }
 
+  // Drop completed / in-flight reports so /report cannot serve pre-correction text.
+  const invalidatedAt = new Date().toISOString();
+  const { error: invalidateReportsError } = await admin
+    .from("race_reports")
+    .update({
+      status: "error",
+      error_message: "Invalidated because organizer race corrections changed.",
+      completed_at: invalidatedAt,
+    })
+    .eq("race_id", raceId)
+    .in("status", ["complete", "generating"]);
+  if (invalidateReportsError) {
+    return NextResponse.json(
+      { error: `Could not invalidate stale reports: ${invalidateReportsError.message}` },
+      { status: 500 },
+    );
+  }
+
   try {
     const result = await analyzeAndPersistRace(raceId);
     return NextResponse.json({
