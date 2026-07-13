@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { needsReplayMapLayers } from "@/components/replay/map-layers";
+import { shouldAddReplayMapLayers } from "@/components/replay/map-layers";
 import { usePlaybackStore, type CameraMode, type TrailMode } from "@/components/replay/playback-store";
 import {
   buildSpeedTrackData,
@@ -179,6 +179,7 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const readyRef = useRef(false);
+  const addingLayersRef = useRef(false);
   const camBearingRef = useRef(0);
   const lastCamFrameNowRef = useRef(0);
   const lastCamTimeMsRef = useRef(0);
@@ -222,9 +223,7 @@ export function MapView({
     );
     mapRef.current = map;
 
-    const addLayers = () => {
-      // `load` and `styledata` both fire on first paint; only add sources once per style.
-      if (!needsReplayMapLayers(map)) return;
+    const addReplayLayers = () => {
       if (!map.getImage("boat-arrow")) {
         map.addImage("boat-arrow", makeBoatArrow(), { sdf: true });
       }
@@ -377,10 +376,25 @@ export function MapView({
       readyRef.current = true;
     };
 
+    // `load` and `styledata` both fire on first paint, and `addSource`/`addImage` can emit
+    // `styledata` synchronously mid-add — re-entrancy would double-add the "trails" source and
+    // throw ("Source \"trails\" already exists"), on both first load and after setStyle. Guard on
+    // an in-progress flag plus the trails source so layers are added exactly once per style.
+    // (#46, #51)
+    const addLayers = () => {
+      if (!shouldAddReplayMapLayers({ isAdding: addingLayersRef.current, map })) return;
+      addingLayersRef.current = true;
+      try {
+        addReplayLayers();
+      } finally {
+        addingLayersRef.current = false;
+      }
+    };
+
     map.on("load", addLayers);
     // After setStyle, sources/layers are gone; re-add them.
     map.on("styledata", () => {
-      if (map.isStyleLoaded() && needsReplayMapLayers(map)) {
+      if (map.isStyleLoaded() && shouldAddReplayMapLayers({ isAdding: addingLayersRef.current, map })) {
         readyRef.current = false;
         addLayers();
       }
