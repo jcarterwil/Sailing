@@ -57,6 +57,8 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 3. `main`'s rulesets enforce the gate: the `verify` check must pass, and contributor PRs require a code-owner review before merge. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
 4. If an automated code reviewer runs on the PR, address its material findings before merging. Never merge with the `verify` check red.
 
+> **Owner merging your own PR:** the plain `gh pr merge` balks — it reads the global "review required" status and ignores your ruleset bypass. Merge via the GitHub **Merge** button or `gh pr merge <N> --squash --admin` (the server honors your bypass, so this isn't a real admin override).
+
 ## Security must-dos (every endpoint and query)
 
 - **RLS on every table**, scoped with the `(select auth.uid())` idiom. New tables follow the pattern in `supabase/migrations`.
