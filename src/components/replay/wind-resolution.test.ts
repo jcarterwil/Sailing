@@ -108,6 +108,33 @@ describe("createReplayWindResolver", () => {
     });
   });
 
+  it.each([
+    ["minimum", 14, null, [14, null]],
+    ["maximum", null, 14, [null, 14]],
+  ] as const)("preserves a one-sided manual %s wind bound", (_, windMinKts, windMaxKts, expectedRange) => {
+    const resolver = createReplayWindResolver(
+      {
+        tags: [],
+        conditions: {
+          windDirDeg: 270,
+          windMinKts,
+          windMaxKts,
+          seaState: null,
+          notes: null,
+        },
+      },
+      null,
+    );
+
+    expect(resolver?.(5_000)).toEqual({
+      twdDeg: 270,
+      twsKts: null,
+      twsRangeKts: expectedRange,
+      source: "manual",
+      confidence: null,
+    });
+  });
+
   it("returns no resolver when neither analysis nor manual direction is available", () => {
     expect(createReplayWindResolver(EMPTY_META, null)).toBeNull();
   });
