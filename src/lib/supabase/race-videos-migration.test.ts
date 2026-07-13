@@ -19,6 +19,9 @@ describe("race video migration security boundary", () => {
 
   it("keeps anonymous metadata and object access denied", () => {
     expect(migration).toContain("revoke all on table public.race_videos from anon");
+    expect(migration).toContain(
+      "revoke insert, update, delete on table public.race_videos from authenticated",
+    );
     expect(migration).not.toMatch(/create\s+policy[\s\S]*on\s+storage\.objects/);
   });
 
