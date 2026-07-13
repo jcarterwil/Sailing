@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
+import { HelmPov } from "@/components/replay/helm-pov";
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
 import { Leaderboard } from "@/components/replay/leaderboard";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
@@ -84,6 +85,8 @@ export function RaceReplay({
   const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
+  const povEnabled =
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pov") === "1";
   const windAt = useMemo(
     () => createReplayWindResolver(raceMeta, analysis),
     [analysis, raceMeta],
@@ -167,7 +170,11 @@ export function RaceReplay({
     >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-w-0 flex-1">
-          <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
+          {povEnabled ? (
+            <HelmPov tracks={tracks} />
+          ) : (
+            <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
+          )}
           <Leaderboard
             tracks={tracks}
             twdAt={twdAt}
