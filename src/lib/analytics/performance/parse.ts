@@ -318,8 +318,11 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
     if (!entry) { valid = false; return; }
     valid = stringAt(entry.entryId, context, `${entryPath}.entryId`, { nonEmpty: true, max: 200 }) && valid;
     valid = literalAt(entry.status, ["legal", "ocs-recrossed", "ocs-no-recross", "no-crossing", "unavailable"], context, `${entryPath}.status`) && valid;
-    for (const field of ["crossingTimeMs", "timeToLineMs", "sogAtGunKts", "sogAtLineKts", "distanceToLineAtGunM", "signedLineSideDistanceAtGunM", "dmg30M", "vmg30Kts"] as const) {
+    for (const field of ["crossingTimeMs", "timeToLineMs", "signedLineSideDistanceAtGunM"] as const) {
       valid = finiteAt(entry[field], context, `${entryPath}.${field}`, { nullable: true }) && valid;
+    }
+    for (const field of ["sogAtGunKts", "sogAtLineKts", "distanceToLineAtGunM", "dmg30M", "vmg30Kts"] as const) {
+      valid = finiteAt(entry[field], context, `${entryPath}.${field}`, { nullable: true, min: 0 }) && valid;
     }
     valid = finiteAt(entry.rank, context, `${entryPath}.rank`, { nullable: true, integer: true, min: 1 }) && valid;
     valid = validateWarningCodes(entry.warningCodes, context, `${entryPath}.warningCodes`) && valid;
@@ -438,6 +441,12 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   if (row.available === false && (row.q1Kts !== null || row.medianKts !== null || row.q3Kts !== null || (bins?.length ?? 0) > 0)) {
     valid = issue(context, path, "unavailable distribution cannot retain quartiles or bins") && valid;
   }
+  if (row.available === false && (typeof row.unavailableReason !== "string" || row.unavailableReason.length === 0)) {
+    valid = issue(context, `${path}.unavailableReason`, "unavailable distribution requires a reason") && valid;
+  }
+  if (row.available === true && row.unavailableReason !== null) {
+    valid = issue(context, `${path}.unavailableReason`, "available distribution requires a null reason") && valid;
+  }
   return valid;
 }
 
@@ -534,7 +543,13 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     const leg = isRecord(legValue) ? legValue : null;
     valid = validateSameEntrySet(entryIdsAt(Array.isArray(leg?.metrics) ? leg.metrics : null, context, `performance.legs[${index}].metrics`), canonicalEntryIds, context, `performance.legs[${index}].metrics`) && valid;
   });
-  return valid;
+  distributions?.forEach((distributionValue, index) => {
+    const distribution = isRecord(distributionValue) ? distributionValue : null;
+    if (typeof distribution?.entryId === "string" && !canonicalEntryIds.includes(distribution.entryId)) {
+      valid = issue(context, `performance.distributions[${index}].entryId`, "entry ID is not in the canonical fleet") && valid;
+    }
+  });
+  return valid && context.issues.length === 0;
 }
 
 function payloadBytes(value: unknown): number | null {

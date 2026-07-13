@@ -16,6 +16,35 @@ function cloneFixture(): Record<string, unknown> {
   return JSON.parse(JSON.stringify(VALID_PERFORMANCE_V1_FIXTURE)) as Record<string, unknown>;
 }
 
+function validDistribution(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    scope: "race",
+    legIndex: null,
+    entryId: "alpha",
+    direction: "upwind",
+    tack: "port",
+    selection: "all",
+    available: true,
+    unavailableReason: null,
+    q1Kts: 3,
+    medianKts: 4,
+    q3Kts: 5,
+    totalEligibleSeconds: 100,
+    sampleCount: 100,
+    underflowSeconds: 0,
+    overflowSeconds: 0,
+    bins: [{ lowerKts: 0, upperKts: 0.25, seconds: 100, densityPerKt: 4 }],
+    provenance: {
+      source: "computed",
+      confidence: "high",
+      inputs: ["fixture"],
+      coveragePct: 100,
+      note: null,
+    },
+    ...overrides,
+  };
+}
+
 describe("parseStoredPerformance", () => {
   it("distinguishes a legacy analysis with no performance subdocument", () => {
     expect(parseStoredPerformance({ v: 1, race: {}, wind: {} })).toEqual({
@@ -57,6 +86,15 @@ describe("parseStoredPerformance", () => {
     (negativeDelta.wholeRace as Array<Record<string, unknown>>)[0].deltaMs = -1;
     expect(parsePerformanceV1(negativeDelta).status).toBe("malformed");
 
+    for (const field of ["distanceToLineAtGunM", "dmg30M", "vmg30Kts"] as const) {
+      const invalidStart = cloneFixture();
+      const start = invalidStart.start as { entries: Array<Record<string, unknown>> };
+      start.entries[0][field] = -1;
+      const result = parsePerformanceV1(invalidStart);
+      expect(result.status).toBe("malformed");
+      expect(result.issues.join(" ")).toContain(field);
+    }
+
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
     expect(() => parsePerformanceV1(cyclic)).not.toThrow();
@@ -76,39 +114,56 @@ describe("parseStoredPerformance", () => {
     expect(warningResult.issues.join(" ")).toContain("warnings");
 
     const tooManyBins = cloneFixture();
-    tooManyBins.distributions = [{
-      scope: "race",
-      legIndex: null,
-      entryId: "alpha",
-      direction: "upwind",
-      tack: "port",
-      selection: "all",
-      available: true,
-      unavailableReason: null,
-      q1Kts: 3,
-      medianKts: 4,
-      q3Kts: 5,
-      totalEligibleSeconds: 100,
-      sampleCount: 100,
-      underflowSeconds: 0,
-      overflowSeconds: 0,
+    tooManyBins.distributions = [validDistribution({
       bins: Array.from({ length: PERFORMANCE_MAX_BINS_PER_DISTRIBUTION + 1 }, (_, index) => ({
         lowerKts: index * 0.25,
         upperKts: index * 0.25 + 0.25,
         seconds: 1,
         densityPerKt: 0.04,
       })),
-      provenance: {
-        source: "computed",
-        confidence: "high",
-        inputs: ["fixture"],
-        coveragePct: 100,
-        note: null,
-      },
-    }];
+    })];
     const binResult = parsePerformanceV1(tooManyBins);
     expect(binResult.status).toBe("malformed");
     expect(binResult.issues.join(" ")).toContain("bins");
+  });
+
+  it("rejects duplicate rows and distributions outside the canonical fleet", () => {
+    const duplicateResult = cloneFixture();
+    const results = duplicateResult.results as Array<Record<string, unknown>>;
+    results.push({ ...results[0] });
+    const duplicateParsed = parsePerformanceV1(duplicateResult);
+    expect(duplicateParsed.status).toBe("malformed");
+    expect(duplicateParsed.issues.join(" ")).toContain("duplicate entry ID");
+
+    const unknownDistribution = cloneFixture();
+    unknownDistribution.distributions = [validDistribution({ entryId: "not-in-race" })];
+    const unknownParsed = parsePerformanceV1(unknownDistribution);
+    expect(unknownParsed.status).toBe("malformed");
+    expect(unknownParsed.issues.join(" ")).toContain("canonical fleet");
+  });
+
+  it("requires a reason exactly when a distribution is unavailable", () => {
+    const noReason = cloneFixture();
+    noReason.distributions = [validDistribution({
+      available: false,
+      unavailableReason: null,
+      q1Kts: null,
+      medianKts: null,
+      q3Kts: null,
+      bins: [],
+    })];
+    expect(parsePerformanceV1(noReason).status).toBe("malformed");
+
+    const unavailable = cloneFixture();
+    unavailable.distributions = [validDistribution({
+      available: false,
+      unavailableReason: "Fewer than 20 eligible seconds.",
+      q1Kts: null,
+      medianKts: null,
+      q3Kts: null,
+      bins: [],
+    })];
+    expect(parsePerformanceV1(unavailable).status).toBe("valid");
   });
 });
 
