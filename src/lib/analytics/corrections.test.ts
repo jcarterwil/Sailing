@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+<<<<<<< HEAD
   correctionsAreActive,
+=======
+>>>>>>> origin/main
   EMPTY_CORRECTIONS,
   normalizeCorrections,
 } from "@/lib/analytics/corrections";
@@ -90,6 +93,7 @@ describe("normalizeCorrections", () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });
+<<<<<<< HEAD
 
 describe("correctionsAreActive", () => {
   it("is false for empty corrections and true when any field is set", () => {
@@ -108,3 +112,5 @@ describe("correctionsAreActive", () => {
     ).toBe(true);
   });
 });
+=======
+>>>>>>> origin/main

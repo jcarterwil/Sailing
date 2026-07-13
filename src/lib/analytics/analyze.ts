@@ -1,4 +1,5 @@
 import { aggregateEntry, aggregateFleet } from "@/lib/analytics/aggregates";
+import type { RaceCorrections } from "@/lib/analytics/corrections";
 import {
   correctionsAreActive,
   normalizeCorrections,
@@ -21,7 +22,11 @@ import type {
 } from "@/lib/analytics/types";
 import { analyzeWind } from "@/lib/analytics/wind";
 
+<<<<<<< HEAD
 /** Optional analysis knobs. */
+=======
+/** Optional analysis knobs. Corrections are threaded in Phase 1+. */
+>>>>>>> origin/main
 export interface AnalyzeOptions {
   corrections?: RaceCorrections | null;
 }
@@ -123,12 +128,20 @@ function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWar
 
 // Deterministic fleet analytics entrypoint. It does not mutate tracks, perform
 // I/O, or depend on wall-clock time, and its result is safe to JSON.stringify.
+<<<<<<< HEAD
+=======
+// `options` is accepted for back-compat with future correction threading (Phase 1).
+>>>>>>> origin/main
 export function analyzeRace(
   tracks: ProcessedTrack[],
   options?: AnalyzeOptions,
 ): RaceAnalysis {
+<<<<<<< HEAD
   const corrections = normalizeCorrections(options?.corrections ?? null);
   const activeCorrections = correctionsAreActive(corrections) ? corrections : null;
+=======
+  void options;
+>>>>>>> origin/main
   const canonicalTracks = new Map<ProcessedTrack, string>();
   const ordered = [...tracks].sort((a, b) => compareTrackOrder(a, b, canonicalTracks));
   const warnings: AnalysisWarning[] = [];
