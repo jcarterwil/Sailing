@@ -13,6 +13,7 @@ import {
   PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS,
   PERFORMANCE_MAX_WARNING_MESSAGE_CHARS,
   PERFORMANCE_MAX_WARNINGS,
+  PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
 } from "@/lib/analytics/constants";
 import type {
   PerformanceAnalysisV1,
@@ -341,6 +342,10 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
       if (entry.crossingTimeMs === null || entry.timeToLineMs === null || entry.rank === null) {
         valid = issue(context, entryPath, "legal start status requires crossing, time-to-line, and rank") && valid;
       }
+      if (typeof row.gunTimeMs === "number" && typeof entry.crossingTimeMs === "number" &&
+          (entry.crossingTimeMs < row.gunTimeMs || (typeof entry.timeToLineMs === "number" && entry.timeToLineMs < 0))) {
+        valid = issue(context, entryPath, "legal crossing must be at or after the gun") && valid;
+      }
     } else if (entry.crossingTimeMs !== null || entry.timeToLineMs !== null || entry.rank !== null) {
       valid = issue(context, entryPath, "start without a legal crossing cannot retain crossing or rank") && valid;
     }
@@ -420,7 +425,12 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   const row = recordAt(value, context, path);
   if (!row) return false;
   let valid = literalAt(row.scope, ["race", "leg"], context, `${path}.scope`);
-  valid = finiteAt(row.legIndex, context, `${path}.legIndex`, { nullable: true, integer: true, min: 0 }) && valid;
+  valid = finiteAt(row.legIndex, context, `${path}.legIndex`, {
+    nullable: true,
+    integer: true,
+    min: 0,
+    max: PERFORMANCE_MAX_LEG_COUNT - 1,
+  }) && valid;
   valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS }) && valid;
   valid = literalAt(row.direction, ["upwind", "downwind"], context, `${path}.direction`) && valid;
   valid = literalAt(row.tack, ["port", "starboard"], context, `${path}.tack`) && valid;
@@ -460,6 +470,11 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   }
   if (row.available === true && row.unavailableReason !== null) {
     valid = issue(context, `${path}.unavailableReason`, "available distribution requires a null reason") && valid;
+  }
+  if (row.available === true && typeof row.totalEligibleSeconds === "number" &&
+      row.totalEligibleSeconds < PERFORMANCE_MIN_DISTRIBUTION_SECONDS) {
+    valid = issue(context, `${path}.totalEligibleSeconds`,
+      `available distribution requires at least ${PERFORMANCE_MIN_DISTRIBUTION_SECONDS} eligible seconds`) && valid;
   }
   return valid;
 }
@@ -505,6 +520,12 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   const distributions = arrayAt(row.distributions, context, "performance.distributions", PERFORMANCE_MAX_DISTRIBUTIONS);
   if (!distributions) valid = false;
   distributions?.forEach((distribution, index) => { valid = validateDistribution(distribution, context, `performance.distributions[${index}]`) && valid; });
+  distributions?.forEach((distributionValue, index) => {
+    const distribution = isRecord(distributionValue) ? distributionValue : null;
+    if (typeof distribution?.legIndex === "number" && distribution.legIndex >= (legs?.length ?? 0)) {
+      valid = issue(context, `performance.distributions[${index}].legIndex`, "does not reference an existing leg") && valid;
+    }
+  });
   if (context.totalBins > PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS) {
     valid = issue(context, "performance.distributions", `exceeds total bin cap ${PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS}`) && valid;
   }
@@ -517,7 +538,15 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     valid = literalAt(warning.code, ["incomplete-start-geometry", "unsupported-mark", "dispersed-mark-cluster", "missing-entry-passage", "non-monotonic-passage", "unavailable-finish-geometry", "unresolved-finish", "insufficient-coverage", "source-gap", "distribution-omitted", "payload-limited"], context, `${path}.code`) && valid;
     valid = stringAt(warning.message, context, `${path}.message`, { nonEmpty: true, max: PERFORMANCE_MAX_WARNING_MESSAGE_CHARS }) && valid;
     valid = stringAt(warning.entryId, context, `${path}.entryId`, { nullable: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS }) && valid;
-    valid = finiteAt(warning.legIndex, context, `${path}.legIndex`, { nullable: true, integer: true, min: 0 }) && valid;
+    valid = finiteAt(warning.legIndex, context, `${path}.legIndex`, {
+      nullable: true,
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_LEG_COUNT - 1,
+    }) && valid;
+    if (typeof warning.legIndex === "number" && warning.legIndex >= (legs?.length ?? 0)) {
+      valid = issue(context, `${path}.legIndex`, "does not reference an existing leg") && valid;
+    }
   });
   const provenance = recordAt(row.provenance, context, "performance.provenance");
   const canonicalEntryIds: string[] = [];

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   PERFORMANCE_MAX_BINS_PER_DISTRIBUTION,
+  PERFORMANCE_MAX_LEG_COUNT,
   PERFORMANCE_MAX_WARNINGS,
+  PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
 } from "@/lib/analytics/constants";
 import expected from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg.expected.json";
 import { SIX_BOAT_FIVE_LEG_FIXTURE } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
@@ -101,6 +103,14 @@ describe("parseStoredPerformance", () => {
     const timeResult = parsePerformanceV1(inconsistentTimeToLine);
     expect(timeResult.status).toBe("malformed");
     expect(timeResult.issues.join(" ")).toContain("crossingTimeMs - gunTimeMs");
+
+    const preGunCrossing = cloneFixture();
+    const preGunStart = preGunCrossing.start as { gunTimeMs: number; entries: Array<Record<string, unknown>> };
+    preGunStart.entries[0].crossingTimeMs = preGunStart.gunTimeMs - 1;
+    preGunStart.entries[0].timeToLineMs = -1;
+    const preGunResult = parsePerformanceV1(preGunCrossing);
+    expect(preGunResult.status).toBe("malformed");
+    expect(preGunResult.issues.join(" ")).toContain("at or after the gun");
 
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
@@ -215,6 +225,22 @@ describe("parseStoredPerformance", () => {
   });
 
   it("requires a reason exactly when a distribution is unavailable", () => {
+    const insufficientAvailable = cloneFixture();
+    insufficientAvailable.distributions = [validDistribution({
+      totalEligibleSeconds: PERFORMANCE_MIN_DISTRIBUTION_SECONDS - 1,
+    })];
+    const insufficientParsed = parsePerformanceV1(insufficientAvailable);
+    expect(insufficientParsed.status).toBe("malformed");
+    expect(insufficientParsed.issues.join(" ")).toContain(
+      `at least ${PERFORMANCE_MIN_DISTRIBUTION_SECONDS} eligible seconds`,
+    );
+
+    const thresholdAvailable = cloneFixture();
+    thresholdAvailable.distributions = [validDistribution({
+      totalEligibleSeconds: PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
+    })];
+    expect(parsePerformanceV1(thresholdAvailable).status).toBe("valid");
+
     const noReason = cloneFixture();
     noReason.distributions = [validDistribution({
       available: false,
@@ -240,6 +266,25 @@ describe("parseStoredPerformance", () => {
       bins: [],
     })];
     expect(parsePerformanceV1(unavailable).status).toBe("valid");
+  });
+
+  it("bounds leg references to an existing V1 leg", () => {
+    const distribution = cloneFixture();
+    distribution.distributions = [validDistribution({ scope: "leg", legIndex: 5 })];
+    const distributionParsed = parsePerformanceV1(distribution);
+    expect(distributionParsed.status).toBe("malformed");
+    expect(distributionParsed.issues.join(" ")).toContain("existing leg");
+
+    const warning = cloneFixture();
+    warning.warnings = [{
+      code: "source-gap",
+      message: "Invalid leg reference.",
+      entryId: "echo",
+      legIndex: PERFORMANCE_MAX_LEG_COUNT,
+    }];
+    const warningParsed = parsePerformanceV1(warning);
+    expect(warningParsed.status).toBe("malformed");
+    expect(warningParsed.issues.join(" ")).toContain(`must be <= ${PERFORMANCE_MAX_LEG_COUNT - 1}`);
   });
 });
 
