@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
 import type { RaceAnalysis } from "@/lib/analytics/types";
+import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import {
   buildRaceAnalyzeContext,
   parseEntryMeta,
@@ -65,7 +66,7 @@ export default async function ReplayPage({
     supabase
       .from("race_entries")
       .select(
-        "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status)",
+        "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status, updated_at)",
       )
       .eq("race_id", raceId)
       .order("created_at", { ascending: true }),
@@ -131,10 +132,15 @@ export default async function ReplayPage({
     );
   }
 
-  const replayAnalysis = analysisForProcessedEntries(
-    analysis,
-    trackMetas.map((t) => t.entryId),
-  );
+  const replayAnalysis = analysisIsFresh(
+    analysisRow?.computed_at,
+    processed.map((entry) => entry.tracks!.updated_at),
+  )
+    ? analysisForProcessedEntries(
+        analysis,
+        trackMetas.map((track) => track.entryId),
+      )
+    : null;
 
   return (
     <main className="flex h-dvh flex-col">

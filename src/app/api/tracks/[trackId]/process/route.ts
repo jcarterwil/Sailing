@@ -68,7 +68,20 @@ export async function POST(
   }
 
   const admin = createAdminClient();
-  await admin.from("tracks").update({ status: "processing", error_message: null }).eq("id", trackId);
+  const { error: processingError } = await admin
+    .from("tracks")
+    .update({
+      status: "processing",
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", trackId);
+  if (processingError) {
+    return NextResponse.json(
+      { error: `Could not start track processing: ${processingError.message}` },
+      { status: 500 },
+    );
+  }
 
   try {
     const { data: blob, error: downloadError } = await admin.storage
@@ -100,7 +113,7 @@ export async function POST(
 
     const t0 = processed.t0;
     const tEnd = t0 + processed.t[processed.t.length - 1];
-    await admin
+    const { error: trackUpdateError } = await admin
       .from("tracks")
       .update({
         status: "processed",
@@ -112,6 +125,9 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq("id", trackId);
+    if (trackUpdateError) {
+      throw new Error(`Could not update processed track: ${trackUpdateError.message}`);
+    }
 
     // Any newly processed track invalidates prior fleet analysis. Drop it first so
     // replay never serves wind/maneuvers computed against an older track set;
@@ -150,10 +166,20 @@ export async function POST(
         : err instanceof Error
           ? `Processing failed: ${err.message}`
           : "Processing failed.";
-    await admin
+    const { error: failureUpdateError } = await admin
       .from("tracks")
-      .update({ status: "error", error_message: message })
+      .update({
+        status: "error",
+        error_message: message,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", trackId);
-    return NextResponse.json({ error: message }, { status: 422 });
+    if (failureUpdateError) {
+      console.error("Could not persist track processing failure:", failureUpdateError);
+    }
+    return NextResponse.json(
+      { error: message },
+      { status: err instanceof ParseError ? 422 : 500 },
+    );
   }
 }

@@ -193,6 +193,7 @@ export async function requestTrackUpload(
         processed_path: null,
         status: "uploaded",
         error_message: null,
+        updated_at: new Date().toISOString(),
       },
       { onConflict: "entry_id" },
     )

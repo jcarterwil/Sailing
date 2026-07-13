@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { RaceAnalysis } from "@/lib/analytics/types";
+import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import {
   analysisMatchesCurrentFleet,
   buildDossierStats,
@@ -105,12 +106,12 @@ export async function POST(
       .eq("race_id", raceId),
     admin
       .from("race_analyses")
-      .select("analysis")
+      .select("analysis, computed_at")
       .eq("race_id", raceId)
       .maybeSingle(),
     admin
       .from("race_entries")
-      .select("id, boats(name), tracks(status)")
+      .select("id, boats(name), tracks(status, updated_at)")
       .eq("race_id", raceId),
   ]);
   if (
@@ -145,6 +146,12 @@ export async function POST(
         id: entry.id,
         processed: entry.tracks?.status === "processed",
       })),
+    ) ||
+    !analysisIsFresh(
+      analysisResult.data.computed_at,
+      currentEntries
+        .filter((entry) => entry.tracks?.status === "processed")
+        .map((entry) => entry.tracks!.updated_at),
     )
   ) {
     return json(

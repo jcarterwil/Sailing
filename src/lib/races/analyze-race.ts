@@ -29,7 +29,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   const admin = createAdminClient();
   const { data: entries, error: entriesError } = await admin
     .from("race_entries")
-    .select("id, tracks(processed_path, status)")
+    .select("id, tracks(processed_path, status, updated_at)")
     .eq("race_id", raceId)
     .order("created_at", { ascending: true });
   if (entriesError) {
@@ -51,6 +51,17 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     );
   }
 
+  // This timestamp identifies the input snapshot, not the end of computation.
+  // If a track changes while analysis is running, its updated_at will be newer
+  // and consumers will reject this row even if invalidation also fails.
+  const computedAt = new Date().toISOString();
+  const inputVersions = new Map(
+    ready.map((entry) => [
+      entry.id,
+      `${entry.tracks!.processed_path}:${entry.tracks!.updated_at}`,
+    ]),
+  );
+
   const tracks: ProcessedTrack[] = [];
   for (const entry of ready) {
     const path = entry.tracks!.processed_path!;
@@ -63,11 +74,39 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
       );
     }
     const json = gunzipSync(Buffer.from(await blob.arrayBuffer())).toString("utf8");
-    tracks.push(JSON.parse(json) as ProcessedTrack);
+    const track = JSON.parse(json) as ProcessedTrack;
+    if (track.entryId !== entry.id) {
+      throw new AnalyzeRaceError(
+        `Processed track entry mismatch: expected ${entry.id}, received ${track.entryId}.`,
+      );
+    }
+    tracks.push(track);
   }
 
   const analysis = analyzeRace(tracks);
-  const computedAt = new Date().toISOString();
+  const { data: currentEntries, error: currentEntriesError } = await admin
+    .from("race_entries")
+    .select("id, tracks(processed_path, status, updated_at)")
+    .eq("race_id", raceId);
+  if (currentEntriesError) {
+    throw new AnalyzeRaceError(
+      `Could not verify analysis inputs: ${currentEntriesError.message}`,
+    );
+  }
+  const inputsUnchanged =
+    currentEntries?.length === inputVersions.size &&
+    currentEntries.every(
+      (entry) =>
+        entry.tracks?.status === "processed" &&
+        inputVersions.get(entry.id) ===
+          `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
+    );
+  if (!inputsUnchanged) {
+    throw new AnalyzeRaceError(
+      "Processed tracks changed while analysis was running. Retry analysis.",
+      409,
+    );
+  }
   const { error: upsertError } = await admin.from("race_analyses").upsert(
     {
       race_id: raceId,
@@ -91,7 +130,10 @@ export async function raceHasAllTracksProcessed(raceId: string): Promise<boolean
     .from("race_entries")
     .select("id, tracks(status, processed_path)")
     .eq("race_id", raceId);
-  if (error || !entries || entries.length === 0) return false;
+  if (error) {
+    throw new AnalyzeRaceError(`Could not check processed tracks: ${error.message}`);
+  }
+  if (!entries || entries.length === 0) return false;
   return entries.every(
     (e) => e.tracks?.status === "processed" && !!e.tracks.processed_path,
   );
