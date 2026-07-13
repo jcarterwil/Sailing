@@ -525,6 +525,14 @@ export function MapView({
       }
       lastCamTimeMsRef.current = timeMs;
 
+      const startLine = resolveStartLine(tracks, startsMs, timeMs);
+      const startLineSource = map.getSource<maplibregl.GeoJSONSource>("start-line");
+      if (startLineSource) {
+        startLineSource.setData(
+          startLine ? startLineGeoJson(startLine) : EMPTY_START_LINE,
+        );
+      }
+
       if (trailMode === "speed") return;
       const now = performance.now();
       // Trails are heavier; ~12Hz is visually smooth.
@@ -533,14 +541,6 @@ export function MapView({
         const trails = map.getSource<maplibregl.GeoJSONSource>("trails");
         trails?.setData(
           trailGeoJson(tracks, timeMs, trailMode === "tail" ? TAIL_SECONDS * 1000 : null),
-        );
-      }
-
-      const startLine = resolveStartLine(tracks, startsMs, timeMs);
-      const startLineSource = map.getSource<maplibregl.GeoJSONSource>("start-line");
-      if (startLineSource) {
-        startLineSource.setData(
-          startLine ? startLineGeoJson(startLine) : EMPTY_START_LINE,
         );
       }
     };
