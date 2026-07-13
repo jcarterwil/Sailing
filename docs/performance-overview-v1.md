@@ -96,7 +96,7 @@ Organizer overrides are authoritative but remain visibly distinct from evidence.
 | `warnings[]` | at most 256, messages at most 300 chars | stable codes, bounded scope |
 | `provenance` | contract/calculation/wind/correction versions and constants | no raw samples |
 
-Hard caps are exported from `constants.ts`: 100 entries, 16 legs, 17 course points/passages per entry, 512 distribution series, 200 bins per series, 12,000 total bins, 256 warnings, and a 1 MiB UTF-8 serialized performance payload. Before persistence, optional distributions are omitted deterministically with `distribution-omitted`/`payload-limited` warnings; core course/result/start/metric facts are retained.
+Hard caps are exported from `constants.ts`: 100 entries, 200 characters per stable entry ID, 16 legs, 17 course points/passages per entry, 512 distribution series, 200 bins per series, 12,000 total bins, 256 warnings, and a 1 MiB UTF-8 serialized performance payload. Before persistence, optional distributions are omitted deterministically with `distribution-omitted`/`payload-limited` warnings; core course/result/start/metric facts are retained.
 
 No persisted array is populated from an unbounded input without a named cap. Entry, leg, course-point, result, passage, best-interval, distribution, bin, warning, and provenance-input arrays all have explicit limits.
 

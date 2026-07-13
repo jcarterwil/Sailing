@@ -95,10 +95,59 @@ describe("parseStoredPerformance", () => {
       expect(result.issues.join(" ")).toContain(field);
     }
 
+    const inconsistentTimeToLine = cloneFixture();
+    const start = inconsistentTimeToLine.start as { entries: Array<Record<string, unknown>> };
+    start.entries[0].timeToLineMs = -1;
+    const timeResult = parsePerformanceV1(inconsistentTimeToLine);
+    expect(timeResult.status).toBe("malformed");
+    expect(timeResult.issues.join(" ")).toContain("crossingTimeMs - gunTimeMs");
+
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
     expect(() => parsePerformanceV1(cyclic)).not.toThrow();
     expect(parsePerformanceV1(cyclic).status).toBe("malformed");
+  });
+
+  it("enforces normalized bearings and exact best-interval elapsed time", () => {
+    const mutations: Array<(performance: Record<string, unknown>) => void> = [
+      (performance) => { ((performance.start as Record<string, unknown>).line as Record<string, unknown>).bearingDeg = 360; },
+      (performance) => { ((performance.course as { legs: Array<Record<string, unknown>> }).legs[0]).bearingDeg = 360; },
+      (performance) => { (performance.start as Record<string, unknown>).courseSideBearingDeg = 360; },
+    ];
+    for (const mutate of mutations) {
+      const performance = cloneFixture();
+      mutate(performance);
+      expect(parsePerformanceV1(performance).status).toBe("malformed");
+    }
+
+    const inconsistent = cloneFixture();
+    const best = inconsistent.bestIntervals as Array<{ intervals: unknown[] }>;
+    best[0].intervals[0] = {
+      targetDistanceM: 500,
+      startTimeMs: 1_000,
+      endTimeMs: 11_000,
+      elapsedMs: 9_000,
+      averageSpeedKts: 10,
+      fleetBest: true,
+      provenance: {
+        source: "computed",
+        confidence: "high",
+        inputs: ["fixture"],
+        coveragePct: 100,
+        note: null,
+      },
+    };
+    const parsed = parsePerformanceV1(inconsistent);
+    expect(parsed.status).toBe("malformed");
+    expect(parsed.issues.join(" ")).toContain("endTimeMs - startTimeMs");
+  });
+
+  it("uses the 200-character entry ID contract rather than provenance label limits", () => {
+    const replaceEntryId = (entryId: string) => JSON.parse(
+      JSON.stringify(VALID_PERFORMANCE_V1_FIXTURE).replaceAll('"alpha"', JSON.stringify(entryId)),
+    ) as Record<string, unknown>;
+    expect(parsePerformanceV1(replaceEntryId("a".repeat(200))).status).toBe("valid");
+    expect(parsePerformanceV1(replaceEntryId("a".repeat(201))).status).toBe("malformed");
   });
 
   it("rejects oversized top-level and nested arrays", () => {
@@ -150,6 +199,8 @@ describe("parseStoredPerformance", () => {
       q1Kts: null,
       medianKts: null,
       q3Kts: null,
+      totalEligibleSeconds: 10,
+      sampleCount: 10,
       bins: [],
     })];
     expect(parsePerformanceV1(noReason).status).toBe("malformed");
@@ -161,6 +212,8 @@ describe("parseStoredPerformance", () => {
       q1Kts: null,
       medianKts: null,
       q3Kts: null,
+      totalEligibleSeconds: 10,
+      sampleCount: 10,
       bins: [],
     })];
     expect(parsePerformanceV1(unavailable).status).toBe("valid");

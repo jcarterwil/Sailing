@@ -3,6 +3,7 @@ import {
   PERFORMANCE_MAX_COURSE_POINT_COUNT,
   PERFORMANCE_MAX_DISTRIBUTIONS,
   PERFORMANCE_MAX_ENTRY_COUNT,
+  PERFORMANCE_MAX_ENTRY_ID_CHARS,
   PERFORMANCE_MAX_LEG_COUNT,
   PERFORMANCE_MAX_PASSAGES_PER_ENTRY,
   PERFORMANCE_MAX_PAYLOAD_BYTES,
@@ -61,7 +62,7 @@ function finiteAt(
   value: unknown,
   context: ValidationContext,
   path: string,
-  options: { nullable?: boolean; min?: number; max?: number; integer?: boolean } = {},
+  options: { nullable?: boolean; min?: number; max?: number; maxExclusive?: number; integer?: boolean } = {},
 ): boolean {
   if (value === null && options.nullable) return true;
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -70,6 +71,7 @@ function finiteAt(
   if (options.integer && !Number.isInteger(value)) return issue(context, path, "expected integer");
   if (options.min != null && value < options.min) return issue(context, path, `must be >= ${options.min}`);
   if (options.max != null && value > options.max) return issue(context, path, `must be <= ${options.max}`);
+  if (options.maxExclusive != null && value >= options.maxExclusive) return issue(context, path, `must be < ${options.maxExclusive}`);
   return true;
 }
 
@@ -104,6 +106,7 @@ function validateStringArray(
   context: ValidationContext,
   path: string,
   maxLength: number,
+  maxChars = PERFORMANCE_MAX_PROVENANCE_LABEL_CHARS,
 ): boolean {
   const rows = arrayAt(value, context, path, maxLength);
   if (!rows) return false;
@@ -111,7 +114,7 @@ function validateStringArray(
   rows.forEach((row, index) => {
     valid = stringAt(row, context, `${path}[${index}]`, {
       nonEmpty: true,
-      max: PERFORMANCE_MAX_PROVENANCE_LABEL_CHARS,
+      max: maxChars,
     }) && valid;
   });
   return valid;
@@ -192,7 +195,7 @@ function validateLine(value: unknown, context: ValidationContext, path: string):
   let valid = validateCoordinate(row.pin, context, `${path}.pin`);
   valid = validateCoordinate(row.boat, context, `${path}.boat`) && valid;
   valid = finiteAt(row.lengthM, context, `${path}.lengthM`, { min: Number.EPSILON }) && valid;
-  valid = finiteAt(row.bearingDeg, context, `${path}.bearingDeg`, { min: 0, max: 360 }) && valid;
+  valid = finiteAt(row.bearingDeg, context, `${path}.bearingDeg`, { min: 0, maxExclusive: 360 }) && valid;
   return valid;
 }
 
@@ -203,7 +206,7 @@ function validateWarningCodes(value: unknown, context: ValidationContext, path: 
 function validatePassages(value: unknown, context: ValidationContext, path: string): boolean {
   const row = recordAt(value, context, path);
   if (!row) return false;
-  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: 200 });
+  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS });
   const passages = arrayAt(row.passages, context, `${path}.passages`, PERFORMANCE_MAX_PASSAGES_PER_ENTRY);
   if (!passages) return false;
   passages.forEach((passageValue, index) => {
@@ -252,7 +255,7 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
     valid = validateNullableCoordinate(leg.start, context, `${legPath}.start`) && valid;
     valid = validateNullableCoordinate(leg.end, context, `${legPath}.end`) && valid;
     valid = finiteAt(leg.distanceM, context, `${legPath}.distanceM`, { nullable: true, min: 0 }) && valid;
-    valid = finiteAt(leg.bearingDeg, context, `${legPath}.bearingDeg`, { nullable: true, min: 0, max: 360 }) && valid;
+    valid = finiteAt(leg.bearingDeg, context, `${legPath}.bearingDeg`, { nullable: true, min: 0, maxExclusive: 360 }) && valid;
     valid = finiteAt(leg.courseTwaDeg, context, `${legPath}.courseTwaDeg`, { nullable: true, min: -180, max: 180 }) && valid;
     valid = finiteAt(leg.supportingEntryCount, context, `${legPath}.supportingEntryCount`, { integer: true, min: 0, max: PERFORMANCE_MAX_ENTRY_COUNT }) && valid;
     valid = validateProvenance(leg.provenance, context, `${legPath}.provenance`) && valid;
@@ -269,7 +272,7 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
 function validateResult(value: unknown, context: ValidationContext, path: string): boolean {
   const row = recordAt(value, context, path);
   if (!row) return false;
-  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: 200 });
+  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS });
   valid = literalAt(row.status, ["finished", "dns", "dnf", "ret", "ocs", "dsq", "unresolved"], context, `${path}.status`) && valid;
   if (row.finish !== null) {
     const finish = recordAt(row.finish, context, `${path}.finish`);
@@ -307,7 +310,7 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
   if (!row) return false;
   let valid = finiteAt(row.gunTimeMs, context, `${path}.gunTimeMs`, { nullable: true });
   valid = (row.line === null || validateLine(row.line, context, `${path}.line`)) && valid;
-  valid = finiteAt(row.courseSideBearingDeg, context, `${path}.courseSideBearingDeg`, { nullable: true, min: 0, max: 360 }) && valid;
+  valid = finiteAt(row.courseSideBearingDeg, context, `${path}.courseSideBearingDeg`, { nullable: true, min: 0, maxExclusive: 360 }) && valid;
   valid = finiteAt(row.windowStartMs, context, `${path}.windowStartMs`, { nullable: true }) && valid;
   valid = finiteAt(row.windowEndMs, context, `${path}.windowEndMs`, { nullable: true }) && valid;
   const entries = arrayAt(row.entries, context, `${path}.entries`, PERFORMANCE_MAX_ENTRY_COUNT);
@@ -316,7 +319,7 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
     const entryPath = `${path}.entries[${index}]`;
     const entry = recordAt(entryValue, context, entryPath);
     if (!entry) { valid = false; return; }
-    valid = stringAt(entry.entryId, context, `${entryPath}.entryId`, { nonEmpty: true, max: 200 }) && valid;
+    valid = stringAt(entry.entryId, context, `${entryPath}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS }) && valid;
     valid = literalAt(entry.status, ["legal", "ocs-recrossed", "ocs-no-recross", "no-crossing", "unavailable"], context, `${entryPath}.status`) && valid;
     for (const field of ["crossingTimeMs", "timeToLineMs", "signedLineSideDistanceAtGunM"] as const) {
       valid = finiteAt(entry[field], context, `${entryPath}.${field}`, { nullable: true }) && valid;
@@ -327,6 +330,10 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
     valid = finiteAt(entry.rank, context, `${entryPath}.rank`, { nullable: true, integer: true, min: 1 }) && valid;
     valid = validateWarningCodes(entry.warningCodes, context, `${entryPath}.warningCodes`) && valid;
     valid = validateProvenance(entry.provenance, context, `${entryPath}.provenance`) && valid;
+    if (typeof row.gunTimeMs === "number" && typeof entry.crossingTimeMs === "number" && typeof entry.timeToLineMs === "number" &&
+        Math.abs(entry.crossingTimeMs - row.gunTimeMs - entry.timeToLineMs) > 1e-6) {
+      valid = issue(context, `${entryPath}.timeToLineMs`, "must equal crossingTimeMs - gunTimeMs") && valid;
+    }
     if (entry.status === "legal" || entry.status === "ocs-recrossed") {
       if (entry.crossingTimeMs === null || entry.timeToLineMs === null || entry.rank === null) {
         valid = issue(context, entryPath, "legal start status requires crossing, time-to-line, and rank") && valid;
@@ -352,7 +359,7 @@ function validateDirectionalVmg(value: unknown, context: ValidationContext, path
 function validateMetrics(value: unknown, context: ValidationContext, path: string): boolean {
   const row = recordAt(value, context, path);
   if (!row) return false;
-  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: 200 });
+  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS });
   for (const field of ["elapsedMs", "deltaMs", "avgSogKts", "maxSogKts", "sailedDistanceM", "courseDistanceM", "excessDistanceM", "courseEfficiencyPct", "avgAbsTwaDeg", "avgAbsHeelDeg"] as const) {
     valid = finiteAt(row[field], context, `${path}.${field}`, { nullable: true, min: 0 }) && valid;
   }
@@ -379,7 +386,7 @@ function validateMetrics(value: unknown, context: ValidationContext, path: strin
 function validateBestIntervals(value: unknown, context: ValidationContext, path: string): boolean {
   const row = recordAt(value, context, path);
   if (!row) return false;
-  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: 200 });
+  let valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS });
   const intervals = arrayAt(row.intervals, context, `${path}.intervals`, 3);
   if (!intervals || intervals.length !== 3) {
     if (intervals) issue(context, `${path}.intervals`, "must contain 500 m, 1000 m, and 1852 m slots");
@@ -398,6 +405,10 @@ function validateBestIntervals(value: unknown, context: ValidationContext, path:
     valid = finiteAt(interval.averageSpeedKts, context, `${intervalPath}.averageSpeedKts`, { min: 0 }) && valid;
     valid = booleanAt(interval.fleetBest, context, `${intervalPath}.fleetBest`) && valid;
     valid = validateProvenance(interval.provenance, context, `${intervalPath}.provenance`) && valid;
+    if (typeof interval.startTimeMs === "number" && typeof interval.endTimeMs === "number" && typeof interval.elapsedMs === "number" &&
+        (interval.endTimeMs <= interval.startTimeMs || Math.abs(interval.endTimeMs - interval.startTimeMs - interval.elapsedMs) > 1e-6)) {
+      valid = issue(context, intervalPath, "elapsedMs must equal endTimeMs - startTimeMs") && valid;
+    }
   });
   return valid;
 }
@@ -407,7 +418,7 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   if (!row) return false;
   let valid = literalAt(row.scope, ["race", "leg"], context, `${path}.scope`);
   valid = finiteAt(row.legIndex, context, `${path}.legIndex`, { nullable: true, integer: true, min: 0 }) && valid;
-  valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: 200 }) && valid;
+  valid = stringAt(row.entryId, context, `${path}.entryId`, { nonEmpty: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS }) && valid;
   valid = literalAt(row.direction, ["upwind", "downwind"], context, `${path}.direction`) && valid;
   valid = literalAt(row.tack, ["port", "starboard"], context, `${path}.tack`) && valid;
   valid = literalAt(row.selection, ["all", "straight"], context, `${path}.selection`) && valid;
@@ -502,7 +513,7 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     if (!warning) { valid = false; return; }
     valid = literalAt(warning.code, ["incomplete-start-geometry", "unsupported-mark", "dispersed-mark-cluster", "missing-entry-passage", "non-monotonic-passage", "unavailable-finish-geometry", "unresolved-finish", "insufficient-coverage", "source-gap", "distribution-omitted", "payload-limited"], context, `${path}.code`) && valid;
     valid = stringAt(warning.message, context, `${path}.message`, { nonEmpty: true, max: PERFORMANCE_MAX_WARNING_MESSAGE_CHARS }) && valid;
-    valid = stringAt(warning.entryId, context, `${path}.entryId`, { nullable: true, max: 200 }) && valid;
+    valid = stringAt(warning.entryId, context, `${path}.entryId`, { nullable: true, max: PERFORMANCE_MAX_ENTRY_ID_CHARS }) && valid;
     valid = finiteAt(warning.legIndex, context, `${path}.legIndex`, { nullable: true, integer: true, min: 0 }) && valid;
   });
   const provenance = recordAt(row.provenance, context, "performance.provenance");
@@ -514,7 +525,7 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     valid = literalAt(provenance.windSource, ["sensor-derived", "estimated", "manual", "unavailable"], context, "performance.provenance.windSource") && valid;
     valid = literalAt(provenance.windConfidence, ["high", "medium", "low", "unavailable"], context, "performance.provenance.windConfidence") && valid;
     valid = finiteAt(provenance.correctionsVersion, context, "performance.provenance.correctionsVersion", { nullable: true, integer: true, min: 1 }) && valid;
-    valid = validateStringArray(provenance.entryIds, context, "performance.provenance.entryIds", PERFORMANCE_MAX_ENTRY_COUNT) && valid;
+    valid = validateStringArray(provenance.entryIds, context, "performance.provenance.entryIds", PERFORMANCE_MAX_ENTRY_COUNT, PERFORMANCE_MAX_ENTRY_ID_CHARS) && valid;
     if (Array.isArray(provenance.entryIds)) {
       const seen = new Set<string>();
       for (const [index, entryId] of provenance.entryIds.entries()) {
