@@ -1,0 +1,57 @@
+{
+  "fixture": "synthetic-six-boat-five-leg-v1",
+  "metricContract": "performance-overview-v1",
+  "gunTimeMs": 1781974800000,
+  "timezone": "America/Detroit",
+  "entryIds": ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"],
+  "loggingRatesHz": {
+    "alpha": 1,
+    "bravo": 2,
+    "charlie": 1,
+    "delta": 2,
+    "echo": 1,
+    "foxtrot": 2
+  },
+  "legTypes": ["upwind", "downwind", "upwind", "downwind", "upwind"],
+  "startStatuses": {
+    "alpha": "legal",
+    "bravo": "legal",
+    "charlie": "ocs-recrossed",
+    "delta": "legal",
+    "echo": "legal",
+    "foxtrot": "legal"
+  },
+  "passageTimesMs": {
+    "alpha": [1781974922000, 1781975046000, 1781975168000, 1781975293000, 1781975415000],
+    "bravo": [1781974920000, 1781975044000, 1781975171000, 1781975290000, 1781975412000],
+    "charlie": [1781974929000, 1781975050000, 1781975174000, 1781975298000, 1781975420000],
+    "delta": [1781974925000, 1781975041000, 1781975165000, 1781975287000, 1781975408000],
+    "echo": [1781974931000, 1781975052000, 1781975178000, 1781975302000, 1781975426000],
+    "foxtrot": [1781974927000, 1781975048000, 1781975169000, 1781975295000, 1781975418000]
+  },
+  "finishTimesMs": {
+    "alpha": 1781975415000,
+    "bravo": 1781975412000,
+    "charlie": 1781975420000,
+    "delta": 1781975408000,
+    "echo": 1781975426000,
+    "foxtrot": 1781975418000
+  },
+  "sourceGap": {
+    "entryId": "echo",
+    "startMs": 1781975055000,
+    "endMs": 1781975067000,
+    "minimumObservedGapMs": 13000
+  },
+  "missingAttitudeEntryIds": ["foxtrot"],
+  "tolerances": {
+    "fullResolutionPassageTimeMs": 1000,
+    "mixedRateAggregateRelative": 0.001,
+    "coursePointM": 15,
+    "courseDistanceM": 1,
+    "angleDeg": 0.5,
+    "bestIntervalDistanceM": 0.01,
+    "bestIntervalSpeedKts": 0.001,
+    "rankTieMs": 500
+  }
+}

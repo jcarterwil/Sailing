@@ -50,6 +50,27 @@ export const BOTCHED_MAX_DURATION_S = 20; // maneuver duration beyond this is op
 export const BOTCHED_MIN_SPEED_RATIO = 0.6; // SOG-out / SOG-in threshold
 export const BOTCHED_MIN_VMG_RETENTION = 0.5; // made-good efficiency threshold
 
+/** Performance Overview V1 contract bounds (#76). */
+export const PERFORMANCE_RESAMPLE_HZ = 1;
+export const PERFORMANCE_MAX_SOURCE_GAP_MS = 10_000;
+export const PERFORMANCE_MAX_ENTRY_COUNT = 100;
+export const PERFORMANCE_MAX_LEG_COUNT = 16;
+export const PERFORMANCE_MAX_COURSE_POINT_COUNT = PERFORMANCE_MAX_LEG_COUNT + 1;
+export const PERFORMANCE_MAX_PASSAGES_PER_ENTRY = PERFORMANCE_MAX_COURSE_POINT_COUNT;
+export const PERFORMANCE_MAX_WARNINGS = 256;
+export const PERFORMANCE_MAX_WARNING_MESSAGE_CHARS = 300;
+export const PERFORMANCE_MAX_RESULT_NOTE_CHARS = 500;
+export const PERFORMANCE_MAX_DISTRIBUTIONS = 512;
+export const PERFORMANCE_MAX_BINS_PER_DISTRIBUTION = 200;
+export const PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS = 12_000;
+export const PERFORMANCE_DISTRIBUTION_BIN_KTS = 0.25;
+export const PERFORMANCE_DISTRIBUTION_MAX_KTS = 50;
+export const PERFORMANCE_MAX_PROVENANCE_INPUTS = 32;
+export const PERFORMANCE_MAX_PROVENANCE_LABEL_CHARS = 120;
+export const PERFORMANCE_MAX_PAYLOAD_BYTES = 1024 * 1024;
+export const PERFORMANCE_MAX_DISPLAY_POINTS_PER_BOAT = 2_000;
+export const PERFORMANCE_MAX_DISPLAY_POINTS_PER_CHART = 12_000;
+
 // Live ladder / leaderboard (#21).
 export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped boats
 export const LADDER_TREND_WINDOW_MS = 45_000; // lookback for gaining/losing glyph
