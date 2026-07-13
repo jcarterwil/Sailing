@@ -45,6 +45,7 @@ function nextSize(size: OverlaySize): OverlaySize {
 function applyVideoPlayback(
   video: HTMLVideoElement,
   action: Exclude<ReturnType<typeof planVideoSync>, { type: "hide" }>,
+  pendingSeekSecRef: { current: number | null },
 ) {
   const targetSec = clipMsToSeconds(action.clipMs);
   const driftMs = Math.abs(video.currentTime * 1000 - action.clipMs);
@@ -63,10 +64,14 @@ function applyVideoPlayback(
           ? 0
           : SCRUB_SEEK_FLOOR_MS;
     if (Number.isFinite(targetSec) && driftMs >= seekFloor) {
-      try {
-        video.currentTime = Math.max(0, targetSec);
-      } catch {
-        // Ignore seeks before metadata is ready.
+      pendingSeekSecRef.current = Math.max(0, targetSec);
+      if (video.readyState >= 1) {
+        try {
+          video.currentTime = pendingSeekSecRef.current;
+          pendingSeekSecRef.current = null;
+        } catch {
+          // Keep pendingSeekSecRef for loadedmetadata retry while paused.
+        }
       }
     }
   }
@@ -103,6 +108,10 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
   const refreshInFlightRef = useRef(false);
   const errorRefreshCountRef = useRef(0);
   const outsideClipRef = useRef(true);
+  const pendingSeekSecRef = useRef<number | null>(null);
+  const syncRef = useRef<((state: { timeMs: number; playing: boolean; speed: number }) => void) | null>(
+    null,
+  );
 
   const selected =
     videos.find((v) => v.videoId === selectedId) ?? videos[0] ?? null;
@@ -113,6 +122,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
     selectedIdRef.current = videoId;
     prevFleetTimeRef.current = null;
     errorRefreshCountRef.current = 0;
+    pendingSeekSecRef.current = null;
     setLoadError(null);
   };
 
@@ -213,7 +223,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
       }
 
       publishOutside(false);
-      applyVideoPlayback(video, action);
+      applyVideoPlayback(video, action, pendingSeekSecRef);
 
       const expiresAt = expiresAtByIdRef.current.get(id);
       if (expiresAt !== undefined && expiresAt - Date.now() < URL_REFRESH_LEAD_MS) {
@@ -221,11 +231,15 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
       }
     };
 
+    syncRef.current = sync;
     const unsubscribe = usePlaybackStore.subscribe((state) => {
       sync(state);
     });
     sync(usePlaybackStore.getState());
-    return () => unsubscribe();
+    return () => {
+      syncRef.current = null;
+      unsubscribe();
+    };
   }, [closed, videos, effectiveId]);
 
   if (videos.length === 0) return null;
@@ -337,6 +351,19 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
           preload="metadata"
           onLoadedData={() => {
             errorRefreshCountRef.current = 0;
+          }}
+          onLoadedMetadata={() => {
+            const el = videoRef.current;
+            const pending = pendingSeekSecRef.current;
+            if (el && pending !== null) {
+              try {
+                el.currentTime = pending;
+                pendingSeekSecRef.current = null;
+              } catch {
+                // leave pending for a later attempt
+              }
+            }
+            syncRef.current?.(usePlaybackStore.getState());
           }}
           onError={() => {
             const id = selectedIdRef.current;
