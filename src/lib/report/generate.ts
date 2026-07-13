@@ -2,7 +2,7 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 
-import { getConfiguredAiModel } from "@/lib/ai/settings";
+import { getDossierAiConfig } from "@/lib/ai/settings";
 import { buildDossierCreateParams } from "@/lib/report/dossier-request";
 import type { DossierStats } from "@/lib/report/dossier-stats";
 
@@ -42,10 +42,10 @@ export async function generateDossier(
     throw new Error("ANTHROPIC_API_KEY is not configured.");
   }
 
-  const model = await getConfiguredAiModel();
+  const config = await getDossierAiConfig();
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create(
-    buildDossierCreateParams(model, statsPayload),
+    buildDossierCreateParams(config, statsPayload),
   );
 
   if (response.stop_reason === "max_tokens") {
@@ -56,7 +56,7 @@ export async function generateDossier(
 
   return {
     markdown,
-    model,
+    model: config.model,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
   };

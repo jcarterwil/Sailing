@@ -3,6 +3,14 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  DEFAULT_DOSSIER_MAX_TOKENS,
+  DEFAULT_DOSSIER_THINKING,
+  DOSSIER_SYSTEM_PROMPT,
+  type DossierAiConfig,
+  type DossierEffort,
+  type DossierThinkingMode,
+} from "@/lib/report/dossier-request";
 import type { WeatherEvidence } from "@/lib/weather/open-meteo";
 
 export const DEFAULT_AI_MODEL = "claude-sonnet-4-6";
@@ -32,6 +40,35 @@ export async function getConfiguredAiModel(): Promise<string> {
   if (error) throw new Error(`Could not read AI settings: ${error.message}`);
   if (!data?.model) return DEFAULT_AI_MODEL;
   return data.model;
+}
+
+const VALID_DOSSIER_EFFORTS: readonly DossierEffort[] = ["low", "medium", "high", "xhigh", "max"];
+
+export async function getDossierAiConfig(): Promise<DossierAiConfig> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("ai_settings")
+    .select("model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read AI settings: ${error.message}`);
+
+  const model = data?.model || DEFAULT_AI_MODEL;
+  const systemPrompt = data?.report_system_prompt?.trim() || DOSSIER_SYSTEM_PROMPT;
+  const maxTokens =
+    typeof data?.report_max_tokens === "number" && data.report_max_tokens > 0
+      ? data.report_max_tokens
+      : DEFAULT_DOSSIER_MAX_TOKENS;
+  const thinking: DossierThinkingMode =
+    data?.report_thinking === "adaptive" ? "adaptive" : DEFAULT_DOSSIER_THINKING;
+  const effort =
+    thinking === "adaptive" &&
+    data?.report_effort &&
+    (VALID_DOSSIER_EFFORTS as readonly string[]).includes(data.report_effort)
+      ? (data.report_effort as DossierEffort)
+      : null;
+
+  return { model, systemPrompt, maxTokens, thinking, effort };
 }
 
 function anthropicClient(): Anthropic | null {

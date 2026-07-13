@@ -50,3 +50,52 @@ export async function updateAiModel(modelInput: string): Promise<{ warning: stri
   revalidatePath("/admin/ai");
   return { warning };
 }
+
+export async function updateReportAiSettings(input: {
+  systemPrompt: string;
+  maxTokens: number;
+  thinking: string;
+  effort: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sign in required.");
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+  if (!isAdmin) throw new Error("Admin only.");
+
+  const systemPrompt = input.systemPrompt.trim();
+  if (systemPrompt.length > 20_000) {
+    throw new Error("System prompt is too long (max 20000 characters).");
+  }
+
+  const maxTokens = Math.trunc(input.maxTokens);
+  if (!Number.isFinite(maxTokens) || maxTokens < 1024 || maxTokens > 32_000) {
+    throw new Error("Max output tokens must be between 1024 and 32000.");
+  }
+
+  const thinking = input.thinking === "adaptive" ? "adaptive" : "off";
+  const effort =
+    thinking === "adaptive" && ["low", "medium", "high", "xhigh", "max"].includes(input.effort)
+      ? input.effort
+      : null;
+
+  const { data: updated, error } = await supabase
+    .from("ai_settings")
+    .update({
+      report_system_prompt: systemPrompt.length ? systemPrompt : null,
+      report_max_tokens: maxTokens,
+      report_thinking: thinking,
+      report_effort: effort,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+    .eq("id", true)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`Could not save coach-report settings: ${error.message}`);
+  if (!updated) throw new Error("Could not save coach-report settings: the settings row is missing.");
+
+  revalidatePath("/admin/ai");
+}
