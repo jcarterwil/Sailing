@@ -352,6 +352,9 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
       valid = issue(context, `${entryPath}.timeToLineMs`, "must equal crossingTimeMs - gunTimeMs") && valid;
     }
     if (entry.status === "legal" || entry.status === "ocs-recrossed") {
+      if (typeof row.gunTimeMs !== "number") {
+        valid = issue(context, entryPath, "legal start status requires a corrected gun") && valid;
+      }
       if (entry.crossingTimeMs === null || entry.timeToLineMs === null || entry.rank === null) {
         valid = issue(context, entryPath, "legal start status requires crossing, time-to-line, and rank") && valid;
       }
@@ -545,7 +548,19 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     valid = finiteAt(leg.endPointIndex, context, `${path}.endPointIndex`, { integer: true, min: 0 }) && valid;
     const metrics = arrayAt(leg.metrics, context, `${path}.metrics`, PERFORMANCE_MAX_ENTRY_COUNT);
     if (!metrics) valid = false;
-    metrics?.forEach((metric, metricIndex) => { valid = validateMetrics(metric, context, `${path}.metrics[${metricIndex}]`) && valid; });
+    metrics?.forEach((metric, metricIndex) => {
+      const metricPath = `${path}.metrics[${metricIndex}]`;
+      valid = validateMetrics(metric, context, metricPath) && valid;
+      const metricRow = isRecord(metric) ? metric : null;
+      if (metricRow && leg.type === "upwind" && metricRow.downwindVmg !== null) {
+        valid = issue(context, `${metricPath}.downwindVmg`, "must be null on an upwind leg") && valid;
+      } else if (metricRow && leg.type === "downwind" && metricRow.upwindVmg !== null) {
+        valid = issue(context, `${metricPath}.upwindVmg`, "must be null on a downwind leg") && valid;
+      } else if (metricRow && (leg.type === "reach" || leg.type === "unknown") &&
+          (metricRow.upwindVmg !== null || metricRow.downwindVmg !== null)) {
+        valid = issue(context, metricPath, "directional VMG must be null on reach/unknown legs") && valid;
+      }
+    });
     valid = validateProvenance(leg.provenance, context, `${path}.provenance`) && valid;
   });
   const best = arrayAt(row.bestIntervals, context, "performance.bestIntervals", PERFORMANCE_MAX_ENTRY_COUNT);

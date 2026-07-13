@@ -112,6 +112,12 @@ describe("parseStoredPerformance", () => {
     expect(preGunResult.status).toBe("malformed");
     expect(preGunResult.issues.join(" ")).toContain("at or after the gun");
 
+    const missingGun = cloneFixture();
+    (missingGun.start as Record<string, unknown>).gunTimeMs = null;
+    const missingGunResult = parsePerformanceV1(missingGun);
+    expect(missingGunResult.status).toBe("malformed");
+    expect(missingGunResult.issues.join(" ")).toContain("requires a corrected gun");
+
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
     expect(() => parsePerformanceV1(cyclic)).not.toThrow();
@@ -248,6 +254,27 @@ describe("parseStoredPerformance", () => {
     const unrankedParsed = parsePerformanceV1(unranked);
     expect(unrankedParsed.status).toBe("malformed");
     expect(unrankedParsed.issues.join(" ")).toContain("requires rank and delta");
+  });
+
+  it("keeps per-leg directional VMG on the matching leg type", () => {
+    const wrongDirection = cloneFixture();
+    const legs = wrongDirection.legs as Array<{ metrics: Array<Record<string, unknown>> }>;
+    legs[0].metrics[0].downwindVmg = {
+      straightKts: 5,
+      maneuverKts: 3,
+      straightDurationSec: 100,
+      maneuverDurationSec: 20,
+    };
+    const wrongDirectionParsed = parsePerformanceV1(wrongDirection);
+    expect(wrongDirectionParsed.status).toBe("malformed");
+    expect(wrongDirectionParsed.issues.join(" ")).toContain("null on an upwind leg");
+
+    const reach = cloneFixture();
+    const reachLegs = reach.legs as Array<Record<string, unknown>>;
+    reachLegs[0].type = "reach";
+    const reachParsed = parsePerformanceV1(reach);
+    expect(reachParsed.status).toBe("malformed");
+    expect(reachParsed.issues.join(" ")).toContain("reach/unknown legs");
   });
 
   it("requires a reason exactly when a distribution is unavailable", () => {
