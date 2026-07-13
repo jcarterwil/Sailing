@@ -50,6 +50,31 @@ export interface DossierStats {
   warnings: AnalysisWarning[];
 }
 
+export interface CurrentFleetEntry {
+  id: string;
+  processed: boolean;
+}
+
+export function analysisMatchesCurrentFleet(
+  analysis: RaceAnalysis,
+  entries: CurrentFleetEntry[],
+): boolean {
+  if (
+    entries.length === 0 ||
+    entries.some((entry) => !entry.processed) ||
+    entries.length !== analysis.perEntry.length
+  ) {
+    return false;
+  }
+  const currentEntryIds = new Set(entries.map((entry) => entry.id));
+  const analysisEntryIds = new Set(analysis.perEntry.map((entry) => entry.entryId));
+  return (
+    currentEntryIds.size === entries.length &&
+    analysisEntryIds.size === analysis.perEntry.length &&
+    [...currentEntryIds].every((entryId) => analysisEntryIds.has(entryId))
+  );
+}
+
 function rounded(value: number, digits = 2): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;

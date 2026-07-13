@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { RaceAnalysis } from "@/lib/analytics/types";
-import { buildDossierStats } from "@/lib/report/dossier-stats";
+import {
+  analysisMatchesCurrentFleet,
+  buildDossierStats,
+} from "@/lib/report/dossier-stats";
 
 const analysis: RaceAnalysis = {
   v: 1,
@@ -103,5 +106,25 @@ describe("buildDossierStats", () => {
     const before = JSON.stringify(analysis);
     buildDossierStats(analysis);
     expect(JSON.stringify(analysis)).toBe(before);
+  });
+});
+
+describe("analysisMatchesCurrentFleet", () => {
+  it("requires the exact current entry set with every track processed", () => {
+    expect(
+      analysisMatchesCurrentFleet(analysis, [{ id: "entry-a", processed: true }]),
+    ).toBe(true);
+    expect(
+      analysisMatchesCurrentFleet(analysis, [
+        { id: "entry-a", processed: true },
+        { id: "entry-b", processed: false },
+      ]),
+    ).toBe(false);
+    expect(
+      analysisMatchesCurrentFleet(analysis, [{ id: "entry-a", processed: false }]),
+    ).toBe(false);
+    expect(
+      analysisMatchesCurrentFleet(analysis, [{ id: "entry-b", processed: true }]),
+    ).toBe(false);
   });
 });

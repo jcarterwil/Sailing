@@ -6,9 +6,30 @@ import {
   type ReportSnapshot,
   toReportSummary,
 } from "@/lib/report/report-summary";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 type SessionClient = Awaited<ReturnType<typeof createClient>>;
+export const REPORT_GENERATION_TTL_MS = 10 * 60 * 1000;
+
+/** Call only after a session/RLS read has proved access to this race. */
+export async function expireStaleReportGenerations(raceId: string): Promise<void> {
+  const expiredAt = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - REPORT_GENERATION_TTL_MS).toISOString();
+  const { error } = await createAdminClient()
+    .from("race_reports")
+    .update({
+      status: "error",
+      error_message: "Report generation timed out before completion.",
+      completed_at: expiredAt,
+    })
+    .eq("race_id", raceId)
+    .eq("status", "generating")
+    .lt("created_at", staleBefore);
+  if (error) {
+    throw new Error(`Could not expire stale report generation: ${error.message}`);
+  }
+}
 
 export async function loadReportSnapshot(
   supabase: SessionClient,

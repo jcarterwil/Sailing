@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 
 import type { RaceAnalysis } from "@/lib/analytics/types";
-import { buildDossierStats } from "@/lib/report/dossier-stats";
+import {
+  analysisMatchesCurrentFleet,
+  buildDossierStats,
+} from "@/lib/report/dossier-stats";
 import { generateDossier } from "@/lib/report/generate";
-import { loadReportSnapshot } from "@/lib/report/queries";
+import {
+  expireStaleReportGenerations,
+  loadReportSnapshot,
+  REPORT_GENERATION_TTL_MS,
+} from "@/lib/report/queries";
 import {
   REPORT_SUMMARY_COLUMNS,
   toReportSummary,
@@ -15,7 +22,6 @@ import { createClient } from "@/lib/supabase/server";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const GENERATING_TTL_MS = 10 * 60 * 1000;
 const REPORT_LIMIT = 10;
 
 function json(body: unknown, status = 200) {
@@ -57,6 +63,7 @@ export async function GET(
   if ("response" in access) return access.response;
 
   try {
+    await expireStaleReportGenerations(raceId);
     return json(await loadReportSnapshot(access.supabase, raceId));
   } catch (error) {
     return json({ error: safeErrorMessage(error) }, 500);
@@ -103,7 +110,7 @@ export async function POST(
       .maybeSingle(),
     admin
       .from("race_entries")
-      .select("id, boats(name)")
+      .select("id, boats(name), tracks(status)")
       .eq("race_id", raceId),
   ]);
   if (
@@ -118,7 +125,7 @@ export async function POST(
   const now = Date.now();
   if (
     activeResult.data &&
-    now - new Date(activeResult.data.created_at).getTime() < GENERATING_TTL_MS
+    now - new Date(activeResult.data.created_at).getTime() < REPORT_GENERATION_TTL_MS
   ) {
     return json({ error: "A report is already being generated." }, 409);
   }
@@ -129,7 +136,24 @@ export async function POST(
     return json({ error: "Analyze the race before generating a report." }, 400);
   }
 
-  const staleBefore = new Date(now - GENERATING_TTL_MS).toISOString();
+  const analysis = analysisResult.data.analysis as unknown as RaceAnalysis;
+  const currentEntries = entriesResult.data ?? [];
+  if (
+    !analysisMatchesCurrentFleet(
+      analysis,
+      currentEntries.map((entry) => ({
+        id: entry.id,
+        processed: entry.tracks?.status === "processed",
+      })),
+    )
+  ) {
+    return json(
+      { error: "The race analysis is stale. Process every current track and re-analyze first." },
+      400,
+    );
+  }
+
+  const staleBefore = new Date(now - REPORT_GENERATION_TTL_MS).toISOString();
   const { error: staleError } = await admin
     .from("race_reports")
     .update({
@@ -144,9 +168,7 @@ export async function POST(
     return json({ error: "Could not clear a stale report generation." }, 500);
   }
 
-  const baseStats = buildDossierStats(
-    analysisResult.data.analysis as unknown as RaceAnalysis,
-  );
+  const baseStats = buildDossierStats(analysis);
   const boatNameByEntryId = new Map(
     (entriesResult.data ?? []).map((entry) => [entry.id, entry.boats?.name ?? null]),
   );

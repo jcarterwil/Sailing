@@ -79,6 +79,7 @@ export function ReportPageClient({
   }, [isGenerating, raceId]);
 
   const generate = async () => {
+    const previousSnapshot = snapshot;
     setRequestError(null);
     setSnapshot((current) => ({
       ...current,
@@ -104,11 +105,14 @@ export function ReportPageClient({
           report: result.report,
           latestComplete: result.latestComplete ?? current.latestComplete,
         }));
+      } else {
+        setSnapshot(previousSnapshot);
       }
       if (!response.ok) {
         setRequestError(result.error ?? "Could not generate the coach report.");
       }
     } catch {
+      setSnapshot(previousSnapshot);
       setRequestError("Could not start report generation.");
     }
   };
