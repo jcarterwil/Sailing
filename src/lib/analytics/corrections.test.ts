@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  correctionsAreActive,
   EMPTY_CORRECTIONS,
   normalizeCorrections,
 } from "@/lib/analytics/corrections";

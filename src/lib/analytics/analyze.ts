@@ -1,5 +1,9 @@
 import { aggregateEntry, aggregateFleet } from "@/lib/analytics/aggregates";
-import type { RaceCorrections } from "@/lib/analytics/corrections";
+import {
+  correctionsAreActive,
+  normalizeCorrections,
+  type RaceCorrections,
+} from "@/lib/analytics/corrections";
 import {
   columnLength,
   compactInvalidTimeRows,
@@ -17,7 +21,7 @@ import type {
 } from "@/lib/analytics/types";
 import { analyzeWind } from "@/lib/analytics/wind";
 
-/** Optional analysis knobs. Corrections are threaded in Phase 1+. */
+/** Optional analysis knobs. */
 export interface AnalyzeOptions {
   corrections?: RaceCorrections | null;
 }
@@ -119,12 +123,12 @@ function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWar
 
 // Deterministic fleet analytics entrypoint. It does not mutate tracks, perform
 // I/O, or depend on wall-clock time, and its result is safe to JSON.stringify.
-// `options` is accepted for back-compat with future correction threading (Phase 1).
 export function analyzeRace(
   tracks: ProcessedTrack[],
   options?: AnalyzeOptions,
 ): RaceAnalysis {
-  void options;
+  const corrections = normalizeCorrections(options?.corrections ?? null);
+  const activeCorrections = correctionsAreActive(corrections) ? corrections : null;
   const canonicalTracks = new Map<ProcessedTrack, string>();
   const ordered = [...tracks].sort((a, b) => compareTrackOrder(a, b, canonicalTracks));
   const warnings: AnalysisWarning[] = [];
@@ -144,9 +148,15 @@ export function analyzeRace(
     return result;
   };
   const fleetTracks = fleetSourceTracks.map(compact);
-  const window = detectRaceWindow(fleetTracks, warnings);
-  const wind = analyzeWind(fleetTracks, window.start.timeMs, window.finish.timeMs, warnings);
-  const race = buildRaceStructure(fleetTracks, window, wind, warnings);
+  const window = detectRaceWindow(fleetTracks, warnings, activeCorrections);
+  const wind = analyzeWind(
+    fleetTracks,
+    window.start.timeMs,
+    window.finish.timeMs,
+    warnings,
+    activeCorrections,
+  );
+  const race = buildRaceStructure(fleetTracks, window, wind, warnings, activeCorrections);
   const analyzed = ordered.map((sourceTrack) => {
     const track = compact(sourceTrack);
     const maneuvers = detectManeuvers(
@@ -175,7 +185,7 @@ export function analyzeRace(
   }
   const fleetEntries = fleetSourceTracks.map((track) => analysisBySourceTrack.get(track)!);
 
-  return {
+  const result: RaceAnalysis = {
     v: 1,
     race,
     wind,
@@ -183,4 +193,6 @@ export function analyzeRace(
     fleet: aggregateFleet(fleetEntries),
     warnings,
   };
+  if (activeCorrections) result.appliedCorrections = activeCorrections;
+  return result;
 }

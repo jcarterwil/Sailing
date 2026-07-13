@@ -494,3 +494,188 @@ describe("inferRaceLegs", () => {
     }
   });
 });
+
+describe("analyzeRace corrections", () => {
+  function sensorFleet() {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 180_000, event: "race_end", timerSec: 0 },
+    ];
+    const courses = new Array(301).fill(238);
+    const good = trueToApparent(283, 10, 238, 238, 6);
+    const bad = trueToApparent(20, 10, 238, 238, 6);
+    const outside = trueToApparent(100, 18, 238, 238, 6);
+    const goodSamples = courses.map((_, index) => ({
+      t: START - 60_000 + index * 1_000,
+      ...(index >= 60 && index <= 240 ? good : outside),
+    }));
+    const badSamples = courses.map((_, index) => ({
+      t: START - 60_000 + index * 1_000,
+      ...(index >= 60 && index <= 240 ? bad : outside),
+    }));
+    return {
+      good: syntheticTrack("good-boat", courses, {
+        t0: START - 60_000,
+        extras: extras(timerEvents, goodSamples),
+      }),
+      bad: syntheticTrack("bad-boat", courses, {
+        t0: START - 60_000,
+        extras: extras(timerEvents, badSamples),
+      }),
+    };
+  }
+
+  it("excludes a wind sensor from the fleet combine", () => {
+    const { good, bad } = sensorFleet();
+    const goodB = syntheticTrack("good-boat-b", good.cog, {
+      t0: good.t0,
+      extras: good.extras ?? undefined,
+    });
+    // Two good sensors + one bad: without exclusion the 45° gate already drops
+    // the outlier; with exclusion it never enters the combine.
+    const corrected = analyzeRace([good, goodB, bad], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: ["bad-boat"],
+        manualWind: null,
+        window: null,
+        startOverride: null,
+        legRelabels: [],
+      },
+    });
+    expect(corrected.wind.source).toBe("sensor-derived");
+    expect(corrected.wind.provenance.sensorEntryIds).toEqual(["good-boat", "good-boat-b"]);
+    expect(corrected.wind.provenance.excludedSensorEntryIds).toEqual(["bad-boat"]);
+    expect(Math.abs(angleDiff(corrected.wind.twdDeg ?? NaN, 283))).toBeLessThan(0.5);
+    expect(corrected.appliedCorrections?.excludedWindSensorEntryIds).toEqual(["bad-boat"]);
+
+    // Excluding both sensors falls back to the GPS estimate path.
+    const noSensors = analyzeRace([good, bad], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: ["good-boat", "bad-boat"],
+        manualWind: null,
+        window: null,
+        startOverride: null,
+        legRelabels: [],
+      },
+    });
+    expect(noSensors.wind.provenance.excludedSensorEntryIds).toEqual(["bad-boat", "good-boat"]);
+    expect(noSensors.wind.source).not.toBe("sensor-derived");
+  });
+
+  it("short-circuits to organizer manual TWD/TWS", () => {
+    const { good } = sensorFleet();
+    const analysis = analyzeRace([good], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: [],
+        manualWind: {
+          enabled: true,
+          twdDeg: 250,
+          twsKts: 14,
+          twsMinKts: null,
+          twsMaxKts: null,
+        },
+        window: null,
+        startOverride: null,
+        legRelabels: [],
+      },
+    });
+    expect(analysis.wind.source).toBe("manual");
+    expect(analysis.wind.provenance.method).toBe("organizer-manual");
+    expect(analysis.wind.provenance.overridden).toBe(true);
+    expect(analysis.wind.twdDeg).toBe(250);
+    expect(analysis.wind.twsKts).toBe(14);
+    expect(analysis.wind.samples).toEqual([
+      { timeMs: START, twdDeg: 250, twsKts: 14, source: "manual" },
+      { timeMs: START + 180_000, twdDeg: 250, twsKts: 14, source: "manual" },
+    ]);
+    // Organizer actions must not emit problem warnings.
+    expect(analysis.warnings.map((warning) => warning.code)).not.toContain("wind-unavailable");
+  });
+
+  it("trims the analysis window and lets start override win", () => {
+    const { good } = sensorFleet();
+    const analysis = analyzeRace([good], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: [],
+        manualWind: null,
+        window: { startMs: START + 30_000, endMs: START + 120_000 },
+        startOverride: { timeMs: START + 45_000 },
+        legRelabels: [],
+      },
+    });
+    expect(analysis.race.start).toEqual({
+      timeMs: START + 45_000,
+      source: "organizer-override",
+      confidence: "high",
+    });
+    expect(analysis.race.finish).toEqual({
+      timeMs: START + 120_000,
+      source: "organizer-override",
+      confidence: "high",
+    });
+    expect(analysis.race.durationMs).toBe(75_000);
+    expect(analysis.warnings.map((warning) => warning.code)).not.toContain(
+      "start-timer-disagreement",
+    );
+  });
+
+  it("relabels legs by time anchor", () => {
+    const timerEvents: RaceTimerEvent[] = [
+      { t: START, event: "race_start", timerSec: 0 },
+      { t: START + 180_000, event: "race_end", timerSec: 0 },
+    ];
+    const track = syntheticTrack("leg-boat", new Array(181).fill(238), {
+      t0: START,
+      extras: extras(timerEvents),
+    });
+    const baseline = analyzeRace([track], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: [],
+        manualWind: {
+          enabled: true,
+          twdDeg: 283,
+          twsKts: 10,
+          twsMinKts: null,
+          twsMaxKts: null,
+        },
+        window: null,
+        startOverride: null,
+        legRelabels: [],
+      },
+    });
+    expect(baseline.race.legs.length).toBeGreaterThan(0);
+    expect(baseline.race.legs[0].type).toBe("upwind");
+
+    const corrected = analyzeRace([track], {
+      corrections: {
+        v: 1,
+        excludedWindSensorEntryIds: [],
+        manualWind: {
+          enabled: true,
+          twdDeg: 283,
+          twsKts: 10,
+          twsMinKts: null,
+          twsMaxKts: null,
+        },
+        window: null,
+        startOverride: null,
+        legRelabels: [{ atMs: START + 30_000, type: "downwind" }],
+      },
+    });
+    expect(corrected.race.legs[0].type).toBe("downwind");
+    expect(corrected.race.legs[0].relabeled).toBe(true);
+  });
+
+  it("stays back-compatible when corrections are omitted", () => {
+    const { good } = sensorFleet();
+    const a = analyzeRace([good]);
+    const b = analyzeRace([good], { corrections: null });
+    expect(a).toEqual(b);
+    expect(a.appliedCorrections).toBeUndefined();
+  });
+});
