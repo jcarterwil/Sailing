@@ -14,8 +14,9 @@ The client-only race replay: a MapLibre map, a zustand playback clock, and a can
 
 - **No chart library.** Speed strips and the polar plot are hand-drawn on `<canvas>` — SVG-based libs (recharts) die at this point count. Static plot layer + a separate overlay canvas for the moving cursor.
 - **Raw `maplibre-gl`, not react-map-gl.** One component owns the map lifecycle in a `useEffect`. On `setStyle` the sources/layers are wiped — re-add them in the `styledata` handler (see `map-view.tsx`). Tiles are keyless (OpenFreeMap + Esri); no Mapbox token.
-- **The replay is loaded with `ssr: false`** through `replay-shell.tsx` because maplibre is browser-only. Keep the dynamic-import boundary there; the RSC page (`src/app/races/[raceId]/replay/page.tsx`) only mints signed track URLs and passes them in.
+- **The replay is loaded with `ssr: false`** through `replay-shell.tsx` because maplibre is browser-only. Keep the dynamic-import boundary there; the RSC page (`src/app/races/[raceId]/replay/page.tsx`) only mints signed track URLs (and ready-video URLs when present) and passes them in.
 - **Tracks load from Storage, not the server.** `track-loader.ts` fetches the gzipped `ProcessedTrack` JSON via a signed URL and decompresses with the native `DecompressionStream("gzip")` into typed arrays. `track-index.ts` does binary-search + interpolation — reuse it, don't re-scan arrays.
+- **Video overlay (issue #9):** sync from `usePlaybackStore` via `planVideoSync` in `src/lib/videos/replay-sync.ts`. One selected `<video muted playsInline>` at a time; no second rAF loop; bounded drift correction instead of per-frame seeks. Public share (`readOnly`) does not load videos.
 
 ## Store
 

@@ -10,6 +10,8 @@ import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import { Timeline } from "@/components/replay/timeline";
 import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay/track-loader";
+import type { VideoMeta } from "@/components/replay/video-meta";
+import { VideoOverlay } from "@/components/replay/video-overlay";
 import { WindIndicator } from "@/components/replay/wind-indicator";
 import {
   createReplayWindResolver,
@@ -59,6 +61,7 @@ export function RaceReplay({
   raceId,
   raceName,
   trackMetas,
+  videoMetas = [],
   raceMeta,
   analyzeContext,
   analysis = null,
@@ -67,6 +70,8 @@ export function RaceReplay({
   raceId: string;
   raceName: string;
   trackMetas: TrackMeta[];
+  /** Ready videos for authenticated replay; empty on public share. */
+  videoMetas?: VideoMeta[];
   /** Race-level conditions/tags; carried for analyze / dossier correlation. */
   raceMeta: RaceMeta;
   /** Same metadata shape the analyze/report path will consume. */
@@ -171,6 +176,9 @@ export function RaceReplay({
             readOnly={readOnly}
           />
           <WindIndicator windAt={windAt} />
+          {!readOnly && videoMetas.length > 0 ? (
+            <VideoOverlay videos={videoMetas} />
+          ) : null}
         </div>
         <PanelTabs tracks={tracks} analysis={analysis} />
       </div>

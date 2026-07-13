@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
+import type { VideoMeta } from "@/components/replay/video-meta";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import {
@@ -13,6 +14,13 @@ import {
 } from "@/lib/races/meta";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { VideoTimingProvenance } from "@/lib/videos/timing";
+import {
+  VIDEO_BUCKET,
+  VIDEO_READ_URL_TTL_SECONDS,
+  parseVideoUploadSummary,
+} from "@/lib/videos/upload";
+import { isValidVideoTiming } from "@/lib/videos/replay-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +44,11 @@ function analysisForProcessedEntries(
   }
   return analysis;
 }
+
+function parseTimingProvenance(value: unknown): VideoTimingProvenance | null {
+  return value === "telemetry" || value === "manual" ? value : null;
+}
+
 export default async function ReplayPage({
   params,
 }: {
@@ -62,7 +75,7 @@ export default async function ReplayPage({
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags);
 
-  const [{ data: entries }, { data: analysisRow }, { data: correctionsRow }] =
+  const [{ data: entries }, { data: analysisRow }, { data: correctionsRow }, { data: videoRows }] =
     await Promise.all([
       supabase
         .from("race_entries")
@@ -81,6 +94,15 @@ export default async function ReplayPage({
         .select("updated_at")
         .eq("race_id", raceId)
         .maybeSingle(),
+      // Member-read RLS; only ready rows have timing for replay sync.
+      supabase
+        .from("race_videos")
+        .select(
+          "id, entry_id, original_filename, start_utc_ms, duration_ms, timing_provenance, raw_path, summary, status",
+        )
+        .eq("race_id", raceId)
+        .eq("status", "ready")
+        .order("created_at", { ascending: true }),
     ]);
 
   const analysis = parseStoredAnalysis(analysisRow?.analysis);
@@ -124,6 +146,53 @@ export default async function ReplayPage({
     }
   }
 
+  const readyVideos = (videoRows ?? []).flatMap((row) => {
+    const startUtcMs = row.start_utc_ms;
+    const durationMs = row.duration_ms;
+    const provenance = parseTimingProvenance(row.timing_provenance);
+    if (
+      startUtcMs == null ||
+      durationMs == null ||
+      !provenance ||
+      !isValidVideoTiming({ startUtcMs, durationMs })
+    ) {
+      return [];
+    }
+    if (!parseVideoUploadSummary(row.summary)?.confirmed) return [];
+    return [
+      {
+        videoId: row.id,
+        filename: row.original_filename,
+        entryId: row.entry_id,
+        rawPath: row.raw_path,
+        startUtcMs,
+        durationMs,
+        timingProvenance: provenance,
+      },
+    ];
+  });
+
+  const videoMetas: VideoMeta[] = (
+    await Promise.all(
+      readyVideos.map(async (row) => {
+        const { data: signed } = await admin.storage
+          .from(VIDEO_BUCKET)
+          .createSignedUrl(row.rawPath, VIDEO_READ_URL_TTL_SECONDS);
+        if (!signed) return null;
+        return {
+          videoId: row.videoId,
+          filename: row.filename,
+          entryId: row.entryId,
+          url: signed.signedUrl,
+          urlTtlSeconds: VIDEO_READ_URL_TTL_SECONDS,
+          startUtcMs: row.startUtcMs,
+          durationMs: row.durationMs,
+          timingProvenance: row.timingProvenance,
+        } satisfies VideoMeta;
+      }),
+    )
+  ).filter((meta): meta is VideoMeta => meta !== null);
+
   if (trackMetas.length === 0) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
@@ -166,6 +235,7 @@ export default async function ReplayPage({
           raceId={raceId}
           raceName={race.name}
           trackMetas={trackMetas}
+          videoMetas={videoMetas}
           raceMeta={raceMeta}
           analyzeContext={analyzeContext}
           analysis={replayAnalysis}
