@@ -15,7 +15,7 @@
     "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
