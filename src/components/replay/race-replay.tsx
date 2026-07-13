@@ -10,12 +10,16 @@ import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import { Timeline } from "@/components/replay/timeline";
 import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay/track-loader";
+import { WindIndicator } from "@/components/replay/wind-indicator";
+import {
+  createReplayWindResolver,
+  type ReplayWindResolver,
+} from "@/components/replay/wind-resolution";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   fleetStarts,
 } from "@/lib/analytics/start-line";
 import type { RaceAnalysis } from "@/lib/analytics/types";
-import { windDirectionAt } from "@/lib/analytics/wind";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
 
 /**
@@ -27,23 +31,12 @@ export function resolveTwdAt(
   raceMeta: RaceMeta,
   analysis: RaceAnalysis | null = null,
 ): ((timeMs: number) => number) | null {
-  if (analysis?.wind) {
-    const hasDirection =
-      analysis.wind.twdDeg != null ||
-      analysis.wind.samples.some((s) => Number.isFinite(s.twdDeg));
-    if (hasDirection) {
-      return (timeMs) => {
-        const deg = windDirectionAt(analysis.wind, timeMs);
-        if (deg != null && Number.isFinite(deg)) return deg;
-        const manual = raceMeta.conditions?.windDirDeg;
-        if (manual != null && Number.isFinite(manual)) return manual;
-        return Number.NaN;
-      };
-    }
-  }
-  const windDirDeg = raceMeta.conditions?.windDirDeg;
-  if (windDirDeg == null || !Number.isFinite(windDirDeg)) return null;
-  return () => windDirDeg;
+  const windAt = createReplayWindResolver(raceMeta, analysis);
+  return windAt ? (timeMs) => windAt(timeMs).twdDeg : null;
+}
+
+function twdResolver(windAt: ReplayWindResolver | null) {
+  return windAt ? (timeMs: number) => windAt(timeMs).twdDeg : null;
 }
 
 function fleetOrigin(tracks: LoadedTrack[]): { lat: number; lon: number } {
@@ -84,7 +77,11 @@ export function RaceReplay({
   const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
-  const twdAt = resolveTwdAt(raceMeta, analysis);
+  const windAt = useMemo(
+    () => createReplayWindResolver(raceMeta, analysis),
+    [analysis, raceMeta],
+  );
+  const twdAt = useMemo(() => twdResolver(windAt), [windAt]);
 
   const startsMs = useMemo(
     () => (tracks ? fleetStarts(tracks.map((t) => t.extras)) : []),
@@ -170,6 +167,7 @@ export function RaceReplay({
             origin={origin}
             raceId={raceId}
           />
+          <WindIndicator windAt={windAt} />
         </div>
         <PanelTabs tracks={tracks} analysis={analysis} />
       </div>
