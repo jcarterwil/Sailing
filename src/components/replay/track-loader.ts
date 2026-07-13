@@ -49,6 +49,14 @@ function toFloat32(values: (number | null)[]): Float32Array {
 }
 
 export async function loadTrack(meta: TrackMeta): Promise<LoadedTrack> {
+  const { loaded } = await loadReviewTrack(meta);
+  return loaded;
+}
+
+/** One gunzip fetch returning both wire `ProcessedTrack` and replay `LoadedTrack`. */
+export async function loadReviewTrack(
+  meta: TrackMeta,
+): Promise<{ processed: ProcessedTrack; loaded: LoadedTrack }> {
   const res = await fetch(meta.url);
   if (!res.ok || !res.body) {
     throw new Error(`Could not load track for ${meta.boatName} (${res.status}).`);
@@ -66,23 +74,37 @@ export async function loadTrack(meta: TrackMeta): Promise<LoadedTrack> {
     lon[i] = data.lon[i];
   }
   return {
-    entryId: meta.entryId,
-    boatName: meta.boatName,
-    color: meta.color,
-    crew: meta.crew,
-    tags: meta.tags,
-    ownedByMe: meta.ownedByMe,
-    addedByMe: meta.addedByMe,
-    t0: data.t0,
-    tzOffsetMinutes: data.tzOffsetMinutes,
-    t,
-    lat,
-    lon,
-    sog: toFloat32(data.sog),
-    cog: toFloat32(data.cog),
-    hdg: toFloat32(data.hdg),
-    heel: toFloat32(data.heel),
-    trim: toFloat32(data.trim),
-    extras: data.extras ?? null,
+    processed: data,
+    loaded: {
+      entryId: meta.entryId,
+      boatName: meta.boatName,
+      color: meta.color,
+      crew: meta.crew,
+      tags: meta.tags,
+      ownedByMe: meta.ownedByMe,
+      addedByMe: meta.addedByMe,
+      t0: data.t0,
+      tzOffsetMinutes: data.tzOffsetMinutes,
+      t,
+      lat,
+      lon,
+      sog: toFloat32(data.sog),
+      cog: toFloat32(data.cog),
+      hdg: toFloat32(data.hdg),
+      heel: toFloat32(data.heel),
+      trim: toFloat32(data.trim),
+      extras: data.extras ?? null,
+    },
+  };
+}
+
+/** Load the fleet for the review page (analysis preview + playback scrub). */
+export async function loadReviewTracks(
+  metas: readonly TrackMeta[],
+): Promise<{ processed: ProcessedTrack[]; loaded: LoadedTrack[] }> {
+  const rows = await Promise.all(metas.map(loadReviewTrack));
+  return {
+    processed: rows.map((row) => row.processed),
+    loaded: rows.map((row) => row.loaded),
   };
 }
