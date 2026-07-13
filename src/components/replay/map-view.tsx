@@ -50,8 +50,11 @@ function resolveStartLine(
   return startLineAt(
     tracks.map((t) => t.extras),
     gunMs,
+    timeMs,
   );
 }
+
+const EMPTY_START_LINE: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 function startLineGeoJson(line: StartLine) {
   return {
@@ -278,49 +281,54 @@ export function MapView({
           type: "geojson",
           data: startLineGeoJson(startLine),
         });
-        map.addLayer({
-          id: "start-line",
-          type: "line",
-          source: "start-line",
-          filter: ["==", ["geometry-type"], "LineString"],
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": 2,
-            "line-dasharray": [2, 2],
-            "line-opacity": 0.9,
-          },
-        });
-        map.addLayer({
-          id: "start-line-ends",
-          type: "circle",
-          source: "start-line",
-          filter: ["==", ["geometry-type"], "Point"],
-          paint: {
-            "circle-radius": 5,
-            "circle-color": "#ffffff",
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#0f172a",
-          },
-        });
-        map.addLayer({
-          id: "start-line-labels",
-          type: "symbol",
-          source: "start-line",
-          filter: ["==", ["geometry-type"], "Point"],
-          layout: {
-            "text-field": ["get", "label"],
-            "text-size": 11,
-            "text-offset": [0, 1.1],
-            "text-anchor": "top",
-            "text-allow-overlap": true,
-          },
-          paint: {
-            "text-color": "#ffffff",
-            "text-halo-color": "#0f172a",
-            "text-halo-width": 1.2,
-          },
+      } else {
+        map.addSource("start-line", {
+          type: "geojson",
+          data: EMPTY_START_LINE,
         });
       }
+      map.addLayer({
+        id: "start-line",
+        type: "line",
+        source: "start-line",
+        filter: ["==", ["geometry-type"], "LineString"],
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 2,
+          "line-dasharray": [2, 2],
+          "line-opacity": 0.9,
+        },
+      });
+      map.addLayer({
+        id: "start-line-ends",
+        type: "circle",
+        source: "start-line",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#0f172a",
+        },
+      });
+      map.addLayer({
+        id: "start-line-labels",
+        type: "symbol",
+        source: "start-line",
+        filter: ["==", ["geometry-type"], "Point"],
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 11,
+          "text-offset": [0, 1.1],
+          "text-anchor": "top",
+          "text-allow-overlap": true,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#0f172a",
+          "text-halo-width": 1.2,
+        },
+      });
       map.addSource("boats", {
         type: "geojson",
         data: boatsGeoJson(tracks, timeMs, usePlaybackStore.getState().selectedEntryId),
@@ -530,10 +538,10 @@ export function MapView({
 
       const startLine = resolveStartLine(tracks, startsMs, timeMs);
       const startLineSource = map.getSource<maplibregl.GeoJSONSource>("start-line");
-      if (startLine && startLineSource) {
-        startLineSource.setData(startLineGeoJson(startLine));
-      } else if (!startLine && startLineSource) {
-        startLineSource.setData({ type: "FeatureCollection", features: [] });
+      if (startLineSource) {
+        startLineSource.setData(
+          startLine ? startLineGeoJson(startLine) : EMPTY_START_LINE,
+        );
       }
     };
     const state = usePlaybackStore.getState();

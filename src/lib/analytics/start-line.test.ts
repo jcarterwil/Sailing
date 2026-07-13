@@ -79,15 +79,25 @@ describe("activeStart / nextStart", () => {
 });
 
 describe("startForLine", () => {
-  const starts = [1000, 2000];
+  const first = 1_000_000;
+  const second = first + 15 * 60_000;
+  const starts = [first, second];
 
-  it("prefers the upcoming gun during pre-start", () => {
-    expect(startForLine(starts, 500)).toBe(1000);
-    expect(startForLine(starts, 1500)).toBe(2000);
+  it("prefers the upcoming gun during its pre-start window", () => {
+    expect(startForLine(starts, first - 60_000)).toBe(first);
+    expect(startForLine(starts, first + 5 * 60_000)).toBe(second);
+  });
+
+  it("uses the active gun at the exact gun instant", () => {
+    expect(startForLine(starts, first)).toBe(first);
+  });
+
+  it("falls back to the active gun between legs", () => {
+    expect(startForLine(starts, first + 60_000)).toBe(first);
   });
 
   it("falls back to the active gun after the last start", () => {
-    expect(startForLine(starts, 2500)).toBe(2000);
+    expect(startForLine(starts, second + 60_000)).toBe(second);
   });
 });
 
@@ -128,6 +138,27 @@ describe("startLineAt", () => {
         5000,
       ),
     ).toBeNull();
+  });
+
+  it("ignores pings after the scrub instant when resolving pre-start", () => {
+    const gun = 10_000;
+    const line = startLineAt(
+      [
+        extras({
+          linePings: [
+            { t: 1000, end: "pin", lat: 45, lon: -84 },
+            { t: 2000, end: "boat", lat: 45.01, lon: -84.01 },
+            { t: 8000, end: "pin", lat: 99, lon: 99 }, // after scrub, before gun
+          ],
+        }),
+      ],
+      gun,
+      5000,
+    );
+    expect(line).toEqual({
+      pin: { lat: 45, lon: -84 },
+      boat: { lat: 45.01, lon: -84.01 },
+    });
   });
 
   it("returns null for all-null extras", () => {

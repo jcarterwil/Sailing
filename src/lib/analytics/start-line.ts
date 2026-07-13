@@ -7,6 +7,9 @@ export interface StartLine {
 
 const CLUSTER_GAP_MS = 60_000;
 
+/** Pre-start window for countdown, distance chip, and line selection. */
+export const PRESTART_WINDOW_MS = 10 * 60_000;
+
 function medianSorted(sorted: number[]): number {
   if (sorted.length === 0) return Number.NaN;
   const mid = sorted.length >> 1;
@@ -62,28 +65,41 @@ export function nextStart(startsMs: number[], timeMs: number): number | null {
 }
 
 /**
- * Gun whose line/end pings apply at `timeMs`: upcoming start when one exists,
- * otherwise the latest start at or before `timeMs`.
+ * Gun whose line/end pings apply at `timeMs`: upcoming start during its
+ * pre-start window, the active gun at the exact gun instant, otherwise the
+ * latest start at or before `timeMs`.
  */
 export function startForLine(startsMs: number[], timeMs: number): number | null {
-  return nextStart(startsMs, timeMs) ?? activeStart(startsMs, timeMs);
+  const gun = activeStart(startsMs, timeMs);
+  if (gun !== null && gun === timeMs) return gun;
+  const upcoming = nextStart(startsMs, timeMs);
+  if (
+    upcoming !== null &&
+    timeMs >= upcoming - PRESTART_WINDOW_MS &&
+    timeMs < upcoming
+  ) {
+    return upcoming;
+  }
+  return gun;
 }
 
 /**
- * Most-recent finite-coordinate ping per end at/before `startMs`, across all
- * boats. Null unless BOTH ends were pinged — never fabricate a line.
+ * Most-recent finite-coordinate ping per end at/before `startMs` and `asOfMs`,
+ * across all boats. Null unless BOTH ends were pinged — never fabricate a line.
  */
 export function startLineAt(
   extrasList: Array<VkxExtras | null>,
   startMs: number,
+  asOfMs: number = startMs,
 ): StartLine | null {
+  const cutoff = Math.min(startMs, asOfMs);
   let pin: { t: number; lat: number; lon: number } | null = null;
   let boat: { t: number; lat: number; lon: number } | null = null;
 
   for (const extras of extrasList) {
     if (!extras) continue;
     for (const ping of extras.linePings) {
-      if (ping.t > startMs) continue;
+      if (ping.t > cutoff) continue;
       if (!Number.isFinite(ping.lat) || !Number.isFinite(ping.lon) || !Number.isFinite(ping.t)) {
         continue;
       }

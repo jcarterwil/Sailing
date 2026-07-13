@@ -24,12 +24,12 @@ import { distanceToSegmentM, toLocalXY } from "@/lib/analytics/geo";
 import {
   activeStart,
   nextStart,
+  PRESTART_WINDOW_MS,
   startLineAt,
   type StartLine,
 } from "@/lib/analytics/start-line";
 
 const SPEEDS = [1, 5, 10, 25, 50, 100];
-const PRESTART_WINDOW_MS = 10 * 60_000;
 const MIN_CLOSING_KTS = 0.5;
 const MS_PER_KT = 1852 / 3600; // m/s per knot
 
@@ -42,6 +42,15 @@ function formatCountdown(msUntil: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `−${m}:${String(s).padStart(2, "0")}`;
+}
+
+function isCountdownPhase(timeMs: number, startsMs: number[]): boolean {
+  const upcoming = nextStart(startsMs, timeMs);
+  return (
+    upcoming !== null &&
+    timeMs >= upcoming - PRESTART_WINDOW_MS &&
+    timeMs < upcoming
+  );
 }
 
 function formatElapsed(msSince: number): string {
@@ -57,7 +66,13 @@ function raceClockLabel(timeMs: number, startsMs: number[]): string | null {
   const gun = activeStart(startsMs, timeMs);
   const upcoming = nextStart(startsMs, timeMs);
   if (gun !== null && gun === timeMs) return formatElapsed(0);
-  if (upcoming !== null) return formatCountdown(upcoming - timeMs);
+  if (
+    upcoming !== null &&
+    timeMs >= upcoming - PRESTART_WINDOW_MS &&
+    timeMs < upcoming
+  ) {
+    return formatCountdown(upcoming - timeMs);
+  }
   if (gun !== null) return formatElapsed(timeMs - gun);
   return null;
 }
@@ -110,6 +125,7 @@ function distanceChipText(
   const startLine = startLineAt(
     tracks.map((t) => t.extras),
     upcoming,
+    timeMs,
   );
   if (!startLine) return null;
   const track = tracks.find((t) => t.entryId === selectedEntryId);
@@ -171,8 +187,7 @@ export function PlaybackControls({
       primary: raceClockLabel(timeMs, startsMs) ?? formatWallClock(timeMs, tzOffsetMinutes),
       wall: formatWallClock(timeMs, tzOffsetMinutes),
       isRace: startsMs.length > 0 && raceClockLabel(timeMs, startsMs) !== null,
-      isCountdown:
-        startsMs.length > 0 && nextStart(startsMs, timeMs) !== null,
+      isCountdown: startsMs.length > 0 && isCountdownPhase(timeMs, startsMs),
       distance: distanceChipText(tracks, selectedEntryId, timeMs, startsMs),
     };
   });
@@ -185,7 +200,7 @@ export function PlaybackControls({
         primary: race ?? formatWallClock(timeMs, tzOffsetMinutes),
         wall: formatWallClock(timeMs, tzOffsetMinutes),
         isRace: race !== null,
-        isCountdown: startsMs.length > 0 && nextStart(startsMs, timeMs) !== null,
+        isCountdown: startsMs.length > 0 && isCountdownPhase(timeMs, startsMs),
         distance: distanceChipText(tracks, selected, timeMs, startsMs),
       });
     };
