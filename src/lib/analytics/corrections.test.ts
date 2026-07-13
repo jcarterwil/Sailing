@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  clampCorrectionsToTrackSpan,
   correctionsAreActive,
   EMPTY_CORRECTIONS,
   normalizeCorrections,
@@ -106,5 +107,19 @@ describe("correctionsAreActive", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("clampCorrectionsToTrackSpan", () => {
+  it("clamps window and start override into the span", () => {
+    const clamped = clampCorrectionsToTrackSpan(
+      normalizeCorrections({
+        window: { startMs: 0, endMs: 10_000 },
+        startOverride: { timeMs: 9_999 },
+      }),
+      { startMs: 1_000, endMs: 5_000 },
+    );
+    expect(clamped.window).toEqual({ startMs: 1_000, endMs: 5_000 });
+    expect(clamped.startOverride).toEqual({ timeMs: 5_000 });
   });
 });

@@ -62,20 +62,26 @@ export default async function ReplayPage({
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags);
 
-  const [{ data: entries }, { data: analysisRow }] = await Promise.all([
-    supabase
-      .from("race_entries")
-      .select(
-        "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status, updated_at)",
-      )
-      .eq("race_id", raceId)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("race_analyses")
-      .select("analysis, computed_at")
-      .eq("race_id", raceId)
-      .maybeSingle(),
-  ]);
+  const [{ data: entries }, { data: analysisRow }, { data: correctionsRow }] =
+    await Promise.all([
+      supabase
+        .from("race_entries")
+        .select(
+          "id, color, crew, tags, added_by, boats(name, owner_id), tracks(processed_path, status, updated_at)",
+        )
+        .eq("race_id", raceId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("race_analyses")
+        .select("analysis, computed_at")
+        .eq("race_id", raceId)
+        .maybeSingle(),
+      supabase
+        .from("race_corrections")
+        .select("updated_at")
+        .eq("race_id", raceId)
+        .maybeSingle(),
+    ]);
 
   const analysis = parseStoredAnalysis(analysisRow?.analysis);
   const processed = (entries ?? []).filter(
@@ -135,6 +141,7 @@ export default async function ReplayPage({
   const replayAnalysis = analysisIsFresh(
     analysisRow?.computed_at,
     processed.map((entry) => entry.tracks!.updated_at),
+    correctionsRow?.updated_at,
   )
     ? analysisForProcessedEntries(
         analysis,

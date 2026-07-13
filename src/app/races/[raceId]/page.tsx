@@ -57,6 +57,7 @@ export default async function RaceManagePage({
     { data: canOrganize, error: organizerError },
     { data: boatMemberships, error: membershipsError },
     { data: analysisRow },
+    { data: correctionsRow },
     { data: videos, error: videosError },
   ] = await Promise.all([
       supabase
@@ -74,6 +75,11 @@ export default async function RaceManagePage({
       supabase
         .from("race_analyses")
         .select("computed_at")
+        .eq("race_id", raceId)
+        .maybeSingle(),
+      supabase
+        .from("race_corrections")
+        .select("updated_at")
         .eq("race_id", raceId)
         .maybeSingle(),
       supabase
@@ -154,6 +160,7 @@ export default async function RaceManagePage({
     analysisIsFresh(
       analysisRow?.computed_at,
       processedEntries.map((entry) => entry.tracks!.updated_at),
+      correctionsRow?.updated_at,
     )
       ? analysisRow?.computed_at ?? null
       : null;
