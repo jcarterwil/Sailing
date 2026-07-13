@@ -1,0 +1,8 @@
+# Code owners are automatically requested for review on pull requests, and
+# (with "Require review from Code Owners" branch protection on) their approval
+# is required before a PR can merge into main.
+#
+# Order matters: the last matching pattern wins for a given path.
+
+# Default owner for everything in the repo.
+*       @jcarterwil

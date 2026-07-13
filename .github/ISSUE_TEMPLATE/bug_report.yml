@@ -1,0 +1,60 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please do **not** include
+        passwords, tokens, or other secrets in this report.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I ..., I expected ..., but instead ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Page / route
+      description: Where did this happen? (e.g. /races/[id]/replay)
+    validations:
+      required: false
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did you see it?
+      options:
+        - Production (sailing-performance.vercel.app)
+        - Local dev
+        - A preview deployment
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment-details
+    attributes:
+      label: Browser / device
+      description: Browser, OS, and device (desktop or mobile).
+    validations:
+      required: false
+  - type: textarea
+    id: console
+    attributes:
+      label: Console / network errors
+      description: Any errors from the browser console or network tab. This will be rendered as code, so no need for backticks.
+      render: shell
+    validations:
+      required: false
