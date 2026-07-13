@@ -84,7 +84,9 @@ export default async function RaceManagePage({
         .maybeSingle(),
       supabase
         .from("race_videos")
-        .select("id, entry_id, uploaded_by, original_filename, status, summary, created_at")
+        // Select the row shape so an app-first deploy still works during the
+        // brief window before additive Phase 3 columns reach PostgREST.
+        .select("*")
         .eq("race_id", raceId)
         .order("created_at", { ascending: false }),
     ]);
@@ -151,6 +153,10 @@ export default async function RaceManagePage({
     entryName: video.entry_id ? entryNameById.get(video.entry_id) ?? null : null,
     canManage: isOrganizer || video.uploaded_by === user.id,
     uploadConfirmed: parseVideoUploadSummary(video.summary)?.confirmed ?? false,
+    startUtcMs: video.start_utc_ms ?? null,
+    durationMs: video.duration_ms ?? null,
+    timingProvenance: video.timing_provenance ?? null,
+    lastErrorMessage: video.last_error_message ?? null,
   }));
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",

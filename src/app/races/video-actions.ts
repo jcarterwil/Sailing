@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { deleteVideoWithCompensation } from "@/lib/videos/delete-lifecycle";
+import { validateManualVideoTiming } from "@/lib/videos/timing";
 import {
   VIDEO_BUCKET,
   VIDEO_READ_URL_TTL_SECONDS,
@@ -319,6 +320,46 @@ export async function deleteRaceVideo(videoId: string): Promise<void> {
   } catch (error) {
     console.error("Could not delete video consistently:", error);
     throw new Error("Could not delete the video. No confirmed deletion was recorded.");
+  }
+  revalidatePath(`/races/${video.race_id}`);
+}
+
+export async function setManualVideoTiming(
+  videoId: string,
+  input: { startUtc: string; durationMs: number },
+): Promise<void> {
+  const { video } = await loadManageableVideo(videoId);
+  if (!parseVideoUploadSummary(video.summary)?.confirmed) {
+    throw new Error("Video upload is not ready to align.");
+  }
+  const timing = validateManualVideoTiming(input);
+  const now = new Date().toISOString();
+  const { data: updated, error } = await createAdminClient()
+    .from("race_videos")
+    .update({
+      status: "ready",
+      has_telemetry: false,
+      start_utc_ms: timing.startUtcMs,
+      duration_ms: timing.durationMs,
+      timing_provenance: "manual",
+      processing_started_at: null,
+      last_error_code: null,
+      last_error_message: null,
+      summary: {
+        ...(video.summary && typeof video.summary === "object" && !Array.isArray(video.summary)
+          ? video.summary
+          : {}),
+        timing,
+      } as unknown as Json,
+      updated_at: now,
+    })
+    .eq("id", video.id)
+    .eq("raw_path", video.raw_path)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) {
+    console.error("Could not save manual video timing:", error);
+    throw new Error("Could not save manual video timing.");
   }
   revalidatePath(`/races/${video.race_id}`);
 }
