@@ -73,41 +73,27 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
   const [size, setSize] = useState<OverlaySize>("medium");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  /** React-facing src so remounts / selection pick up refreshed signed URLs. */
-  const [srcById, setSrcById] = useState(() =>
-    Object.fromEntries(videos.map((v) => [v.videoId, v.url])),
-  );
+  /** Overrides for refreshed signed URLs (async only — not synced in an effect). */
+  const [urlOverrides, setUrlOverrides] = useState<Record<string, string>>({});
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const outsideRef = useRef<HTMLDivElement | null>(null);
-  const expiresByIdRef = useRef(
-    new Map(videos.map((v) => [v.videoId, v.expiresAt])),
-  );
-  const metaByIdRef = useRef(new Map(videos.map((v) => [v.videoId, v])));
+  const expiresAtByIdRef = useRef(new Map<string, number>());
+  const metaByIdRef = useRef(new Map<string, VideoMeta>());
   const prevFleetTimeRef = useRef<number | null>(null);
-  const selectedIdRef = useRef(selectedId);
+  const selectedIdRef = useRef<string | null>(selectedId);
   const refreshInFlightRef = useRef(false);
 
-  useEffect(() => {
-    expiresByIdRef.current = new Map(videos.map((v) => [v.videoId, v.expiresAt]));
-    metaByIdRef.current = new Map(videos.map((v) => [v.videoId, v]));
-    setSrcById((prev) => {
-      const next = { ...prev };
-      for (const v of videos) {
-        if (!next[v.videoId]) next[v.videoId] = v.url;
-      }
-      return next;
-    });
-    if (!selectedId || !metaByIdRef.current.has(selectedId)) {
-      setSelectedId(videos[0]?.videoId ?? null);
-    }
-  }, [videos, selectedId]);
+  const selected =
+    videos.find((v) => v.videoId === selectedId) ?? videos[0] ?? null;
+  const effectiveId = selected?.videoId ?? null;
 
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
+  const selectVideo = (videoId: string) => {
+    setSelectedId(videoId);
+    selectedIdRef.current = videoId;
     prevFleetTimeRef.current = null;
     setLoadError(null);
-  }, [selectedId]);
+  };
 
   const refreshUrl = async (videoId: string): Promise<string | null> => {
     if (refreshInFlightRef.current) return null;
@@ -115,8 +101,8 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
     setRefreshing(true);
     try {
       const grant = await requestVideoReadUrl(videoId);
-      expiresByIdRef.current.set(videoId, grant.expiresAt);
-      setSrcById((prev) => ({ ...prev, [videoId]: grant.signedUrl }));
+      expiresAtByIdRef.current.set(videoId, Date.parse(grant.expiresAt));
+      setUrlOverrides((prev) => ({ ...prev, [videoId]: grant.signedUrl }));
       const el = videoRef.current;
       if (el && selectedIdRef.current === videoId) {
         const resumeSec = el.currentTime;
@@ -145,7 +131,17 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
 
   // Imperative sync from the single playback store — no React renders at 60fps.
   useEffect(() => {
-    if (closed || videos.length === 0) return;
+    if (closed || videos.length === 0 || !effectiveId) return;
+
+    metaByIdRef.current = new Map(videos.map((v) => [v.videoId, v]));
+    selectedIdRef.current = effectiveId;
+
+    const now = Date.now();
+    for (const v of videos) {
+      if (!expiresAtByIdRef.current.has(v.videoId)) {
+        expiresAtByIdRef.current.set(v.videoId, now + v.urlTtlSeconds * 1000);
+      }
+    }
 
     const setOutsideVisible = (visible: boolean) => {
       const el = outsideRef.current;
@@ -190,12 +186,9 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
       setOutsideVisible(false);
       applyVideoPlayback(video, action);
 
-      const expiresAt = expiresByIdRef.current.get(id);
-      if (expiresAt) {
-        const msLeft = Date.parse(expiresAt) - Date.now();
-        if (msLeft < 60_000) {
-          void refreshUrl(id);
-        }
+      const expiresAt = expiresAtByIdRef.current.get(id);
+      if (expiresAt !== undefined && expiresAt - Date.now() < 60_000) {
+        void refreshUrl(id);
       }
     };
 
@@ -204,9 +197,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
     });
     sync(usePlaybackStore.getState());
     return () => unsubscribe();
-    // Intentionally re-bind when selection / video list / closed chrome changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closed, videos, selectedId]);
+  }, [closed, videos, effectiveId]);
 
   if (videos.length === 0) return null;
 
@@ -227,8 +218,9 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
     );
   }
 
-  const selected = videos.find((v) => v.videoId === selectedId) ?? videos[0];
-  const src = selected ? (srcById[selected.videoId] ?? selected.url) : "";
+  const src = selected
+    ? (urlOverrides[selected.videoId] ?? selected.url)
+    : "";
 
   return (
     <div
@@ -252,7 +244,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
               id="replay-video-select"
               className="max-w-28 truncate rounded border border-white/15 bg-transparent px-1 py-0.5 text-[11px] text-white"
               value={selected?.videoId}
-              onChange={(e) => setSelectedId(e.target.value)}
+              onChange={(e) => selectVideo(e.target.value)}
             >
               {videos.map((v) => (
                 <option key={v.videoId} value={v.videoId} className="bg-slate-950 text-white">

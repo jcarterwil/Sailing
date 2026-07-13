@@ -171,7 +171,7 @@ export default async function ReplayPage({
       filename: row.original_filename,
       entryId: row.entry_id,
       url: signed.signedUrl,
-      expiresAt: new Date(Date.now() + VIDEO_READ_URL_TTL_SECONDS * 1000).toISOString(),
+      urlTtlSeconds: VIDEO_READ_URL_TTL_SECONDS,
       startUtcMs,
       durationMs,
       timingProvenance: provenance,

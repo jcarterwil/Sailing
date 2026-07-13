@@ -6,7 +6,8 @@ export interface VideoMeta {
   filename: string;
   entryId: string | null;
   url: string;
-  expiresAt: string;
+  /** Seconds until the signed URL expires (from mint time). */
+  urlTtlSeconds: number;
   startUtcMs: number;
   durationMs: number;
   timingProvenance: VideoTimingProvenance;
