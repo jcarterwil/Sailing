@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
 
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
 import { Leaderboard } from "@/components/replay/leaderboard";
@@ -23,6 +24,19 @@ import {
 } from "@/lib/analytics/start-line";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
+
+const HelmPov = dynamic(
+  () => import("@/components/replay/helm-pov").then((module) => module.HelmPov),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-sky-100 text-sm text-sky-950">
+        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        Loading helm view…
+      </div>
+    ),
+  },
+);
 
 /**
  * Resolve true-wind direction at a scrub time for ladder / wind UI.
@@ -84,6 +98,8 @@ export function RaceReplay({
   const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
+  const povEnabled =
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pov") === "1";
   const windAt = useMemo(
     () => createReplayWindResolver(raceMeta, analysis),
     [analysis, raceMeta],
@@ -167,7 +183,11 @@ export function RaceReplay({
     >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-w-0 flex-1">
-          <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
+          {povEnabled ? (
+            <HelmPov tracks={tracks} />
+          ) : (
+            <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
+          )}
           <Leaderboard
             tracks={tracks}
             twdAt={twdAt}
