@@ -1,4 +1,5 @@
 import { aggregateEntry, aggregateFleet } from "@/lib/analytics/aggregates";
+import type { RaceCorrections } from "@/lib/analytics/corrections";
 import {
   columnLength,
   compactInvalidTimeRows,
@@ -15,6 +16,11 @@ import type {
   RaceAnalysis,
 } from "@/lib/analytics/types";
 import { analyzeWind } from "@/lib/analytics/wind";
+
+/** Optional analysis knobs. Corrections are threaded in Phase 1+. */
+export interface AnalyzeOptions {
+  corrections?: RaceCorrections | null;
+}
 
 function canonicalTrack(track: ProcessedTrack, canonicalTracks: Map<ProcessedTrack, string>): string {
   const cached = canonicalTracks.get(track);
@@ -113,7 +119,12 @@ function validateTracks(tracks: readonly ProcessedTrack[], warnings: AnalysisWar
 
 // Deterministic fleet analytics entrypoint. It does not mutate tracks, perform
 // I/O, or depend on wall-clock time, and its result is safe to JSON.stringify.
-export function analyzeRace(tracks: ProcessedTrack[]): RaceAnalysis {
+// `options` is accepted for back-compat with future correction threading (Phase 1).
+export function analyzeRace(
+  tracks: ProcessedTrack[],
+  options?: AnalyzeOptions,
+): RaceAnalysis {
+  void options;
   const canonicalTracks = new Map<ProcessedTrack, string>();
   const ordered = [...tracks].sort((a, b) => compareTrackOrder(a, b, canonicalTracks));
   const warnings: AnalysisWarning[] = [];

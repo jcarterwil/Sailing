@@ -1,3 +1,5 @@
+import type { RaceCorrections } from "@/lib/analytics/corrections";
+
 export interface TrackPoint {
   t: number; // epoch ms UTC
   lat: number;
@@ -95,7 +97,7 @@ export interface AnalysisWarning {
   entryId: string | null;
 }
 
-export type WindSource = "sensor-derived" | "estimated" | "unavailable";
+export type WindSource = "sensor-derived" | "estimated" | "manual" | "unavailable";
 
 export interface WindPoint {
   timeMs: number;
@@ -106,11 +108,15 @@ export interface WindPoint {
 
 export interface WindProvenance {
   source: WindSource;
-  method: "apparent-wind-vector" | "fleet-heading-modes" | "none";
+  method: "apparent-wind-vector" | "fleet-heading-modes" | "organizer-manual" | "none";
   confidence: "high" | "medium" | "low" | "unavailable";
   sensorEntryIds: string[];
   sensorSampleCount: number;
   estimatedHeadingSampleCount: number;
+  /** Sensors skipped by organizer correction (empty when none). */
+  excludedSensorEntryIds?: string[];
+  /** True when organizer manual TWD/TWS overrode the combine. */
+  overridden?: boolean;
 }
 
 export interface WindAnalysis {
@@ -137,7 +143,12 @@ export interface RaceLine {
 
 export interface RaceBoundary {
   timeMs: number | null;
-  source: "vkx-race-timer" | "vkx-countdown" | "track-overlap" | "unavailable";
+  source:
+    | "vkx-race-timer"
+    | "vkx-countdown"
+    | "track-overlap"
+    | "organizer-override"
+    | "unavailable";
   confidence: "high" | "medium" | "low" | "unavailable";
 }
 
@@ -150,6 +161,8 @@ export interface RaceLeg {
   endTimeMs: number;
   meanCourseDeg: number | null;
   mark: RaceCoordinate | null;
+  /** True when an organizer leg-relabel correction set this type. */
+  relabeled?: boolean;
 }
 
 export interface RaceStructure {
@@ -223,6 +236,45 @@ export interface FleetAggregates {
   avgVmgRetention: number | null;
 }
 
+export type WindQualityFindingCode =
+  | "dominates-fleet"
+  | "direction-outlier"
+  | "disagrees-with-estimate"
+  | "low-internal-consistency"
+  | "implausible-tws"
+  | "sparse-samples";
+
+export type WindQualitySeverity = "warn" | "critical";
+
+export interface WindQualityFinding {
+  code: WindQualityFindingCode;
+  severity: WindQualitySeverity;
+  message: string;
+}
+
+export type BoatWindQualityStatus = "ok" | "warn" | "critical" | "excluded";
+
+export interface BoatWindQuality {
+  entryId: string;
+  sampleCount: number;
+  dominancePct: number;
+  meanTwdDeg: number | null;
+  resultantStrength: number | null;
+  meanTwsKts: number | null;
+  /** Leave-one-out deviation from the remaining-boat consensus (degrees). */
+  deviationFromConsensusDeg: number | null;
+  deviationFromEstimateDeg: number | null;
+  excluded: boolean;
+  findings: WindQualityFinding[];
+  status: BoatWindQualityStatus;
+}
+
+export interface WindQualityReport {
+  boats: BoatWindQuality[];
+  consensusTwdDeg: number | null;
+  estimateTwdDeg: number | null;
+}
+
 // Pure, deterministic and JSON-safe fleet analysis. All unavailable numeric
 // values are null rather than NaN so this object can be persisted as jsonb.
 export interface RaceAnalysis {
@@ -232,6 +284,10 @@ export interface RaceAnalysis {
   perEntry: EntryAnalysis[];
   fleet: FleetAggregates;
   warnings: AnalysisWarning[];
+  /** Present when wind-quality heuristics were run (Phase 2+). */
+  windQuality?: WindQualityReport;
+  /** Snapshot of corrections that produced this analysis, when any were applied. */
+  appliedCorrections?: RaceCorrections;
 }
 
 export class ParseError extends Error {}
