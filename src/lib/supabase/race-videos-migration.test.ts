@@ -29,5 +29,8 @@ describe("race video migration security boundary", () => {
     expect(migration).toContain("public.is_race_member(race_id)");
     expect(migration).toContain("uploaded_by = (select auth.uid())");
     expect(migration).toContain("public.is_race_organizer(race_id)");
+    expect(migration).toMatch(
+      /create policy "uploader or organizer delete race videos"[\s\S]*?using \(\s*public\.is_race_member\(race_id\)/,
+    );
   });
 });
