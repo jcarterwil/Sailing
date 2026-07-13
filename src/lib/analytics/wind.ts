@@ -346,3 +346,39 @@ export function windDirectionAt(wind: WindAnalysis, timeMs: number): number | nu
   const fraction = (timeMs - first.timeMs) / (second.timeMs - first.timeMs);
   return norm360(first.twdDeg + angleDiff(second.twdDeg, first.twdDeg) * fraction);
 }
+
+export function windSpeedAt(wind: WindAnalysis, timeMs: number): number | null {
+  const fallback =
+    wind.twsKts != null && Number.isFinite(wind.twsKts) ? wind.twsKts : null;
+  if (wind.samples.length === 0) return fallback;
+
+  const speedAt = (index: number): number | null => {
+    const speed = wind.samples[index].twsKts;
+    return speed != null && Number.isFinite(speed) ? speed : null;
+  };
+
+  if (wind.samples.length === 1 || timeMs <= wind.samples[0].timeMs) {
+    return speedAt(0) ?? fallback;
+  }
+  const lastIndex = wind.samples.length - 1;
+  if (timeMs >= wind.samples[lastIndex].timeMs) {
+    return speedAt(lastIndex) ?? fallback;
+  }
+
+  let lo = 0;
+  let hi = lastIndex;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (wind.samples[mid].timeMs <= timeMs) lo = mid;
+    else hi = mid;
+  }
+
+  const firstSpeed = speedAt(lo);
+  const secondSpeed = speedAt(hi);
+  if (firstSpeed === null) return secondSpeed ?? fallback;
+  if (secondSpeed === null) return firstSpeed;
+  const firstTime = wind.samples[lo].timeMs;
+  const secondTime = wind.samples[hi].timeMs;
+  const fraction = (timeMs - firstTime) / (secondTime - firstTime);
+  return firstSpeed + (secondSpeed - firstSpeed) * fraction;
+}
