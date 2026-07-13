@@ -22,11 +22,11 @@ Production: https://sailing-performance.vercel.app
 - Tailwind CSS 4 and shadcn/ui
 - Supabase Auth and Postgres
 - Vercel hosting and GitHub deployments
-- Node.js 22
+- Node.js 24 (Active LTS)
 
 ## Local setup
 
-Requirements: Node.js 22 and npm.
+Requirements: Node.js 24 and npm.
 
 ```bash
 git clone https://github.com/jcarterwil/Sailing.git
@@ -66,10 +66,8 @@ npm run db:push
 ### Auto-migrate on merge
 
 Vercel only syncs env vars — it does **not** run SQL. Migrations under
-`supabase/migrations/` are applied on merge to `main` by:
-
-1. **Supabase GitHub Integration** — [Project Settings → Integrations → GitHub](https://supabase.com/dashboard/project/mmyogyxvgwfmrqjcsguz/settings/integrations) with **Deploy to production** (and optional PR preview branching). Working directory: `.`
-2. **GitHub Actions** — [`.github/workflows/supabase-migrations.yml`](.github/workflows/supabase-migrations.yml) runs `supabase db push` when migrations change. Needs repo secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`; without them it skips cleanly (see `supabase/AGENTS.md`).
+`supabase/migrations/` are applied on merge to `main` automatically by the
+**Supabase GitHub Integration** ([Project Settings → Integrations → GitHub](https://supabase.com/dashboard/project/mmyogyxvgwfmrqjcsguz/settings/integrations) with **Deploy to production** enabled). No CI secrets and no manual step — just merge. Locally you can apply immediately with `npm run db:push`. Keep migrations additive/backward-compatible, and run `npm run db:types` after a schema change (see `supabase/AGENTS.md`).
 
 Hosted Auth is configured for localhost, Vercel preview deployments, and the production origin.
 
@@ -93,10 +91,24 @@ Do not commit the Google client secret.
 | `npm run dev` | Start the local development server |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Check TypeScript without emitting files |
+| `npm run test` | Run the Vitest suite |
 | `npm run build` | Create a production build |
-| `npm run verify` | Run lint, typecheck, and production build |
+| `npm run verify` | Run lint → typecheck → test → build (what CI runs) |
 | `npm run db:push` | Apply pending Supabase migrations |
 | `npm run db:reset` | Reset a local Supabase database |
+
+## Testing and CI
+
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
+`npm run verify` (lint → typecheck → test → build) on every pull request and on
+push to `main`. **CI is the authoritative build/test gate** — locally you only
+need the fast checks (`lint`, `typecheck`, and the relevant `test`s); push and
+let CI run the full build/test rather than fighting a slow or constrained local
+build.
+
+`main` is protected by GitHub rulesets: changes land through a PR whose `verify`
+check passes, contributor PRs also require a maintainer review, and no one pushes
+to `main` directly. The repo owner can self-merge once CI is green.
 
 ## Deployment
 

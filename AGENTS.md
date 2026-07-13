@@ -16,7 +16,7 @@ Directory-specific guides exist — read the `AGENTS.md` nearest the code you to
 ## Golden rules
 
 1. **Read the Next.js 16 docs before writing framework code.** Request interception is `src/proxy.ts` (the renamed `middleware.ts`). Data pages use `export const dynamic = "force-dynamic"`; route handlers take `params: Promise<{…}>`. Confirm conventions in `node_modules/next/dist/docs/` rather than from memory.
-2. **`npm run verify` must pass before any PR** — it runs lint → typecheck → vitest → build. It is the CI gate.
+2. **CI is the build/test gate — let it run.** GitHub Actions runs `npm run verify` (lint → typecheck → test → build) on every PR and on push to `main`; that check is authoritative. Locally, run the fast, reliable pieces — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. **Don't gate your work on a full local production `build`, especially in constrained or cloud sandboxes where it's flaky — push and let CI build/test**, then fix whatever it flags. (The `build` step needs real time and memory; a wobbly sandbox is the wrong place to run it.)
 3. **Surgical changes only.** Match surrounding style; touch only what the task needs; don't refactor adjacent code.
 4. **Never put a secret in a `NEXT_PUBLIC_` variable.** The service-role key (`SUPABASE_SECRET_KEY`) is server-only via `src/lib/supabase/admin.ts` (`import "server-only"`). Client and server components use the publishable key.
 
@@ -45,22 +45,17 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 
 ## How changes reach production
 
+- **CI:** `.github/workflows/ci.yml` runs `npm run verify` (lint → typecheck → test → build) on every PR and every push to `main`, on **Node 24** with inert placeholder public env vars (no secrets — server secrets are read at request time, not during the build). This is the automated gate; treat a red `verify` as blocking.
+- **Branch protection:** `main` is governed by GitHub **rulesets** — every change lands via a PR whose `verify` check passes; contributor PRs also require a code-owner (maintainer) review; the repo owner can self-merge their own PR once CI is green. No direct pushes, force-pushes, or deletion of `main`. **Squash-merge only.**
 - **App code:** push to `main` → Vercel builds and deploys automatically. Primary domain `https://sailing-performance.vercel.app`.
 - **Database:** the **Supabase GitHub integration** is connected to this repo with *Deploy to production* enabled on `main`. Supabase applies any new `supabase/migrations/` file automatically when it merges to `main` — no CI secrets, no manual step. (Locally you can still run `npm run db:push` to apply immediately.) Migrations must be **additive/backward-compatible** so app and schema can deploy in either order. After changing schema, run `npm run db:types` and commit the regenerated types. See `supabase/AGENTS.md`.
 
-## Pull request review gate
+## Pull request flow
 
-Every code change must complete this sequence before merge:
-
-1. Run `npm run verify` and fix failures attributable to the change.
-2. Open the pull request and mark it ready for review.
-3. Request the installed native Codex reviewer by posting the exact PR comment `@codex review`.
-4. Wait for Codex to finish. An eyes reaction means the request was accepted, not that the review is complete.
-5. Address every material finding, rerun relevant checks, and request another Codex review after substantive fixes.
-6. Merge only after Codex has posted its completed review and no material finding remains unresolved.
-
-Do not replace the installed GitHub integration with a custom API-key GitHub Action. If Codex does not
-respond or cannot run, report that blocker explicitly rather than silently merging without the review.
+1. Get the fast local checks green — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. A clean local production `build` is **not** required; CI runs it (see above).
+2. Open the PR against `main`. CI runs `npm run verify`; fix anything it flags that's attributable to your change. Keep changes additive/backward-compatible where they touch the database or shared analytics types.
+3. `main`'s rulesets enforce the gate: the `verify` check must pass, and contributor PRs require a code-owner review before merge. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
+4. If an automated code reviewer runs on the PR, address its material findings before merging. Never merge with the `verify` check red.
 
 ## Security must-dos (every endpoint and query)
 
