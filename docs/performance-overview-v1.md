@@ -57,6 +57,7 @@ The ChartedSails reference is a feature inventory, not a metric oracle. In parti
 ### 2.4 Null, zero, and warnings
 
 - Every unavailable or unreliable numeric value is `null`, never `NaN`, `Infinity`, or an implicit zero.
+- Every field declared by the V1 interfaces is a required JSON key. Nullable fields use an explicit `null`; omitting one is malformed V1 input rather than an alternate encoding.
 - Zero is valid only when the measured/computed quantity is genuinely zero. Example: a legal-status boat still pre-start at gun +30 s may have `dmg30M=0`.
 - Each null is explained by section provenance, `warningCodes`, `unavailableReason`, or a top-level warning. UI renders null as `—` plus the reason.
 - A recoverable data problem returns bounded warnings and partial output. Unsupported/malformed persisted versions return an explicit parser state and do not throw into page rendering.

@@ -219,6 +219,12 @@ export const SIX_BOAT_FIVE_LEG_FIXTURE = {
     entryIds: PLANS.map((plan) => plan.entryId),
     loggingRatesHz: Object.fromEntries(PLANS.map((plan) => [plan.entryId, plan.loggingRateHz])),
     startStatuses: Object.fromEntries(PLANS.map((plan) => [plan.entryId, plan.ocsRecross ? "ocs-recrossed" : "legal"])),
+    startCrossingTimesMs: Object.fromEntries(PLANS.map((plan) => [plan.entryId, FIXTURE_GUN_MS + plan.crossingOffsetSec * 1_000])),
+    startRanks: Object.fromEntries(
+      [...PLANS]
+        .sort((left, right) => left.crossingOffsetSec - right.crossingOffsetSec)
+        .map((plan, index) => [plan.entryId, index + 1]),
+    ),
     passageTimesMs: Object.fromEntries(PLANS.map((plan) => [plan.entryId, plan.passagesSec.map((seconds) => FIXTURE_GUN_MS + seconds * 1_000)])),
     finishTimesMs: Object.fromEntries(PLANS.map((plan) => [plan.entryId, FIXTURE_GUN_MS + plan.passagesSec[4] * 1_000])),
     gap: { entryId: "echo", startMs: FIXTURE_GUN_MS + 255_000, endMs: FIXTURE_GUN_MS + 267_000 },

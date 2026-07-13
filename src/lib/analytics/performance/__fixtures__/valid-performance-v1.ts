@@ -158,7 +158,7 @@ export const VALID_PERFORMANCE_V1_FIXTURE: PerformanceAnalysisV1 = {
     windowEndMs: FIXTURE_GUN_MS + 60_000,
     entries: ENTRY_IDS.map((entryId, index) => {
       const ocs = entryId === "charlie";
-      const crossingTimeMs = FIXTURE_GUN_MS + (ocs ? 11 : index + 1) * 1_000;
+      const crossingTimeMs = SIX_BOAT_FIVE_LEG_FIXTURE.expected.startCrossingTimesMs[entryId as keyof typeof SIX_BOAT_FIVE_LEG_FIXTURE.expected.startCrossingTimesMs];
       return {
         entryId,
         status: ocs ? "ocs-recrossed" as const : "legal" as const,
@@ -170,7 +170,7 @@ export const VALID_PERFORMANCE_V1_FIXTURE: PerformanceAnalysisV1 = {
         signedLineSideDistanceAtGunM: ocs ? 6 : -(index + 2),
         dmg30M: 85 - index * 3,
         vmg30Kts: (85 - index * 3) / 30 / 0.514444,
-        rank: ocs ? 6 : index + 1,
+        rank: SIX_BOAT_FIVE_LEG_FIXTURE.expected.startRanks[entryId as keyof typeof SIX_BOAT_FIVE_LEG_FIXTURE.expected.startRanks],
         warningCodes: [],
         provenance: provenance("line-crossing"),
       };

@@ -240,6 +240,9 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
     valid = finiteAt(point.atMs, context, `${pointPath}.atMs`, { nullable: true }) && valid;
     valid = validateNullableCoordinate(point.position, context, `${pointPath}.position`) && valid;
     valid = (point.line === null || validateLine(point.line, context, `${pointPath}.line`)) && valid;
+    if (point.kind === "mark" && point.line !== null) {
+      valid = issue(context, `${pointPath}.line`, "mark point geometry requires a null line") && valid;
+    }
     valid = finiteAt(point.supportingEntryCount, context, `${pointPath}.supportingEntryCount`, { integer: true, min: 0, max: PERFORMANCE_MAX_ENTRY_COUNT }) && valid;
     valid = finiteAt(point.spreadM, context, `${pointPath}.spreadM`, { nullable: true, min: 0 }) && valid;
     valid = validateProvenance(point.provenance, context, `${pointPath}.provenance`) && valid;

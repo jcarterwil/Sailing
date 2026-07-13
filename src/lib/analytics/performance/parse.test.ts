@@ -142,6 +142,29 @@ describe("parseStoredPerformance", () => {
     expect(parsed.issues.join(" ")).toContain("endTimeMs - startTimeMs");
   });
 
+  it("requires null for unavailable fields and forbids line geometry on marks", () => {
+    const omittedFinish = cloneFixture();
+    const results = omittedFinish.results as Array<Record<string, unknown>>;
+    results[0] = {
+      ...results[0],
+      status: "dnf",
+      elapsedMs: null,
+      rank: null,
+      deltaMs: null,
+    };
+    delete results[0].finish;
+    const omittedParsed = parsePerformanceV1(omittedFinish);
+    expect(omittedParsed.status).toBe("malformed");
+    expect(omittedParsed.issues.join(" ")).toContain("finish");
+
+    const markLine = cloneFixture();
+    const course = markLine.course as { points: Array<Record<string, unknown>> };
+    course.points[1].line = (markLine.start as Record<string, unknown>).line;
+    const markParsed = parsePerformanceV1(markLine);
+    expect(markParsed.status).toBe("malformed");
+    expect(markParsed.issues.join(" ")).toContain("mark point geometry requires a null line");
+  });
+
   it("uses the 200-character entry ID contract rather than provenance label limits", () => {
     const replaceEntryId = (entryId: string) => JSON.parse(
       JSON.stringify(VALID_PERFORMANCE_V1_FIXTURE).replaceAll('"alpha"', JSON.stringify(entryId)),
@@ -228,6 +251,14 @@ describe("six-boat Performance Overview fixture", () => {
     expect(new Set(Object.values(fixture.expected.loggingRatesHz))).toEqual(new Set([1, 2]));
     expect(new Set(Object.values(fixture.expected.finishTimesMs)).size).toBe(6);
     expect(fixture.expected.startStatuses.charlie).toBe("ocs-recrossed");
+    expect(fixture.expected.startRanks).toEqual({
+      alpha: 1,
+      bravo: 2,
+      delta: 3,
+      foxtrot: 4,
+      echo: 5,
+      charlie: 6,
+    });
     expect(fixture.startLine.pin).not.toEqual(fixture.startLine.boat);
 
     const charlie = fixture.tracks.find((track) => track.entryId === "charlie")!;
