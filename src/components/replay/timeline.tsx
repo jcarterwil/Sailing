@@ -15,7 +15,13 @@ function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
 
 // Min/max-per-pixel SOG strips, one row per boat, drawn once per resize;
 // the cursor and brush live on an overlay canvas updated per frame.
-export function Timeline({ tracks }: { tracks: LoadedTrack[] }) {
+export function Timeline({
+  tracks,
+  startsMs = [],
+}: {
+  tracks: LoadedTrack[];
+  startsMs?: number[];
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -96,13 +102,27 @@ export function Timeline({ tracks }: { tracks: LoadedTrack[] }) {
         ctx.fillRect(x, height - AXIS_HEIGHT, 1, 4);
         ctx.fillText(formatClock(t, tz).slice(0, 5), x + 3, height - 6);
       }
+
+      // Fleet start guns — static ticks on the base canvas.
+      for (const gun of startsMs) {
+        if (gun < t0 || gun > t1) continue;
+        const x = ((gun - t0) / span) * width;
+        ctx.fillStyle = "rgba(251, 191, 36, 0.95)";
+        ctx.fillRect(x - 0.75, 0, 1.5, height - AXIS_HEIGHT);
+        ctx.beginPath();
+        ctx.moveTo(x, height - AXIS_HEIGHT);
+        ctx.lineTo(x - 4, height - AXIS_HEIGHT + 6);
+        ctx.lineTo(x + 4, height - AXIS_HEIGHT + 6);
+        ctx.closePath();
+        ctx.fill();
+      }
     };
 
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, [tracks, height]);
+  }, [tracks, height, startsMs]);
 
   // Cursor + brush overlay, driven per-frame by transient subscription.
   useEffect(() => {

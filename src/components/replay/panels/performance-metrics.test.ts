@@ -30,6 +30,7 @@ function makeTrack({
     hdg: new Float32Array(times.length),
     heel: new Float32Array(times.length),
     trim: new Float32Array(times.length),
+    extras: null,
   };
 }
 

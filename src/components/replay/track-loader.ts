@@ -1,4 +1,4 @@
-import type { ProcessedTrack } from "@/lib/analytics/types";
+import type { ProcessedTrack, VkxExtras } from "@/lib/analytics/types";
 import type { CrewMember, RaceMeta } from "@/lib/races/meta";
 
 export interface TrackMeta {
@@ -33,6 +33,8 @@ export interface LoadedTrack {
   hdg: Float32Array;
   heel: Float32Array;
   trim: Float32Array;
+  /** VKX timer/line/wind extras; null for CSV or missing. */
+  extras: VkxExtras | null;
 }
 
 export type { RaceMeta };
@@ -81,5 +83,6 @@ export async function loadTrack(meta: TrackMeta): Promise<LoadedTrack> {
     hdg: toFloat32(data.hdg),
     heel: toFloat32(data.heel),
     trim: toFloat32(data.trim),
+    extras: data.extras ?? null,
   };
 }

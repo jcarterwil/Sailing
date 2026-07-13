@@ -32,3 +32,30 @@ export function toLocalXY(
     y: (lat - originLat) * EARTH_RADIUS_M * DEG,
   };
 }
+
+/** Point-to-segment distance in meters using the local equirectangular frame. */
+export function distanceToSegmentM(
+  lat: number,
+  lon: number,
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+): number {
+  const originLat = (a.lat + b.lat) / 2;
+  const originLon = (a.lon + b.lon) / 2;
+  const p = toLocalXY(originLat, originLon, lat, lon);
+  const pa = toLocalXY(originLat, originLon, a.lat, a.lon);
+  const pb = toLocalXY(originLat, originLon, b.lat, b.lon);
+  const dx = pb.x - pa.x;
+  const dy = pb.y - pa.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) {
+    const ex = p.x - pa.x;
+    const ey = p.y - pa.y;
+    return Math.hypot(ex, ey);
+  }
+  let t = ((p.x - pa.x) * dx + (p.y - pa.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = pa.x + t * dx;
+  const qy = pa.y + t * dy;
+  return Math.hypot(p.x - qx, p.y - qy);
+}

@@ -8,6 +8,7 @@ The client-only race replay: a MapLibre map, a zustand playback clock, and a can
 - **React-rendered widgets subscribe narrowly and throttle** to ~10Hz (see the clock in `playback-controls.tsx`, Instruments, and the live `leaderboard.tsx`). Use `usePlaybackStore((s) => s.field)` selectors, not the whole store.
 - The single rAF clock lives in `race-replay.tsx` and calls `store.tick(dt)`. Don't add competing animation loops.
 - **Wind for ladder / future wind indicator:** resolve via `resolveTwdAt(raceMeta)` in `race-replay.tsx` (manual `conditions.windDirDeg` today; TODO #3 for `analysis.wind`). Do not invent a second wind path for #7.
+- **Start line / race clock:** `LoadedTrack.extras` carries VKX timerEvents/linePings (null for CSV). Derive `startsMs` in `race-replay.tsx` via `fleetStarts`; pass into MapView / PlaybackControls / Timeline. Resolve the line at scrub time with `startForLine` + `startLineAt` (upcoming gun pre-start, else active). Never fabricate a line from one end.
 
 ## Rules
 
