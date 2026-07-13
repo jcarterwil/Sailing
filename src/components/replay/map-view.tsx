@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { needsReplayMapLayers } from "@/components/replay/map-layers";
 import { usePlaybackStore, type CameraMode, type TrailMode } from "@/components/replay/playback-store";
 import {
   buildSpeedTrackData,
@@ -222,6 +223,8 @@ export function MapView({
     mapRef.current = map;
 
     const addLayers = () => {
+      // `load` and `styledata` both fire on first paint; only add sources once per style.
+      if (!needsReplayMapLayers(map)) return;
       if (!map.getImage("boat-arrow")) {
         map.addImage("boat-arrow", makeBoatArrow(), { sdf: true });
       }
@@ -377,7 +380,7 @@ export function MapView({
     map.on("load", addLayers);
     // After setStyle, sources/layers are gone; re-add them.
     map.on("styledata", () => {
-      if (map.isStyleLoaded() && !map.getSource("boats")) {
+      if (map.isStyleLoaded() && needsReplayMapLayers(map)) {
         readyRef.current = false;
         addLayers();
       }
