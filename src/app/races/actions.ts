@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -362,4 +364,58 @@ export async function updateRaceMeta(
   if (error) throw new Error(`Could not update race metadata: ${error.message}`);
 
   revalidatePath(`/races/${raceId}`);
+}
+
+export async function toggleShare(
+  raceId: string,
+  enable: boolean,
+): Promise<{ shareSlug: string | null }> {
+  const { supabase } = await requireUser();
+
+  const { data: race, error: raceError } = await supabase
+    .from("races")
+    .select("id")
+    .eq("id", raceId)
+    .maybeSingle();
+  if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
+  if (!race) throw new Error("Race not found.");
+
+  const { data: canOrganize, error: organizerError } = await supabase.rpc(
+    "is_race_organizer",
+    { rid: raceId },
+  );
+  if (organizerError) {
+    throw new Error(`Could not check race permissions: ${organizerError.message}`);
+  }
+  if (!canOrganize) {
+    throw new Error("Only the organizer can change sharing.");
+  }
+
+  if (!enable) {
+    const { error } = await supabase
+      .from("races")
+      .update({ share_slug: null })
+      .eq("id", raceId);
+    if (error) throw new Error(`Could not disable sharing: ${error.message}`);
+    revalidatePath(`/races/${raceId}`);
+    return { shareSlug: null };
+  }
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const shareSlug = randomBytes(16).toString("base64url");
+    const { error } = await supabase
+      .from("races")
+      .update({ share_slug: shareSlug })
+      .eq("id", raceId);
+    if (!error) {
+      revalidatePath(`/races/${raceId}`);
+      return { shareSlug };
+    }
+    // Unique violation — try another slug.
+    if (error.code !== "23505") {
+      throw new Error(`Could not enable sharing: ${error.message}`);
+    }
+  }
+
+  throw new Error("Could not generate a unique share link.");
 }

@@ -172,11 +172,13 @@ export function Leaderboard({
   twdAt,
   origin,
   raceId,
+  readOnly = false,
 }: {
   tracks: LoadedTrack[];
   twdAt: ((timeMs: number) => number) | null;
   origin: { lat: number; lon: number };
   raceId: string;
+  readOnly?: boolean;
 }) {
   const selectedEntryId = usePlaybackStore((s) => s.selectedEntryId);
   const setSelectedEntryId = usePlaybackStore((s) => s.setSelectedEntryId);
@@ -192,16 +194,20 @@ export function Leaderboard({
   if (!twdAt) {
     return (
       <div className="absolute top-3 left-3 z-10 max-w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur">
-        <p>
-          Set a wind direction in{" "}
-          <Link
-            href={`/races/${raceId}`}
-            className="underline underline-offset-2 hover:text-white"
-          >
-            race conditions
-          </Link>{" "}
-          to enable ranks
-        </p>
+        {readOnly ? (
+          <p>Wind direction not set — ranks unavailable</p>
+        ) : (
+          <p>
+            Set a wind direction in{" "}
+            <Link
+              href={`/races/${raceId}`}
+              className="underline underline-offset-2 hover:text-white"
+            >
+              race conditions
+            </Link>{" "}
+            to enable ranks
+          </p>
+        )}
       </div>
     );
   }

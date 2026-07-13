@@ -9,7 +9,9 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-type SessionClient = Awaited<ReturnType<typeof createClient>>;
+type ReportClient =
+  | Awaited<ReturnType<typeof createClient>>
+  | ReturnType<typeof createAdminClient>;
 export const REPORT_GENERATION_TTL_MS = 10 * 60 * 1000;
 
 /** Call only after a session/RLS read has proved access to this race. */
@@ -32,7 +34,7 @@ export async function expireStaleReportGenerations(raceId: string): Promise<void
 }
 
 export async function loadReportSnapshot(
-  supabase: SessionClient,
+  supabase: ReportClient,
   raceId: string,
   options: { includePreviousComplete?: boolean } = {},
 ): Promise<ReportSnapshot> {
@@ -70,4 +72,12 @@ export async function loadReportSnapshot(
       ? toReportSummary(completeResult.data)
       : null,
   };
+}
+
+/** Call only after a share-slug lookup has authorized anonymous access. */
+export async function loadReportSnapshotAdmin(
+  raceId: string,
+  options: { includePreviousComplete?: boolean } = {},
+): Promise<ReportSnapshot> {
+  return loadReportSnapshot(createAdminClient(), raceId, options);
 }

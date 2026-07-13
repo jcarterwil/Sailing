@@ -30,6 +30,8 @@ export function ReplayShell(props: {
   analyzeContext: RaceAnalyzeContext;
   /** Persisted `race_analyses.analysis` when available. */
   analysis?: RaceAnalysis | null;
+  /** Public share view — hide manage-race links. */
+  readOnly?: boolean;
 }) {
   return <RaceReplay {...props} />;
 }
