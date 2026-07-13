@@ -156,8 +156,6 @@ export function normalizeCorrections(input: unknown): RaceCorrections {
     legRelabels: normalizeLegRelabels(record.legRelabels),
   };
 }
-<<<<<<< HEAD
-
 /** True when any correction would change analysis vs the auto-detected baseline. */
 export function correctionsAreActive(corrections: RaceCorrections): boolean {
   return (
@@ -168,5 +166,3 @@ export function correctionsAreActive(corrections: RaceCorrections): boolean {
     corrections.legRelabels.length > 0
   );
 }
-=======
->>>>>>> origin/main
