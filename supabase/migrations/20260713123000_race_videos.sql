@@ -117,6 +117,9 @@ on public.race_videos
 for delete
 to authenticated
 using (
-  uploaded_by = (select auth.uid())
-  or public.is_race_organizer(race_id)
+  public.is_race_member(race_id)
+  and (
+    uploaded_by = (select auth.uid())
+    or public.is_race_organizer(race_id)
+  )
 );
