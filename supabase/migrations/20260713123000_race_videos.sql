@@ -73,6 +73,7 @@ alter table public.race_videos enable row level security;
 
 revoke all on table public.race_videos from anon;
 grant select on table public.race_videos to authenticated;
+revoke insert, update, delete on table public.race_videos from authenticated;
 
 create policy "Members read race videos"
 on public.race_videos
