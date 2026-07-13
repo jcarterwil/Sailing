@@ -9,6 +9,7 @@ import {
   Film,
   Loader2,
   RefreshCw,
+  SlidersHorizontal,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   markVideoUploadError,
   requestVideoReadUrl,
   requestVideoUpload,
+  setManualVideoTiming,
 } from "@/app/races/video-actions";
 import {
   AlertDialog,
@@ -44,6 +46,10 @@ interface VideoRow {
   entryName: string | null;
   canManage: boolean;
   uploadConfirmed: boolean;
+  startUtcMs: number | null;
+  durationMs: number | null;
+  timingProvenance: string | null;
+  lastErrorMessage: string | null;
 }
 
 interface UploadState {
@@ -66,7 +72,9 @@ function safeClientError(error: unknown): string {
     message.startsWith("The uploaded") ||
     message.startsWith("The stored") ||
     message.startsWith("Could not") ||
-    message.startsWith("Video not found")
+    message.startsWith("Video not found") ||
+    message.startsWith("Enter a valid") ||
+    message.startsWith("Enter a positive")
   ) {
     return message;
   }
@@ -79,6 +87,9 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
   const [replaceVideoId, setReplaceVideoId] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [busyVideoId, setBusyVideoId] = useState<string | null>(null);
+  const [manualVideoId, setManualVideoId] = useState<string | null>(null);
+  const [manualStartUtc, setManualStartUtc] = useState("");
+  const [manualDurationMs, setManualDurationMs] = useState("");
 
   async function uploadFile(file: File, replacingId: string | null) {
     setUpload({ label: file.name, phase: "uploading", percent: 0 });
@@ -163,6 +174,38 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
     }
   }
 
+
+  async function processVideo(videoId: string) {
+    setBusyVideoId(videoId);
+    try {
+      const response = await fetch(`/api/videos/${videoId}/process`, { method: "POST" });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Could not process video.");
+      router.refresh();
+    } catch (error) {
+      setUpload({ label: "Process video", phase: "error", percent: 0, detail: safeClientError(error) });
+      router.refresh();
+    } finally {
+      setBusyVideoId(null);
+    }
+  }
+
+  async function saveManualTiming(videoId: string) {
+    setBusyVideoId(videoId);
+    try {
+      await setManualVideoTiming(videoId, {
+        startUtc: manualStartUtc,
+        durationMs: Number(manualDurationMs),
+      });
+      setManualVideoId(null);
+      router.refresh();
+    } catch (error) {
+      setUpload({ label: "Manual alignment", phase: "error", percent: 0, detail: safeClientError(error) });
+    } finally {
+      setBusyVideoId(null);
+    }
+  }
+
   async function removeVideo(videoId: string) {
     setBusyVideoId(videoId);
     try {
@@ -241,6 +284,37 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
         </div>
       )}
 
+
+      {manualVideoId && (
+        <div className="rounded-lg border border-border/70 p-3 text-sm">
+          <p className="font-medium">Manual UTC alignment</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+            <input
+              className="rounded-md border bg-background px-3 py-2"
+              aria-label="Video start time in UTC"
+              placeholder="2026-07-13T15:00:00.000Z"
+              value={manualStartUtc}
+              onChange={(event) => setManualStartUtc(event.target.value)}
+            />
+            <input
+              className="rounded-md border bg-background px-3 py-2"
+              aria-label="Video duration in milliseconds"
+              placeholder="duration ms"
+              inputMode="numeric"
+              value={manualDurationMs}
+              onChange={(event) => setManualDurationMs(event.target.value)}
+            />
+            <Button
+              size="sm"
+              disabled={busyVideoId === manualVideoId}
+              onClick={() => void saveManualTiming(manualVideoId)}
+            >
+              Save alignment
+            </Button>
+          </div>
+        </div>
+      )}
+
       <ul className="divide-y divide-border/70 rounded-lg border border-border/70">
         {videos.length === 0 && (
           <li className="px-4 py-6 text-center text-sm text-muted-foreground">
@@ -256,6 +330,14 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
                 {video.entryName ? `${video.entryName} · ` : ""}
                 {new Date(video.createdAt).toLocaleString()}
               </p>
+              {video.startUtcMs && video.durationMs && (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(video.startUtcMs).toISOString()} · {Math.round(video.durationMs / 1000)}s · {video.timingProvenance}
+                </p>
+              )}
+              {video.status === "error" && video.lastErrorMessage && (
+                <p className="text-xs text-destructive">{video.lastErrorMessage}</p>
+              )}
             </div>
             <Badge variant={video.uploadConfirmed ? "secondary" : "outline"}>
               {video.uploadConfirmed
@@ -280,6 +362,28 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
               </Button>
               {video.canManage && (
                 <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!video.uploadConfirmed || busyVideoId === video.id}
+                    onClick={() => void processVideo(video.id)}
+                  >
+                    <Loader2 className={busyVideoId === video.id ? "size-4 animate-spin" : "size-4"} aria-hidden="true" />
+                    Process
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!video.uploadConfirmed || busyVideoId === video.id}
+                    onClick={() => {
+                      setManualVideoId(video.id);
+                      setManualStartUtc(video.startUtcMs ? new Date(video.startUtcMs).toISOString() : "");
+                      setManualDurationMs(video.durationMs ? String(video.durationMs) : "");
+                    }}
+                  >
+                    <SlidersHorizontal className="size-4" aria-hidden="true" />
+                    Align
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

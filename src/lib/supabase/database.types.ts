@@ -403,12 +403,17 @@ export type Database = {
           entry_id: string | null
           has_telemetry: boolean
           id: string
+          last_error_code: string | null
+          last_error_message: string | null
           original_filename: string
+          processing_attempts: number
+          processing_started_at: string | null
           race_id: string
           raw_path: string
           start_utc_ms: number | null
           status: string
           summary: Json | null
+          timing_provenance: string | null
           updated_at: string
           uploaded_by: string
         }
@@ -418,12 +423,17 @@ export type Database = {
           entry_id?: string | null
           has_telemetry?: boolean
           id?: string
+          last_error_code?: string | null
+          last_error_message?: string | null
           original_filename: string
+          processing_attempts?: number
+          processing_started_at?: string | null
           race_id: string
           raw_path: string
           start_utc_ms?: number | null
           status?: string
           summary?: Json | null
+          timing_provenance?: string | null
           updated_at?: string
           uploaded_by: string
         }
@@ -433,12 +443,17 @@ export type Database = {
           entry_id?: string | null
           has_telemetry?: boolean
           id?: string
+          last_error_code?: string | null
+          last_error_message?: string | null
           original_filename?: string
+          processing_attempts?: number
+          processing_started_at?: string | null
           race_id?: string
           raw_path?: string
           start_utc_ms?: number | null
           status?: string
           summary?: Json | null
+          timing_provenance?: string | null
           updated_at?: string
           uploaded_by?: string
         }
