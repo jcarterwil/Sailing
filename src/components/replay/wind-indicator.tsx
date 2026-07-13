@@ -17,10 +17,7 @@ function useWindReading(windAt: ReplayWindResolver | null): ReplayWindReading | 
   );
 
   useEffect(() => {
-    if (!windAt) {
-      queueMicrotask(() => setReading(null));
-      return;
-    }
+    if (!windAt) return;
 
     let lastUpdate = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -33,6 +30,7 @@ function useWindReading(windAt: ReplayWindResolver | null): ReplayWindReading | 
 
     publish(pendingTime);
     const unsubscribe = usePlaybackStore.subscribe((state) => {
+      if (state.timeMs === pendingTime) return;
       pendingTime = state.timeMs;
       const wait = UPDATE_INTERVAL_MS - (performance.now() - lastUpdate);
       if (wait <= 0) {
@@ -49,7 +47,7 @@ function useWindReading(windAt: ReplayWindResolver | null): ReplayWindReading | 
     };
   }, [windAt]);
 
-  return reading;
+  return windAt ? reading : null;
 }
 
 function directionText(directionDeg: number): string {

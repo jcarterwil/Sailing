@@ -379,6 +379,8 @@ export function windSpeedAt(wind: WindAnalysis, timeMs: number): number | null {
   if (secondSpeed === null) return firstSpeed;
   const firstTime = wind.samples[lo].timeMs;
   const secondTime = wind.samples[hi].timeMs;
-  const fraction = (timeMs - firstTime) / (secondTime - firstTime);
+  const interval = secondTime - firstTime;
+  if (!Number.isFinite(interval) || interval <= 0) return secondSpeed;
+  const fraction = (timeMs - firstTime) / interval;
   return firstSpeed + (secondSpeed - firstSpeed) * fraction;
 }
