@@ -20,6 +20,16 @@ export const WIND_MIN_SOG_KTS = 2; // exclude drifting and pre-start loitering f
 export const WIND_SENSOR_MATCH_MS = 2_000; // maximum telemetry-to-wind sample alignment error
 export const WIND_OUTPUT_BIN_MS = 60_000; // compact persisted sensor-wind timeline
 export const WIND_BOAT_OUTLIER_DEG = 45; // reject per-boat means farther than this from equal-weight consensus
+/** Wind-quality heuristic thresholds (#55). */
+export const WIND_QUALITY_DOMINANCE_WARN = 0.5;
+export const WIND_QUALITY_DOMINANCE_CRITICAL = 0.7;
+export const WIND_QUALITY_DIRECTION_OUTLIER_WARN_DEG = 30;
+export const WIND_QUALITY_DIRECTION_OUTLIER_CRITICAL_DEG = 60;
+export const WIND_QUALITY_ESTIMATE_DISAGREE_DEG = 45;
+export const WIND_QUALITY_LOW_STRENGTH = 0.6;
+export const WIND_QUALITY_TWS_MIN_KTS = 0.5;
+export const WIND_QUALITY_TWS_MAX_KTS = 45;
+export const WIND_QUALITY_SPARSE_SAMPLES = 10;
 export const LEG_BIN_MS = 60_000; // fleet course classification cadence
 export const LEG_MIN_BINS = 2; // suppress one-bin false leg changes
 export const LEG_UPWIND_MAX_ABS_TWA_DEG = 90; // |TWA| below this is upwind

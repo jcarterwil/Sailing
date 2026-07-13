@@ -35,7 +35,7 @@ interface EstimatedDirection {
   confidence: "high" | "medium" | "low";
 }
 
-interface SensorVector {
+export interface SensorVector {
   timeMs: number;
   twdDeg: number;
   twsKts: number;
@@ -319,15 +319,31 @@ function binSensorVectors(vectors: readonly SensorVector[]): WindPoint[] {
     });
 }
 
-export function analyzeWind(
+export interface AnalyzeWindDetailed {
+  wind: WindAnalysis;
+  /** Pre-exclusion sensor vectors under the winning AWA convention (empty when none). */
+  sensorVectors: SensorVector[];
+  estimateTwdDeg: number | null;
+}
+
+export function analyzeWindDetailed(
   tracks: readonly ProcessedTrack[],
   startTimeMs: number | null,
   finishTimeMs: number | null,
   warnings: AnalysisWarning[],
   corrections: RaceCorrections | null = null,
-): WindAnalysis {
+): AnalyzeWindDetailed {
   const excluded = new Set(corrections?.excludedWindSensorEntryIds ?? []);
   const excludedList = [...excluded].sort();
+  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs, excluded);
+  // Collect with no exclusion so wind-quality can still see dominated/outlier boats.
+  const allSensor = collectSensorVectors(
+    tracks,
+    estimated?.twdDeg ?? null,
+    startTimeMs,
+    finishTimeMs,
+  );
+  const sensorVectors = allSensor?.vectors ?? [];
 
   if (corrections?.manualWind?.enabled) {
     const twdDeg = round(norm360(corrections.manualWind.twdDeg), 2);
@@ -345,53 +361,53 @@ export function analyzeWind(
       }
     }
     return {
-      source: "manual",
-      twdDeg,
-      twsKts,
-      samples,
-      provenance: {
+      wind: {
         source: "manual",
-        method: "organizer-manual",
-        confidence: "high",
-        sensorEntryIds: [],
-        sensorSampleCount: 0,
-        estimatedHeadingSampleCount: 0,
-        excludedSensorEntryIds: excludedList,
-        overridden: true,
+        twdDeg,
+        twsKts,
+        samples,
+        provenance: {
+          source: "manual",
+          method: "organizer-manual",
+          confidence: "high",
+          sensorEntryIds: [],
+          sensorSampleCount: 0,
+          estimatedHeadingSampleCount: estimated?.sampleCount ?? 0,
+          excludedSensorEntryIds: excludedList,
+          overridden: true,
+        },
       },
+      sensorVectors,
+      estimateTwdDeg: estimated?.twdDeg ?? null,
     };
   }
 
-  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs, excluded);
-  const sensor = collectSensorVectors(
-    tracks,
-    estimated?.twdDeg ?? null,
-    startTimeMs,
-    finishTimeMs,
-    excluded,
-  );
-
-  if (sensor) {
-    const combined = combineBoats(summarizePerBoat(sensor.vectors));
+  const activeVectors = sensorVectors.filter((vector) => !excluded.has(vector.entryId));
+  if (activeVectors.length >= 10) {
+    const combined = combineBoats(summarizePerBoat(activeVectors));
     if (combined) {
       const accepted = new Set(combined.acceptedEntryIds);
-      const acceptedVectors = sensor.vectors.filter((vector) => accepted.has(vector.entryId));
+      const acceptedVectors = activeVectors.filter((vector) => accepted.has(vector.entryId));
       return {
-        source: "sensor-derived",
-        twdDeg: nullable(combined.twdDeg, 2),
-        twsKts: nullable(combined.twsKts, 2),
-        samples: binSensorVectors(acceptedVectors),
-        provenance: {
+        wind: {
           source: "sensor-derived",
-          method: "apparent-wind-vector",
-          confidence:
-            combined.strength >= 0.85 ? "high" : combined.strength >= 0.65 ? "medium" : "low",
-          sensorEntryIds: combined.acceptedEntryIds,
-          sensorSampleCount: acceptedVectors.length,
-          estimatedHeadingSampleCount: estimated?.sampleCount ?? 0,
-          excludedSensorEntryIds: excludedList,
-          overridden: false,
+          twdDeg: nullable(combined.twdDeg, 2),
+          twsKts: nullable(combined.twsKts, 2),
+          samples: binSensorVectors(acceptedVectors),
+          provenance: {
+            source: "sensor-derived",
+            method: "apparent-wind-vector",
+            confidence:
+              combined.strength >= 0.85 ? "high" : combined.strength >= 0.65 ? "medium" : "low",
+            sensorEntryIds: combined.acceptedEntryIds,
+            sensorSampleCount: acceptedVectors.length,
+            estimatedHeadingSampleCount: estimated?.sampleCount ?? 0,
+            excludedSensorEntryIds: excludedList,
+            overridden: false,
+          },
         },
+        sensorVectors,
+        estimateTwdDeg: estimated?.twdDeg ?? null,
       };
     }
   }
@@ -427,20 +443,24 @@ export function analyzeWind(
       entryId: null,
     });
     return {
-      source: "estimated",
-      twdDeg: round(estimated.twdDeg, 2),
-      twsKts: null,
-      samples,
-      provenance: {
+      wind: {
         source: "estimated",
-        method: "fleet-heading-modes",
-        confidence: estimated.confidence === "high" ? "medium" : estimated.confidence,
-        sensorEntryIds: [],
-        sensorSampleCount: 0,
-        estimatedHeadingSampleCount: estimated.sampleCount,
-        excludedSensorEntryIds: excludedList,
-        overridden: false,
+        twdDeg: round(estimated.twdDeg, 2),
+        twsKts: null,
+        samples,
+        provenance: {
+          source: "estimated",
+          method: "fleet-heading-modes",
+          confidence: estimated.confidence === "high" ? "medium" : estimated.confidence,
+          sensorEntryIds: [],
+          sensorSampleCount: 0,
+          estimatedHeadingSampleCount: estimated.sampleCount,
+          excludedSensorEntryIds: excludedList,
+          overridden: false,
+        },
       },
+      sensorVectors,
+      estimateTwdDeg: estimated.twdDeg,
     };
   }
 
@@ -450,21 +470,35 @@ export function analyzeWind(
     entryId: null,
   });
   return {
-    source: "unavailable",
-    twdDeg: null,
-    twsKts: null,
-    samples: [],
-    provenance: {
+    wind: {
       source: "unavailable",
-      method: "none",
-      confidence: "unavailable",
-      sensorEntryIds: [],
-      sensorSampleCount: 0,
-      estimatedHeadingSampleCount: 0,
-      excludedSensorEntryIds: excludedList,
-      overridden: false,
+      twdDeg: null,
+      twsKts: null,
+      samples: [],
+      provenance: {
+        source: "unavailable",
+        method: "none",
+        confidence: "unavailable",
+        sensorEntryIds: [],
+        sensorSampleCount: 0,
+        estimatedHeadingSampleCount: 0,
+        excludedSensorEntryIds: excludedList,
+        overridden: false,
+      },
     },
+    sensorVectors,
+    estimateTwdDeg: null,
   };
+}
+
+export function analyzeWind(
+  tracks: readonly ProcessedTrack[],
+  startTimeMs: number | null,
+  finishTimeMs: number | null,
+  warnings: AnalysisWarning[],
+  corrections: RaceCorrections | null = null,
+): WindAnalysis {
+  return analyzeWindDetailed(tracks, startTimeMs, finishTimeMs, warnings, corrections).wind;
 }
 
 export function windDirectionAt(wind: WindAnalysis, timeMs: number): number | null {

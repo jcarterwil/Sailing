@@ -19,7 +19,8 @@ import type {
   ProcessedTrack,
   RaceAnalysis,
 } from "@/lib/analytics/types";
-import { analyzeWind } from "@/lib/analytics/wind";
+import { analyzeWindDetailed } from "@/lib/analytics/wind";
+import { assessWindQuality } from "@/lib/analytics/wind-quality";
 
 /** Optional analysis knobs. */
 export interface AnalyzeOptions {
@@ -149,13 +150,19 @@ export function analyzeRace(
   };
   const fleetTracks = fleetSourceTracks.map(compact);
   const window = detectRaceWindow(fleetTracks, warnings, activeCorrections);
-  const wind = analyzeWind(
+  const detailed = analyzeWindDetailed(
     fleetTracks,
     window.start.timeMs,
     window.finish.timeMs,
     warnings,
     activeCorrections,
   );
+  const wind = detailed.wind;
+  const windQuality = detailed.sensorVectors.length > 0
+    ? assessWindQuality(detailed.sensorVectors, detailed.estimateTwdDeg, {
+        excludedEntryIds: activeCorrections?.excludedWindSensorEntryIds ?? [],
+      })
+    : undefined;
   const race = buildRaceStructure(fleetTracks, window, wind, warnings, activeCorrections);
   const analyzed = ordered.map((sourceTrack) => {
     const track = compact(sourceTrack);
@@ -193,6 +200,7 @@ export function analyzeRace(
     fleet: aggregateFleet(fleetEntries),
     warnings,
   };
+  if (windQuality) result.windQuality = windQuality;
   if (activeCorrections) result.appliedCorrections = activeCorrections;
   return result;
 }
