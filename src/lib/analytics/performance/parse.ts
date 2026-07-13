@@ -404,8 +404,9 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
           (entry.crossingTimeMs < row.gunTimeMs || (typeof entry.timeToLineMs === "number" && entry.timeToLineMs < 0))) {
         valid = issue(context, entryPath, "legal crossing must be at or after the gun") && valid;
       }
-    } else if (entry.crossingTimeMs !== null || entry.timeToLineMs !== null || entry.rank !== null) {
-      valid = issue(context, entryPath, "start without a legal crossing cannot retain crossing or rank") && valid;
+    } else if (entry.crossingTimeMs !== null || entry.timeToLineMs !== null || entry.rank !== null ||
+        entry.sogAtLineKts !== null) {
+      valid = issue(context, entryPath, "start without a legal crossing cannot retain crossing/rank/line SOG") && valid;
     }
   });
   valid = validateProvenance(row.provenance, context, `${path}.provenance`) && valid;

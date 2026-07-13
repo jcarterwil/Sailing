@@ -133,6 +133,16 @@ describe("parseStoredPerformance", () => {
     expect(inconsistentVmgResult.status).toBe("malformed");
     expect(inconsistentVmgResult.issues.join(" ")).toContain("dmg30M / 30 / knot conversion");
 
+    const noCrossingSpeed = cloneFixture();
+    const noCrossingStart = noCrossingSpeed.start as { entries: Array<Record<string, unknown>> };
+    noCrossingStart.entries[0].status = "no-crossing";
+    noCrossingStart.entries[0].crossingTimeMs = null;
+    noCrossingStart.entries[0].timeToLineMs = null;
+    noCrossingStart.entries[0].rank = null;
+    const noCrossingResult = parsePerformanceV1(noCrossingSpeed);
+    expect(noCrossingResult.status).toBe("malformed");
+    expect(noCrossingResult.issues.join(" ")).toContain("crossing/rank/line SOG");
+
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
     expect(() => parsePerformanceV1(cyclic)).not.toThrow();
