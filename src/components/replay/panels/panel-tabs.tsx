@@ -9,23 +9,14 @@ import {
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { Instruments } from "@/components/replay/panels/instruments";
+import { Maneuvers } from "@/components/replay/panels/maneuvers";
 import { resolveMobileSheetGesture } from "@/components/replay/panels/mobile-sheet";
 import { Performance } from "@/components/replay/panels/performance";
+import { Polars } from "@/components/replay/panels/polars";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { RaceAnalysis } from "@/lib/analytics/types";
-
-function Placeholder({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="flex h-full min-h-40 items-center justify-center p-6 text-center">
-      <div>
-        <p className="font-medium">{title}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-      </div>
-    </div>
-  );
-}
 
 export function PanelTabs({
   tracks,
@@ -176,24 +167,10 @@ export function PanelTabs({
             <Performance tracks={tracks} />
           </TabsContent>
           <TabsContent value="maneuvers" className="min-h-0 overflow-y-auto">
-            <Placeholder
-              title="Maneuver analysis"
-              detail={
-                analysis
-                  ? `${analysis.perEntry.reduce((n, e) => n + e.maneuvers.length, 0)} maneuvers detected — table UI lands in #4.`
-                  : "Run Re-analyze on the race page once all tracks are processed."
-              }
-            />
+            <Maneuvers tracks={tracks} analysis={analysis} />
           </TabsContent>
           <TabsContent value="polars" className="min-h-0 overflow-y-auto">
-            <Placeholder
-              title="Polar comparison"
-              detail={
-                analysis
-                  ? "Fleet analysis is loaded — polar chart lands in #4."
-                  : "Run Re-analyze on the race page once all tracks are processed."
-              }
-            />
+            <Polars tracks={tracks} analysis={analysis} />
           </TabsContent>
         </Tabs>
       </div>
