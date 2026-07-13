@@ -1,0 +1,47 @@
+import "server-only";
+
+import type { Json } from "@/lib/supabase/database.types";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export type SharedRace = {
+  id: string;
+  name: string;
+  venue: string | null;
+  starts_at: string | null;
+  created_at: string;
+  conditions: Json | null;
+  tags: string[];
+  share_slug: string;
+};
+
+/** Resolve a public share slug. Caller must treat a null race as notFound(). */
+export async function resolveSharedRace(slug: string): Promise<{
+  admin: ReturnType<typeof createAdminClient>;
+  race: SharedRace | null;
+}> {
+  const admin = createAdminClient();
+  const { data: race, error } = await admin
+    .from("races")
+    .select("id, name, venue, starts_at, created_at, conditions, tags, share_slug")
+    .eq("share_slug", slug)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Could not resolve share link: ${error.message}`);
+  }
+  if (!race?.share_slug) {
+    return { admin, race: null };
+  }
+  return {
+    admin,
+    race: {
+      id: race.id,
+      name: race.name,
+      venue: race.venue,
+      starts_at: race.starts_at,
+      created_at: race.created_at,
+      conditions: race.conditions,
+      tags: race.tags,
+      share_slug: race.share_slug,
+    },
+  };
+}

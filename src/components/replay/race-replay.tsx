@@ -62,6 +62,7 @@ export function RaceReplay({
   raceMeta,
   analyzeContext,
   analysis = null,
+  readOnly = false,
 }: {
   raceId: string;
   raceName: string;
@@ -72,6 +73,7 @@ export function RaceReplay({
   analyzeContext: RaceAnalyzeContext;
   /** Persisted fleet analysis from `race_analyses`, when available. */
   analysis?: RaceAnalysis | null;
+  readOnly?: boolean;
 }) {
   const [tracks, setTracks] = useState<LoadedTrack[] | null>(null);
   const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
@@ -166,6 +168,7 @@ export function RaceReplay({
             twdAt={twdAt}
             origin={origin}
             raceId={raceId}
+            readOnly={readOnly}
           />
           <WindIndicator windAt={windAt} />
         </div>

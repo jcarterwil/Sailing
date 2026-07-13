@@ -24,6 +24,9 @@ interface ReportPageClientProps {
   raceDate: string;
   isOrganizer: boolean;
   initialSnapshot: ReportSnapshot;
+  /** Public share view — no manage links, polling, or generate. */
+  readOnly?: boolean;
+  shareSlug?: string;
 }
 
 function nodeText(node: ReactNode): string {
@@ -43,13 +46,15 @@ export function ReportPageClient({
   raceDate,
   isOrganizer,
   initialSnapshot,
+  readOnly = false,
+  shareSlug,
 }: ReportPageClientProps) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [requestError, setRequestError] = useState<string | null>(null);
-  const isGenerating = snapshot.report?.status === "generating";
+  const isGenerating = !readOnly && snapshot.report?.status === "generating";
 
   useEffect(() => {
-    if (!isGenerating) return;
+    if (readOnly || !isGenerating) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -76,7 +81,7 @@ export function ReportPageClient({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [isGenerating, raceId]);
+  }, [isGenerating, raceId, readOnly]);
 
   const generate = async () => {
     const previousSnapshot = snapshot;
@@ -124,11 +129,11 @@ export function ReportPageClient({
     <main className="report-print-page mx-auto min-h-screen w-full max-w-5xl px-5 py-8 sm:px-10 lg:px-12">
       <header className="print-hidden border-b border-border/70 pb-6">
         <Link
-          href={`/races/${raceId}`}
+          href={readOnly && shareSlug ? `/s/${shareSlug}` : `/races/${raceId}`}
           className="mb-4 flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Manage race
+          {readOnly ? "Back to replay" : "Manage race"}
         </Link>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -148,7 +153,7 @@ export function ReportPageClient({
                 Print / PDF
               </Button>
             )}
-            {isOrganizer && (
+            {!readOnly && isOrganizer && (
               <Button onClick={generate} disabled={isGenerating}>
                 {isGenerating ? (
                   <LoaderCircle className="animate-spin" aria-hidden="true" />

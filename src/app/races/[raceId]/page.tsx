@@ -4,6 +4,7 @@ import { ArrowLeft, FileText, PlayCircle, Waves } from "lucide-react";
 
 import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
 import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
+import { SharePanel } from "@/app/races/[raceId]/share-panel";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,9 @@ export default async function RaceManagePage({
 
   const { data: race, error: raceError } = await supabase
     .from("races")
-    .select("id, name, venue, starts_at, created_at, organizer_id, join_code, conditions, tags")
+    .select(
+      "id, name, venue, starts_at, created_at, organizer_id, join_code, share_slug, conditions, tags",
+    )
     .eq("id", raceId)
     .maybeSingle();
   if (raceError) {
@@ -229,6 +232,14 @@ export default async function RaceManagePage({
           defaultWeatherStartsAt={new Date(weatherStartMs).toISOString()}
           defaultWeatherEndsAt={new Date(weatherEndMs).toISOString()}
         />
+
+        {canManageRace && (
+          <SharePanel
+            key={`${race.id}:share:${race.share_slug ?? "off"}`}
+            raceId={race.id}
+            initialSlug={race.share_slug}
+          />
+        )}
 
         <Card className="bg-card/70">
           <CardHeader>
