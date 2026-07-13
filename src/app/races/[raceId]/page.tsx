@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
+import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
 
@@ -55,7 +56,7 @@ export default async function RaceManagePage({
       supabase
         .from("race_entries")
         .select(
-          "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at)",
+          "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at, updated_at)",
         )
         .eq("race_id", raceId)
         .order("created_at", { ascending: true }),
@@ -122,6 +123,14 @@ export default async function RaceManagePage({
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",
   );
+  const analysisComputedAt =
+    processedEntries.length === (entries?.length ?? 0) &&
+    analysisIsFresh(
+      analysisRow?.computed_at,
+      processedEntries.map((entry) => entry.tracks!.updated_at),
+    )
+      ? analysisRow?.computed_at ?? null
+      : null;
   const trackStarts = processedEntries
     .map((entry) => entry.tracks?.started_at)
     .filter((value): value is string => !!value)
@@ -190,7 +199,7 @@ export default async function RaceManagePage({
                 raceId={race.id}
                 processedCount={processedCount}
                 entryCount={panelEntries.length}
-                lastComputedAt={analysisRow?.computed_at ?? null}
+                lastComputedAt={analysisComputedAt}
               />
             )}
             <Button asChild variant="outline">
