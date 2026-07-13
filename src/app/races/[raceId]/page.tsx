@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, PlayCircle, Waves } from "lucide-react";
+import { ArrowLeft, FileText, PlayCircle, Waves } from "lucide-react";
 
 import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
 import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
@@ -193,6 +193,12 @@ export default async function RaceManagePage({
                 lastComputedAt={analysisRow?.computed_at ?? null}
               />
             )}
+            <Button asChild variant="outline">
+              <Link href={`/races/${race.id}/report`}>
+                <FileText className="size-4" aria-hidden="true" />
+                Coach report
+              </Link>
+            </Button>
             <Button asChild disabled={processedCount === 0}>
               <Link href={`/races/${race.id}/replay`}>
                 <PlayCircle className="size-4" aria-hidden="true" />
