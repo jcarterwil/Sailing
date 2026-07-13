@@ -354,6 +354,76 @@ export type Database = {
           },
         ]
       }
+      race_videos: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          entry_id: string | null
+          has_telemetry: boolean
+          id: string
+          original_filename: string
+          race_id: string
+          raw_path: string
+          start_utc_ms: number | null
+          status: string
+          summary: Json | null
+          updated_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          entry_id?: string | null
+          has_telemetry?: boolean
+          id?: string
+          original_filename: string
+          race_id: string
+          raw_path: string
+          start_utc_ms?: number | null
+          status?: string
+          summary?: Json | null
+          updated_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          entry_id?: string | null
+          has_telemetry?: boolean
+          id?: string
+          original_filename?: string
+          race_id?: string
+          raw_path?: string
+          start_utc_ms?: number | null
+          status?: string
+          summary?: Json | null
+          updated_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_videos_entry_race_fkey"
+            columns: ["entry_id", "race_id"]
+            isOneToOne: false
+            referencedRelation: "race_entries"
+            referencedColumns: ["id", "race_id"]
+          },
+          {
+            foreignKeyName: "race_videos_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_videos_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       races: {
         Row: {
           conditions: Json | null

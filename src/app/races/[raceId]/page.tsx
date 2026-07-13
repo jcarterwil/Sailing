@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, FileText, PlayCircle, Waves } from "lucide-react";
+import { ArrowLeft, FileText, Film, PlayCircle, Waves } from "lucide-react";
 
 import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
 import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
 import { SharePanel } from "@/app/races/[raceId]/share-panel";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
+import { VideoPanel } from "@/app/races/[raceId]/video-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
+import { parseVideoUploadSummary } from "@/lib/videos/upload";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,7 @@ export default async function RaceManagePage({
     { data: canOrganize, error: organizerError },
     { data: boatMemberships, error: membershipsError },
     { data: analysisRow },
+    { data: videos, error: videosError },
   ] = await Promise.all([
       supabase
         .from("race_entries")
@@ -73,6 +76,11 @@ export default async function RaceManagePage({
         .select("computed_at")
         .eq("race_id", raceId)
         .maybeSingle(),
+      supabase
+        .from("race_videos")
+        .select("id, entry_id, uploaded_by, original_filename, status, summary, created_at")
+        .eq("race_id", raceId)
+        .order("created_at", { ascending: false }),
     ]);
   if (entriesError) {
     throw new Error(`Could not load race entries: ${entriesError.message}`);
@@ -82,6 +90,9 @@ export default async function RaceManagePage({
   }
   if (membershipsError) {
     throw new Error(`Could not load boat access: ${membershipsError.message}`);
+  }
+  if (videosError) {
+    throw new Error(`Could not load race videos: ${videosError.message}`);
   }
 
   const isOrganizer = canOrganize ?? false;
@@ -123,6 +134,18 @@ export default async function RaceManagePage({
     };
   });
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
+  const entryNameById = new Map(
+    panelEntries.map((entry) => [entry.entryId, entry.boatName]),
+  );
+  const panelVideos = (videos ?? []).map((video) => ({
+    id: video.id,
+    filename: video.original_filename,
+    status: video.status,
+    createdAt: video.created_at,
+    entryName: video.entry_id ? entryNameById.get(video.entry_id) ?? null : null,
+    canManage: isOrganizer || video.uploaded_by === user.id,
+    uploadConfirmed: parseVideoUploadSummary(video.summary)?.confirmed ?? false,
+  }));
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",
   );
@@ -259,6 +282,27 @@ export default async function RaceManagePage({
           </CardHeader>
           <CardContent>
             <UploadPanel raceId={race.id} isOrganizer={isOrganizer} entries={panelEntries} />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/70">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Film className="size-5 text-primary" aria-hidden="true" />
+                  Action-camera videos
+                </CardTitle>
+                <CardDescription>
+                  Upload a private MP4 or MOV directly to secure storage. Race members may view;
+                  only the uploader or organizer may replace or delete.
+                </CardDescription>
+              </div>
+              <Badge variant="secondary">{panelVideos.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <VideoPanel raceId={race.id} videos={panelVideos} />
           </CardContent>
         </Card>
       </section>
