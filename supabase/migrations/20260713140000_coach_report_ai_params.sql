@@ -6,7 +6,7 @@
 alter table public.ai_settings
   add column report_system_prompt text,
   add column report_max_tokens integer not null default 16000
-    check (report_max_tokens between 1024 and 32000),
+    check (report_max_tokens between 1024 and 21000),
   add column report_thinking text not null default 'off'
     check (report_thinking in ('off', 'adaptive')),
   add column report_effort text

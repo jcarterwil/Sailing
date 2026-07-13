@@ -90,7 +90,7 @@ export function ReportAiSettingsForm({
             id="report-max-tokens"
             type="number"
             min={1024}
-            max={32000}
+            max={21000}
             step={1000}
             value={maxTokens}
             onChange={(event) => setMaxTokens(event.target.value)}

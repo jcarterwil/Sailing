@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDossierCreateParams, type DossierAiConfig } from "@/lib/report/dossier-request";
+import {
+  buildDossierCreateParams,
+  DEFAULT_DOSSIER_THINKING,
+  type DossierAiConfig,
+} from "@/lib/report/dossier-request";
 import type { DossierStats } from "@/lib/report/dossier-stats";
 
 const minimalStats: DossierStats = {
@@ -89,5 +93,23 @@ describe("buildDossierCreateParams", () => {
     const params = buildDossierCreateParams({ ...baseConfig, thinking: "off", effort: "high" }, minimalStats);
 
     expect(Object.hasOwn(params, "output_config")).toBe(false);
+  });
+
+  it("defaults thinking to off, which pins the #52 fix at the source", () => {
+    expect(DEFAULT_DOSSIER_THINKING).toBe("off");
+  });
+
+  it("omits the thinking field for always-thinking models (Fable/Mythos reject disabled)", () => {
+    const fable = buildDossierCreateParams(
+      { ...baseConfig, model: "claude-fable-5", thinking: "off" },
+      minimalStats,
+    );
+    expect(Object.hasOwn(fable, "thinking")).toBe(false);
+
+    const mythos = buildDossierCreateParams(
+      { ...baseConfig, model: "claude-mythos-5", thinking: "off" },
+      minimalStats,
+    );
+    expect(Object.hasOwn(mythos, "thinking")).toBe(false);
   });
 });

@@ -46,13 +46,22 @@ export interface DossierAiConfig {
  * - `output_config.effort` is only sent when thinking is adaptive.
  */
 export function buildDossierCreateParams(config: DossierAiConfig, statsPayload: DossierStats) {
+  // Fable 5 / Mythos 5 always think and reject an explicit `{ type: "disabled" }` (400); for them
+  // "off" means omit the `thinking` field entirely. Every other current model must receive an
+  // explicit disabled config so newer models (e.g. Sonnet 5) do not run adaptive thinking by
+  // default and exhaust the max_tokens budget (#52).
+  const alwaysThinks = /^claude-(fable|mythos)/.test(config.model);
+  const thinking =
+    config.thinking === "adaptive"
+      ? ({ type: "adaptive" } as const)
+      : alwaysThinks
+        ? null
+        : ({ type: "disabled" } as const);
+
   return {
     model: config.model,
     max_tokens: config.maxTokens,
-    thinking:
-      config.thinking === "adaptive"
-        ? ({ type: "adaptive" } as const)
-        : ({ type: "disabled" } as const),
+    ...(thinking ? { thinking } : {}),
     system: config.systemPrompt,
     messages: [
       {

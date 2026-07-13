@@ -71,8 +71,10 @@ export async function updateReportAiSettings(input: {
   }
 
   const maxTokens = Math.trunc(input.maxTokens);
-  if (!Number.isFinite(maxTokens) || maxTokens < 1024 || maxTokens > 32_000) {
-    throw new Error("Max output tokens must be between 1024 and 32000.");
+  if (!Number.isFinite(maxTokens) || maxTokens < 1024 || maxTokens > 21_000) {
+    // 21000 keeps the non-streaming Anthropic request under the SDK's 10-minute
+    // timeout guard ((3_600_000 * max_tokens) / 128_000 must stay under 600_000).
+    throw new Error("Max output tokens must be between 1024 and 21000.");
   }
 
   const thinking = input.thinking === "adaptive" ? "adaptive" : "off";
