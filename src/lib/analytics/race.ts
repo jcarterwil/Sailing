@@ -6,6 +6,7 @@ import {
   LEG_UPWIND_MAX_ABS_TWA_DEG,
   TIMER_CONSENSUS_MS,
 } from "@/lib/analytics/constants";
+import type { LegRelabelCorrection, RaceCorrections } from "@/lib/analytics/corrections";
 import { bearingDeg, haversineM } from "@/lib/analytics/geo";
 import {
   columnLength,
@@ -84,12 +85,18 @@ function countdownStarts(tracks: readonly ProcessedTrack[]): number[] {
 export function detectRaceWindow(
   tracks: readonly ProcessedTrack[],
   warnings: AnalysisWarning[],
+  corrections: RaceCorrections | null = null,
 ): RaceWindow {
+  const overrideWindow = corrections?.window ?? null;
+  const overrideStart = corrections?.startOverride ?? null;
+  const suppressStartWarnings = overrideWindow != null || overrideStart != null;
+  const suppressFinishWarnings = overrideWindow != null;
+
   const starts = consensusTimestamp(timerEvents(tracks, "race_start"));
   let start: RaceBoundary;
   if (starts) {
     start = { timeMs: starts.timeMs, source: "vkx-race-timer", confidence: "high" };
-    if (starts.disagreement) {
+    if (starts.disagreement && !suppressStartWarnings) {
       warnings.push({
         code: "start-timer-disagreement",
         message: "VKX race-start events disagree by more than two seconds; the largest synchronized cluster was used.",
@@ -100,7 +107,7 @@ export function detectRaceWindow(
     const countdown = consensusTimestamp(countdownStarts(tracks));
     if (countdown) {
       start = { timeMs: countdown.timeMs, source: "vkx-countdown", confidence: "medium" };
-      if (countdown.disagreement) {
+      if (countdown.disagreement && !suppressStartWarnings) {
         warnings.push({
           code: "start-timer-disagreement",
           message: "VKX countdown events disagree by more than two seconds; the largest synchronized cluster was used.",
@@ -114,7 +121,7 @@ export function detectRaceWindow(
       start = firstTimes.length > 0
         ? { timeMs: Math.max(...firstTimes), source: "track-overlap", confidence: "low" }
         : { timeMs: null, source: "unavailable", confidence: "unavailable" };
-      if (start.timeMs !== null) {
+      if (start.timeMs !== null && !suppressStartWarnings) {
         warnings.push({
           code: "start-inferred-from-tracks",
           message: "No usable VKX timer event was present; race start was inferred from common track coverage.",
@@ -128,7 +135,7 @@ export function detectRaceWindow(
   let finish: RaceBoundary;
   if (finishes && (start.timeMs === null || finishes.timeMs > start.timeMs)) {
     finish = { timeMs: finishes.timeMs, source: "vkx-race-timer", confidence: "high" };
-    if (finishes.disagreement) {
+    if (finishes.disagreement && !suppressFinishWarnings) {
       warnings.push({
         code: "finish-timer-disagreement",
         message: "VKX race-end events disagree by more than two seconds; the largest synchronized cluster was used.",
@@ -146,13 +153,43 @@ export function detectRaceWindow(
     finish = overlapEnd !== null && (start.timeMs === null || overlapEnd > start.timeMs)
       ? { timeMs: overlapEnd, source: "track-overlap", confidence: "low" }
       : { timeMs: null, source: "unavailable", confidence: "unavailable" };
-    if (finish.timeMs !== null) {
+    if (finish.timeMs !== null && !suppressFinishWarnings) {
       warnings.push({
         code: "finish-inferred-from-tracks",
         message: "No usable VKX race-end event was present; race finish was inferred from common track coverage.",
         entryId: null,
       });
     }
+  }
+
+  if (overrideWindow) {
+    start = {
+      timeMs: overrideWindow.startMs,
+      source: "organizer-override",
+      confidence: "high",
+    };
+    finish = {
+      timeMs: overrideWindow.endMs,
+      source: "organizer-override",
+      confidence: "high",
+    };
+  }
+
+  // Start override wins over window start (and auto-detected start).
+  if (overrideStart) {
+    start = {
+      timeMs: overrideStart.timeMs,
+      source: "organizer-override",
+      confidence: "high",
+    };
+  }
+
+  if (
+    start.timeMs !== null &&
+    finish.timeMs !== null &&
+    finish.timeMs <= start.timeMs
+  ) {
+    finish = { timeMs: null, source: "unavailable", confidence: "unavailable" };
   }
 
   if (start.timeMs === null || finish.timeMs === null) {
@@ -319,14 +356,46 @@ export function inferRaceLegs(
   });
 }
 
+function legContains(leg: RaceLeg, atMs: number, isLast: boolean): boolean {
+  if (atMs < leg.startTimeMs) return false;
+  if (atMs < leg.endTimeMs) return true;
+  return isLast && atMs === leg.endTimeMs;
+}
+
+/** Apply time-anchored organizer leg relabels after inference. */
+export function applyLegRelabels(
+  legs: readonly RaceLeg[],
+  relabels: readonly LegRelabelCorrection[],
+): RaceLeg[] {
+  if (relabels.length === 0 || legs.length === 0) return [...legs];
+  return legs.map((leg, index) => {
+    const isLast = index === legs.length - 1;
+    let type = leg.type;
+    let relabeled = false;
+    for (const relabel of relabels) {
+      if (legContains(leg, relabel.atMs, isLast)) {
+        type = relabel.type;
+        relabeled = true;
+      }
+    }
+    if (!relabeled) return { ...leg };
+    return { ...leg, type, relabeled: true };
+  });
+}
+
 export function buildRaceStructure(
   tracks: readonly ProcessedTrack[],
   window: RaceWindow,
   wind: WindAnalysis,
   warnings: AnalysisWarning[],
+  corrections: RaceCorrections | null = null,
 ): RaceStructure {
   const startTimeMs = window.start.timeMs;
   const finishTimeMs = window.finish.timeMs;
+  const legs = applyLegRelabels(
+    inferRaceLegs(tracks, startTimeMs, finishTimeMs, wind, warnings),
+    corrections?.legRelabels ?? [],
+  );
   return {
     start: window.start,
     finish: window.finish,
@@ -334,6 +403,6 @@ export function buildRaceStructure(
       ? finishTimeMs - startTimeMs
       : null,
     startLine: detectStartLine(tracks, startTimeMs),
-    legs: inferRaceLegs(tracks, startTimeMs, finishTimeMs, wind, warnings),
+    legs,
   };
 }

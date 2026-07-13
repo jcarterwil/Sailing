@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  correctionsAreActive,
   EMPTY_CORRECTIONS,
   normalizeCorrections,
 } from "@/lib/analytics/corrections";
@@ -87,5 +88,23 @@ describe("normalizeCorrections", () => {
       ],
     });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe("correctionsAreActive", () => {
+  it("is false for empty corrections and true when any field is set", () => {
+    expect(correctionsAreActive(EMPTY_CORRECTIONS)).toBe(false);
+    expect(
+      correctionsAreActive(
+        normalizeCorrections({ excludedWindSensorEntryIds: ["x"] }),
+      ),
+    ).toBe(true);
+    expect(
+      correctionsAreActive(
+        normalizeCorrections({
+          manualWind: { enabled: true, twdDeg: 10, twsKts: null, twsMinKts: null, twsMaxKts: null },
+        }),
+      ),
+    ).toBe(true);
   });
 });

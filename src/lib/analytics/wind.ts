@@ -1,12 +1,14 @@
 import { angleDiff, circularMean, norm360 } from "@/lib/analytics/angles";
 import {
   ANALYSIS_SAMPLE_MS,
+  WIND_BOAT_OUTLIER_DEG,
   WIND_ESTIMATION_WINDOW_MS,
   WIND_HEADING_BIN_DEG,
   WIND_MIN_SOG_KTS,
   WIND_OUTPUT_BIN_MS,
   WIND_SENSOR_MATCH_MS,
 } from "@/lib/analytics/constants";
+import type { RaceCorrections } from "@/lib/analytics/corrections";
 import {
   columnLength,
   epochAt,
@@ -40,16 +42,92 @@ interface SensorVector {
   entryId: string;
 }
 
+/** Per-boat sensor-wind summary used for equal-weight fleet combine. */
+export interface BoatWindSummary {
+  entryId: string;
+  twdDeg: number;
+  twsKts: number;
+  strength: number;
+  sampleCount: number;
+}
+
+export interface CombinedBoatWind {
+  twdDeg: number;
+  twsKts: number;
+  strength: number;
+  boats: BoatWindSummary[];
+  acceptedEntryIds: string[];
+  rejectedEntryIds: string[];
+}
+
+/** Group sensor vectors by entry and average each boat once. */
+export function summarizePerBoat(vectors: readonly SensorVector[]): BoatWindSummary[] {
+  const byEntry = new Map<string, SensorVector[]>();
+  for (const vector of vectors) {
+    const list = byEntry.get(vector.entryId);
+    if (list) list.push(vector);
+    else byEntry.set(vector.entryId, [vector]);
+  }
+  return [...byEntry.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([entryId, values]) => {
+      const directions = values.map((value) => value.twdDeg);
+      return {
+        entryId,
+        twdDeg: circularMean(directions),
+        twsKts: mean(values.map((value) => value.twsKts)),
+        strength: resultantStrength(directions),
+        sampleCount: values.length,
+      };
+    })
+    .filter((boat) => finite(boat.twdDeg) && finite(boat.twsKts) && boat.sampleCount > 0);
+}
+
+/**
+ * Equal-weight consensus across boats, then drop boats > WIND_BOAT_OUTLIER_DEG
+ * from that consensus and recombine. Falls back to the full set if every boat
+ * would be rejected.
+ */
+export function combineBoats(boats: readonly BoatWindSummary[]): CombinedBoatWind | null {
+  if (boats.length === 0) return null;
+  const consensusTwd = circularMean(boats.map((boat) => boat.twdDeg));
+  if (!finite(consensusTwd)) return null;
+
+  let accepted = boats.filter(
+    (boat) => Math.abs(angleDiff(boat.twdDeg, consensusTwd)) <= WIND_BOAT_OUTLIER_DEG,
+  );
+  if (accepted.length === 0) accepted = [...boats];
+
+  const twdDeg = circularMean(accepted.map((boat) => boat.twdDeg));
+  const twsKts = mean(accepted.map((boat) => boat.twsKts));
+  if (!finite(twdDeg) || !finite(twsKts)) return null;
+
+  const acceptedIds = new Set(accepted.map((boat) => boat.entryId));
+  return {
+    twdDeg,
+    twsKts,
+    strength: resultantStrength(accepted.map((boat) => boat.twdDeg)),
+    boats: [...boats],
+    acceptedEntryIds: [...acceptedIds].sort(),
+    rejectedEntryIds: boats
+      .map((boat) => boat.entryId)
+      .filter((entryId) => !acceptedIds.has(entryId))
+      .sort(),
+  };
+}
+
 function estimateDirectionFromFleet(
   tracks: readonly ProcessedTrack[],
   startTimeMs: number | null,
   finishTimeMs: number | null,
+  excludedEntryIds: ReadonlySet<string> = new Set(),
 ): EstimatedDirection | null {
   const headings: number[] = [];
   const binCount = Math.round(360 / WIND_HEADING_BIN_DEG);
   const histogram = new Array<number>(binCount).fill(0);
 
   for (const track of tracks) {
+    if (excludedEntryIds.has(track.entryId)) continue;
     const length = columnLength(track);
     if (length === 0) continue;
     let first = 0;
@@ -165,6 +243,7 @@ function collectSensorVectors(
   estimatedTwdDeg: number | null,
   startTimeMs: number | null,
   finishTimeMs: number | null,
+  excludedEntryIds: ReadonlySet<string> = new Set(),
 ): { vectors: SensorVector[]; entryIds: string[]; strength: number } | null {
   const conventions = ["relative-plus", "relative-minus", "absolute"] as const;
   let best: { vectors: SensorVector[]; strength: number; score: number } | null = null;
@@ -172,6 +251,7 @@ function collectSensorVectors(
   for (const convention of conventions) {
     const vectors: SensorVector[] = [];
     for (const track of tracks) {
+      if (excludedEntryIds.has(track.entryId)) continue;
       const length = columnLength(track);
       for (const sample of track.extras?.windSamples ?? []) {
         if (!finite(sample.t) || !finite(sample.awaDeg) || !finite(sample.awsMs)) continue;
@@ -194,16 +274,22 @@ function collectSensorVectors(
       }
     }
     if (vectors.length < 10) continue;
-    const directions = vectors.map((vector) => vector.twdDeg);
-    const strength = resultantStrength(directions);
-    const direction = circularMean(directions);
+    const boats = summarizePerBoat(vectors);
+    if (boats.length === 0) continue;
+    // Score conventions by per-boat internal consistency, not cross-boat
+    // agreement — an outlier sensor must not push us onto a wrong AWA
+    // convention that merely collapses fleet disagreement.
+    const strength = mean(boats.map((boat) => boat.strength));
+    const direction = circularMean(boats.map((boat) => boat.twdDeg));
     const agreement = estimatedTwdDeg === null
       ? 0
       : 1 - Math.min(180, Math.abs(angleDiff(direction, estimatedTwdDeg))) / 180;
     // Consistency determines the convention; fleet-heading agreement only
     // breaks close ties because GPS inference is deliberately lower fidelity.
+    // Prefer the earlier convention on floating-point ties (resultant strength
+    // of identical samples is not always bitwise-equal across conventions).
     const score = strength + agreement * 0.05;
-    if (!best || score > best.score) best = { vectors, strength, score };
+    if (!best || score > best.score + 1e-12) best = { vectors, strength, score };
   }
 
   if (!best || best.strength < 0.4) return null;
@@ -221,12 +307,16 @@ function binSensorVectors(vectors: readonly SensorVector[]): WindPoint[] {
   }
   return [...bins.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([timeMs, values]) => ({
-      timeMs,
-      twdDeg: round(circularMean(values.map((value) => value.twdDeg)), 2),
-      twsKts: nullable(mean(values.map((value) => value.twsKts)), 2),
-      source: "sensor-derived" as const,
-    }));
+    .flatMap(([timeMs, values]) => {
+      const combined = combineBoats(summarizePerBoat(values));
+      if (!combined) return [];
+      return [{
+        timeMs,
+        twdDeg: round(combined.twdDeg, 2),
+        twsKts: nullable(combined.twsKts, 2),
+        source: "sensor-derived" as const,
+      }];
+    });
 }
 
 export function analyzeWind(
@@ -234,38 +324,82 @@ export function analyzeWind(
   startTimeMs: number | null,
   finishTimeMs: number | null,
   warnings: AnalysisWarning[],
+  corrections: RaceCorrections | null = null,
 ): WindAnalysis {
-  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs);
+  const excluded = new Set(corrections?.excludedWindSensorEntryIds ?? []);
+  const excludedList = [...excluded].sort();
+
+  if (corrections?.manualWind?.enabled) {
+    const twdDeg = round(norm360(corrections.manualWind.twdDeg), 2);
+    const twsKts = nullable(
+      corrections.manualWind.twsKts != null && Number.isFinite(corrections.manualWind.twsKts)
+        ? corrections.manualWind.twsKts
+        : NaN,
+      2,
+    );
+    const samples: WindPoint[] = [];
+    if (startTimeMs !== null) {
+      samples.push({ timeMs: startTimeMs, twdDeg, twsKts, source: "manual" });
+      if (finishTimeMs !== null && finishTimeMs > startTimeMs) {
+        samples.push({ timeMs: finishTimeMs, twdDeg, twsKts, source: "manual" });
+      }
+    }
+    return {
+      source: "manual",
+      twdDeg,
+      twsKts,
+      samples,
+      provenance: {
+        source: "manual",
+        method: "organizer-manual",
+        confidence: "high",
+        sensorEntryIds: [],
+        sensorSampleCount: 0,
+        estimatedHeadingSampleCount: 0,
+        excludedSensorEntryIds: excludedList,
+        overridden: true,
+      },
+    };
+  }
+
+  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs, excluded);
   const sensor = collectSensorVectors(
     tracks,
     estimated?.twdDeg ?? null,
     startTimeMs,
     finishTimeMs,
+    excluded,
   );
 
   if (sensor) {
-    const twdDeg = circularMean(sensor.vectors.map((vector) => vector.twdDeg));
-    const twsKts = mean(sensor.vectors.map((vector) => vector.twsKts));
-    return {
-      source: "sensor-derived",
-      twdDeg: nullable(twdDeg, 2),
-      twsKts: nullable(twsKts, 2),
-      samples: binSensorVectors(sensor.vectors),
-      provenance: {
+    const combined = combineBoats(summarizePerBoat(sensor.vectors));
+    if (combined) {
+      const accepted = new Set(combined.acceptedEntryIds);
+      const acceptedVectors = sensor.vectors.filter((vector) => accepted.has(vector.entryId));
+      return {
         source: "sensor-derived",
-        method: "apparent-wind-vector",
-        confidence: sensor.strength >= 0.85 ? "high" : sensor.strength >= 0.65 ? "medium" : "low",
-        sensorEntryIds: sensor.entryIds,
-        sensorSampleCount: sensor.vectors.length,
-        estimatedHeadingSampleCount: estimated?.sampleCount ?? 0,
-      },
-    };
+        twdDeg: nullable(combined.twdDeg, 2),
+        twsKts: nullable(combined.twsKts, 2),
+        samples: binSensorVectors(acceptedVectors),
+        provenance: {
+          source: "sensor-derived",
+          method: "apparent-wind-vector",
+          confidence:
+            combined.strength >= 0.85 ? "high" : combined.strength >= 0.65 ? "medium" : "low",
+          sensorEntryIds: combined.acceptedEntryIds,
+          sensorSampleCount: acceptedVectors.length,
+          estimatedHeadingSampleCount: estimated?.sampleCount ?? 0,
+          excludedSensorEntryIds: excludedList,
+          overridden: false,
+        },
+      };
+    }
   }
 
-  const sensorCount = tracks.reduce(
-    (count, track) => count + (track.extras?.windSamples.length ?? 0),
-    0,
-  );
+  const sensorCount = tracks.reduce((count, track) => {
+    if (excluded.has(track.entryId)) return count;
+    return count + (track.extras?.windSamples.length ?? 0);
+  }, 0);
   if (sensorCount > 0) {
     warnings.push({
       code: "sensor-wind-unusable",
@@ -304,6 +438,8 @@ export function analyzeWind(
         sensorEntryIds: [],
         sensorSampleCount: 0,
         estimatedHeadingSampleCount: estimated.sampleCount,
+        excludedSensorEntryIds: excludedList,
+        overridden: false,
       },
     };
   }
@@ -325,6 +461,8 @@ export function analyzeWind(
       sensorEntryIds: [],
       sensorSampleCount: 0,
       estimatedHeadingSampleCount: 0,
+      excludedSensorEntryIds: excludedList,
+      overridden: false,
     },
   };
 }
