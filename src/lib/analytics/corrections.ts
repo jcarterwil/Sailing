@@ -167,3 +167,26 @@ export function correctionsAreActive(corrections: RaceCorrections): boolean {
     corrections.legRelabels.length > 0
   );
 }
+
+function clampMs(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Clamp window / start override times into a known track span. */
+export function clampCorrectionsToTrackSpan(
+  corrections: RaceCorrections,
+  span: { startMs: number; endMs: number },
+): RaceCorrections {
+  const next = normalizeCorrections(corrections);
+  if (next.window) {
+    const startMs = clampMs(next.window.startMs, span.startMs, span.endMs);
+    const endMs = clampMs(next.window.endMs, span.startMs, span.endMs);
+    next.window = startMs < endMs ? { startMs, endMs } : null;
+  }
+  if (next.startOverride) {
+    next.startOverride = {
+      timeMs: clampMs(next.startOverride.timeMs, span.startMs, span.endMs),
+    };
+  }
+  return normalizeCorrections(next);
+}

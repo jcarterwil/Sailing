@@ -21,6 +21,32 @@ describe("analysisIsFresh", () => {
     ).toBe(false);
   });
 
+  it("rejects an analysis older than organizer corrections", () => {
+    expect(
+      analysisIsFresh(
+        "2026-07-12T22:10:00.000Z",
+        ["2026-07-12T22:09:00.000Z"],
+        "2026-07-12T22:10:00.001Z",
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts when corrections were applied at or before compute time", () => {
+    expect(
+      analysisIsFresh(
+        "2026-07-12T22:10:00.000Z",
+        ["2026-07-12T22:09:00.000Z"],
+        "2026-07-12T22:10:00.000Z",
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores a missing corrections timestamp", () => {
+    expect(
+      analysisIsFresh("2026-07-12T22:10:00.000Z", ["2026-07-12T22:09:00.000Z"], null),
+    ).toBe(true);
+  });
+
   it.each([
     [null, ["2026-07-12T22:10:00.000Z"]],
     ["invalid", ["2026-07-12T22:10:00.000Z"]],

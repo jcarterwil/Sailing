@@ -46,7 +46,7 @@ export default async function SharedReplayPage({
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags);
 
-  const [{ data: entries, error: entriesError }, { data: analysisRow }] =
+  const [{ data: entries, error: entriesError }, { data: analysisRow }, { data: correctionsRow }] =
     await Promise.all([
       admin
         .from("race_entries")
@@ -58,6 +58,11 @@ export default async function SharedReplayPage({
       admin
         .from("race_analyses")
         .select("analysis, computed_at")
+        .eq("race_id", race.id)
+        .maybeSingle(),
+      admin
+        .from("race_corrections")
+        .select("updated_at")
         .eq("race_id", race.id)
         .maybeSingle(),
     ]);
@@ -115,6 +120,7 @@ export default async function SharedReplayPage({
   const replayAnalysis = analysisIsFresh(
     analysisRow?.computed_at,
     processed.map((entry) => entry.tracks!.updated_at),
+    correctionsRow?.updated_at,
   )
     ? analysisForProcessedEntries(
         analysis,
