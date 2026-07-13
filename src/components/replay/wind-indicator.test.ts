@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { speedText } from "@/components/replay/wind-indicator";
 import type { ReplayWindReading } from "@/components/replay/wind-resolution";
+import { speedText } from "@/components/replay/wind-text";
 
 function manualReading(
   twsRangeKts: ReplayWindReading["twsRangeKts"],
