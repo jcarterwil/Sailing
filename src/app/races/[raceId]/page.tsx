@@ -58,6 +58,7 @@ export default async function RaceManagePage({
     { data: boatMemberships, error: membershipsError },
     { data: analysisRow },
     { data: videos, error: videosError },
+    { data: correctionsRow },
   ] = await Promise.all([
       supabase
         .from("race_entries")
@@ -81,6 +82,11 @@ export default async function RaceManagePage({
         .select("id, entry_id, uploaded_by, original_filename, status, summary, created_at")
         .eq("race_id", raceId)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("race_corrections")
+        .select("updated_at")
+        .eq("race_id", raceId)
+        .maybeSingle(),
     ]);
   if (entriesError) {
     throw new Error(`Could not load race entries: ${entriesError.message}`);
@@ -154,6 +160,7 @@ export default async function RaceManagePage({
     analysisIsFresh(
       analysisRow?.computed_at,
       processedEntries.map((entry) => entry.tracks!.updated_at),
+      correctionsRow?.updated_at,
     )
       ? analysisRow?.computed_at ?? null
       : null;

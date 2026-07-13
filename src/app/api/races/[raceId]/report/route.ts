@@ -91,7 +91,8 @@ export async function POST(
   }
 
   const admin = createAdminClient();
-  const [activeResult, countResult, analysisResult, entriesResult] = await Promise.all([
+  const [activeResult, countResult, analysisResult, entriesResult, correctionsResult] =
+    await Promise.all([
     admin
       .from("race_reports")
       .select("id, created_at")
@@ -113,12 +114,18 @@ export async function POST(
       .from("race_entries")
       .select("id, boats(name), tracks(status, updated_at)")
       .eq("race_id", raceId),
+    admin
+      .from("race_corrections")
+      .select("updated_at")
+      .eq("race_id", raceId)
+      .maybeSingle(),
   ]);
   if (
     activeResult.error ||
     countResult.error ||
     analysisResult.error ||
-    entriesResult.error
+    entriesResult.error ||
+    correctionsResult.error
   ) {
     return json({ error: "Could not prepare report generation." }, 500);
   }
@@ -152,6 +159,7 @@ export async function POST(
       currentEntries
         .filter((entry) => entry.tracks?.status === "processed")
         .map((entry) => entry.tracks!.updated_at),
+      correctionsResult.data?.updated_at,
     )
   ) {
     return json(

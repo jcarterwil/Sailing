@@ -214,18 +214,21 @@ export type Database = {
         Row: {
           analysis: Json
           computed_at: string
+          corrections_applied_at: string | null
           race_id: string
           version: number
         }
         Insert: {
           analysis: Json
           computed_at?: string
+          corrections_applied_at?: string | null
           race_id: string
           version?: number
         }
         Update: {
           analysis?: Json
           computed_at?: string
+          corrections_applied_at?: string | null
           race_id?: string
           version?: number
         }
@@ -235,6 +238,45 @@ export type Database = {
             columns: ["race_id"]
             isOneToOne: true
             referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_corrections: {
+        Row: {
+          corrections: Json
+          race_id: string
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          corrections?: Json
+          race_id: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          corrections?: Json
+          race_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_corrections_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: true
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_corrections_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

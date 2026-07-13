@@ -1,6 +1,10 @@
 import { gunzipSync } from "node:zlib";
 
 import { analyzeRace } from "@/lib/analytics/analyze";
+import {
+  normalizeCorrections,
+  type RaceCorrections,
+} from "@/lib/analytics/corrections";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
@@ -19,19 +23,46 @@ export type AnalyzeRaceResult = {
   analysis: RaceAnalysis;
   computedAt: string;
   trackCount: number;
+  correctionsUpdatedAt: string | null;
 };
 
+export type LoadedRaceCorrections = {
+  corrections: RaceCorrections;
+  updatedAt: string | null;
+};
+
+/** Load persisted organizer corrections (empty document when none). */
+export async function loadRaceCorrections(raceId: string): Promise<LoadedRaceCorrections> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("race_corrections")
+    .select("corrections, updated_at")
+    .eq("race_id", raceId)
+    .maybeSingle();
+  if (error) {
+    throw new AnalyzeRaceError(`Could not load race corrections: ${error.message}`);
+  }
+  return {
+    corrections: normalizeCorrections(data?.corrections ?? null),
+    updatedAt: data?.updated_at ?? null,
+  };
+}
+
 /**
- * Download all processed tracks for a race, run `analyzeRace`, upsert into
- * `race_analyses`. Uses the service-role client — callers must authorize.
+ * Download all processed tracks for a race, run `analyzeRace` with persisted
+ * corrections, upsert into `race_analyses`. Uses the service-role client —
+ * callers must authorize.
  */
 export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRaceResult> {
   const admin = createAdminClient();
-  const { data: entries, error: entriesError } = await admin
-    .from("race_entries")
-    .select("id, tracks(processed_path, status, updated_at)")
-    .eq("race_id", raceId)
-    .order("created_at", { ascending: true });
+  const [{ data: entries, error: entriesError }, loadedCorrections] = await Promise.all([
+    admin
+      .from("race_entries")
+      .select("id, tracks(processed_path, status, updated_at)")
+      .eq("race_id", raceId)
+      .order("created_at", { ascending: true }),
+    loadRaceCorrections(raceId),
+  ]);
   if (entriesError) {
     throw new AnalyzeRaceError(`Could not load race entries: ${entriesError.message}`);
   }
@@ -61,6 +92,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
       `${entry.tracks!.processed_path}:${entry.tracks!.updated_at}`,
     ]),
   );
+  const correctionsUpdatedAt = loadedCorrections.updatedAt;
 
   const tracks: ProcessedTrack[] = [];
   for (const entry of ready) {
@@ -83,11 +115,15 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     tracks.push(track);
   }
 
-  const analysis = analyzeRace(tracks);
-  const { data: currentEntries, error: currentEntriesError } = await admin
-    .from("race_entries")
-    .select("id, tracks(processed_path, status, updated_at)")
-    .eq("race_id", raceId);
+  const analysis = analyzeRace(tracks, { corrections: loadedCorrections.corrections });
+  const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
+    await Promise.all([
+      admin
+        .from("race_entries")
+        .select("id, tracks(processed_path, status, updated_at)")
+        .eq("race_id", raceId),
+      loadRaceCorrections(raceId),
+    ]);
   if (currentEntriesError) {
     throw new AnalyzeRaceError(
       `Could not verify analysis inputs: ${currentEntriesError.message}`,
@@ -101,9 +137,9 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
         inputVersions.get(entry.id) ===
           `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
     );
-  if (!inputsUnchanged) {
+  if (!inputsUnchanged || currentCorrections.updatedAt !== correctionsUpdatedAt) {
     throw new AnalyzeRaceError(
-      "Processed tracks changed while analysis was running. Retry analysis.",
+      "Processed tracks or corrections changed while analysis was running. Retry analysis.",
       409,
     );
   }
@@ -113,6 +149,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
       version: 1,
       analysis: analysis as unknown as Json,
       computed_at: computedAt,
+      corrections_applied_at: correctionsUpdatedAt,
     },
     { onConflict: "race_id" },
   );
@@ -120,7 +157,12 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     throw new AnalyzeRaceError(`Could not store analysis: ${upsertError.message}`);
   }
 
-  return { analysis, computedAt, trackCount: tracks.length };
+  return {
+    analysis,
+    computedAt,
+    trackCount: tracks.length,
+    correctionsUpdatedAt,
+  };
 }
 
 /** True when every race entry has a processed track with a storage path. */
