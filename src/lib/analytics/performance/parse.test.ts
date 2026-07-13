@@ -224,6 +224,23 @@ describe("parseStoredPerformance", () => {
     expect(unknownParsed.issues.join(" ")).toContain("canonical fleet");
   });
 
+  it("keeps metric rank state consistent with elapsed duration", () => {
+    const unavailable = cloneFixture();
+    const metrics = unavailable.wholeRace as Array<Record<string, unknown>>;
+    metrics[0].elapsedMs = null;
+    const unavailableParsed = parsePerformanceV1(unavailable);
+    expect(unavailableParsed.status).toBe("malformed");
+    expect(unavailableParsed.issues.join(" ")).toContain("null rank/delta");
+
+    const unranked = cloneFixture();
+    const unrankedMetrics = unranked.wholeRace as Array<Record<string, unknown>>;
+    unrankedMetrics[0].rank = null;
+    unrankedMetrics[0].deltaMs = null;
+    const unrankedParsed = parsePerformanceV1(unranked);
+    expect(unrankedParsed.status).toBe("malformed");
+    expect(unrankedParsed.issues.join(" ")).toContain("requires rank and delta");
+  });
+
   it("requires a reason exactly when a distribution is unavailable", () => {
     const insufficientAvailable = cloneFixture();
     insufficientAvailable.distributions = [validDistribution({
@@ -240,6 +257,12 @@ describe("parseStoredPerformance", () => {
       totalEligibleSeconds: PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
     })];
     expect(parsePerformanceV1(thresholdAvailable).status).toBe("valid");
+
+    const missingQuartile = cloneFixture();
+    missingQuartile.distributions = [validDistribution({ medianKts: null })];
+    const missingQuartileParsed = parsePerformanceV1(missingQuartile);
+    expect(missingQuartileParsed.status).toBe("malformed");
+    expect(missingQuartileParsed.issues.join(" ")).toContain("finite quartiles");
 
     const noReason = cloneFixture();
     noReason.distributions = [validDistribution({

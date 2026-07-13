@@ -189,7 +189,8 @@ Start rank is independent of race rank.
 |---|---|---|
 | `entryId` | stable current entry ID | never display-name identity |
 | `elapsedMs` | scope end - start | null without both boundaries |
-| `rank`, `tied`, `deltaMs` | scope rules above | null when duration unavailable |
+| `rank`, `deltaMs` | scope rules above | null when duration unavailable |
+| `tied` | whether the entry shares its non-null rank | false when duration/rank unavailable |
 | `avgSogKts` | duration-weighted mean valid 1 Hz SOG | null with no eligible duration |
 | `maxSogKts` | maximum eligible unrounded SOG | null with no eligible sample |
 | `sailedDistanceM` | sum eligible consecutive geodesic segments | excludes gaps/invalid fixes |

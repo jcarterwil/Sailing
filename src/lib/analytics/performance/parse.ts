@@ -388,6 +388,12 @@ function validateMetrics(value: unknown, context: ValidationContext, path: strin
   valid = booleanAt(row.partial, context, `${path}.partial`) && valid;
   valid = validateWarningCodes(row.warningCodes, context, `${path}.warningCodes`) && valid;
   valid = validateProvenance(row.provenance, context, `${path}.provenance`) && valid;
+  if (row.elapsedMs === null && (row.rank !== null || row.deltaMs !== null || row.tied !== false)) {
+    valid = issue(context, path, "unavailable duration requires null rank/delta and tied=false") && valid;
+  }
+  if (typeof row.elapsedMs === "number" && (row.rank === null || row.deltaMs === null)) {
+    valid = issue(context, path, "available duration requires rank and delta") && valid;
+  }
   return valid;
 }
 
@@ -470,6 +476,10 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   }
   if (row.available === true && row.unavailableReason !== null) {
     valid = issue(context, `${path}.unavailableReason`, "available distribution requires a null reason") && valid;
+  }
+  if (row.available === true &&
+      (typeof row.q1Kts !== "number" || typeof row.medianKts !== "number" || typeof row.q3Kts !== "number")) {
+    valid = issue(context, path, "available distribution requires finite quartiles") && valid;
   }
   if (row.available === true && typeof row.totalEligibleSeconds === "number" &&
       row.totalEligibleSeconds < PERFORMANCE_MIN_DISTRIBUTION_SECONDS) {
