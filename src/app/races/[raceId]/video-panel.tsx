@@ -83,6 +83,7 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
   async function uploadFile(file: File, replacingId: string | null) {
     setUpload({ label: file.name, phase: "uploading", percent: 0 });
     let grantedVideoId: string | null = null;
+    let putCompleted = false;
     try {
       const validated = validateVideoUpload({
         filename: file.name,
@@ -103,6 +104,7 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
             current ? { ...current, phase: "uploading", percent } : current,
           ),
       });
+      putCompleted = true;
       setUpload((current) =>
         current ? { ...current, phase: "confirming", percent: 100 } : current,
       );
@@ -119,7 +121,9 @@ export function VideoPanel({ raceId, videos }: { raceId: string; videos: VideoRo
       }
       setUpload({ label: file.name, phase: "done", percent: 100, detail });
     } catch (error) {
-      if (grantedVideoId) {
+      // Only mark upload_failed when the PUT itself failed. Confirmation
+      // failures leave the object in place so the user can retry verify.
+      if (grantedVideoId && !putCompleted) {
         try {
           await markVideoUploadError(grantedVideoId);
         } catch {

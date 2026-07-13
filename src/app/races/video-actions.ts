@@ -292,7 +292,7 @@ export async function deleteRaceVideo(videoId: string): Promise<void> {
   const admin = createAdminClient();
 
   try {
-    const result = await deleteVideoWithCompensation({
+    await deleteVideoWithCompensation({
       deleteMetadata: async () => {
         const { data, error } = await admin
           .from("race_videos")
@@ -315,7 +315,7 @@ export async function deleteRaceVideo(videoId: string): Promise<void> {
         if (error) throw error;
       },
     });
-    if (result === "missing") throw new Error("Video was already deleted.");
+    // "missing" means a concurrent delete already removed the row — treat as success.
   } catch (error) {
     console.error("Could not delete video consistently:", error);
     throw new Error("Could not delete the video. No confirmed deletion was recorded.");
