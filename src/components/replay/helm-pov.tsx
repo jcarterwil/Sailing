@@ -132,7 +132,11 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
           const largeSeek =
             Number.isFinite(lastReplayMs) && Math.abs(state.timeMs - lastReplayMs) > SEEK_SNAP_MS;
 
-          if (!attitude || largeSeek) {
+          // With no rAF loop, paused scrubs fire only sporadic renders with a
+          // tiny wall-clock dt, so the spring can't converge and the helm view
+          // goes stale. Snap attitude to the target whenever paused (as well as
+          // on the first frame and on large seeks).
+          if (!attitude || largeSeek || !state.playing) {
             attitude = resetPovAttitude(target);
           } else {
             attitude = advancePovAttitude(
@@ -151,10 +155,13 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
           for (const track of tracks) {
             const boat = rivals.get(track.entryId);
             if (!boat) continue;
-            boat.visible = track.entryId !== selected.entryId;
-            if (!boat.visible) continue;
 
             const sample = sampleAt(track, state.timeMs);
+            // Hide the helm boat itself, and hide any rival outside its own track
+            // interval so no phantom sits at a clamped first/last fix.
+            boat.visible = track.entryId !== selected.entryId && sample.inTrack;
+            if (!boat.visible) continue;
+
             const offset = localOffsetMeters(selectedSample, sample);
             boat.position.set(offset.east, 0.35, -offset.north);
             boat.rotation.y = -finiteHeading(sample, 0) * DEG_TO_RAD;

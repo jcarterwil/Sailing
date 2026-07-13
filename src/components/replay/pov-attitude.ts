@@ -21,7 +21,10 @@ function finiteOr(value: number, fallback: number): number {
 
 /** The target angle nearest the current unwrapped angle. */
 export function nearestEquivalentAngle(targetDeg: number, currentDeg: number): number {
-  const delta = ((targetDeg - currentDeg + 540) % 360) - 180;
+  // Floored modulo keeps the delta in [-180, 180) even when `currentDeg` is an
+  // unwrapped heading many turns away (repeated spins); a plain `%` would return
+  // a negative remainder and snap the camera a full turn backward at the wrap.
+  const delta = (((targetDeg - currentDeg + 180) % 360) + 360) % 360 - 180;
   return currentDeg + delta;
 }
 

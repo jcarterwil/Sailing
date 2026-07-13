@@ -13,6 +13,13 @@ describe("POV attitude damping", () => {
     expect(nearestEquivalentAngle(359, 1)).toBe(-1);
   });
 
+  it("stays continuous for unwrapped headings many turns away (spins)", () => {
+    // 719 is nearest 720, not 360 — a plain `%` would snap a full turn back.
+    expect(nearestEquivalentAngle(0, 719)).toBe(720);
+    expect(nearestEquivalentAngle(0, -719)).toBe(-720);
+    expect(nearestEquivalentAngle(10, 1085)).toBe(1090);
+  });
+
   it("is frame-rate independent for a fixed target", () => {
     let at30 = { value: 0, velocity: 0 };
     let at60 = { value: 0, velocity: 0 };
