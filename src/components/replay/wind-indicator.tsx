@@ -8,6 +8,7 @@ import type {
   ReplayWindReading,
   ReplayWindResolver,
 } from "@/components/replay/wind-resolution";
+import { speedText } from "@/components/replay/wind-text";
 
 const UPDATE_INTERVAL_MS = 100;
 
@@ -52,16 +53,6 @@ function useWindReading(windAt: ReplayWindResolver | null): ReplayWindReading | 
 
 function directionText(directionDeg: number): string {
   return `${String(Math.round(directionDeg) % 360).padStart(3, "0")}°`;
-}
-
-function speedText(reading: ReplayWindReading): string {
-  if (reading.twsKts != null) return `${reading.twsKts.toFixed(1)} kt`;
-  if (reading.twsRangeKts) {
-    const [minimum, maximum] = reading.twsRangeKts;
-    if (minimum === maximum) return `${minimum.toFixed(1)} kt`;
-    return `${minimum.toFixed(1)}–${maximum.toFixed(1)} kt`;
-  }
-  return "—";
 }
 
 function sourceText(reading: ReplayWindReading): string {

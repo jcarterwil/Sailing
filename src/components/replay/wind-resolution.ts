@@ -8,7 +8,7 @@ export type ReplayWindSource = "sensor" | "estimated" | "manual";
 export interface ReplayWindReading {
   twdDeg: number;
   twsKts: number | null;
-  twsRangeKts: readonly [number, number] | null;
+  twsRangeKts: readonly [number | null, number | null] | null;
   source: ReplayWindSource;
   confidence: Exclude<WindProvenance["confidence"], "unavailable"> | null;
 }
@@ -19,21 +19,21 @@ function manualReading(raceMeta: RaceMeta): ReplayWindReading | null {
   const direction = raceMeta.conditions?.windDirDeg;
   if (direction == null || !Number.isFinite(direction)) return null;
 
-  const speeds = [
-    raceMeta.conditions?.windMinKts,
-    raceMeta.conditions?.windMaxKts,
-  ].filter((speed): speed is number =>
-    speed != null && Number.isFinite(speed) && speed >= 0,
-  );
-  const twsRangeKts = speeds.length === 0
+  const validSpeed = (speed: number | null | undefined) =>
+    speed != null && Number.isFinite(speed) && speed >= 0 ? speed : null;
+  const minimum = validSpeed(raceMeta.conditions?.windMinKts);
+  const maximum = validSpeed(raceMeta.conditions?.windMaxKts);
+  const twsRangeKts = minimum == null && maximum == null
     ? null
-    : ([Math.min(...speeds), Math.max(...speeds)] as const);
+    : minimum != null && maximum != null
+      ? ([Math.min(minimum, maximum), Math.max(minimum, maximum)] as const)
+      : ([minimum, maximum] as const);
 
   return {
     twdDeg: norm360(direction),
     twsKts:
-      twsRangeKts && twsRangeKts[0] === twsRangeKts[1]
-        ? twsRangeKts[0]
+      minimum != null && maximum != null && minimum === maximum
+        ? minimum
         : null,
     twsRangeKts,
     source: "manual",
