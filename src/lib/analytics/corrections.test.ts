@@ -46,6 +46,26 @@ describe("normalizeCorrections", () => {
     });
   });
 
+  it("flips inverted manual TWS bounds", () => {
+    expect(
+      normalizeCorrections({
+        manualWind: {
+          enabled: true,
+          twdDeg: 270,
+          twsKts: null,
+          twsMinKts: 14,
+          twsMaxKts: 8,
+        },
+      }).manualWind,
+    ).toEqual({
+      enabled: true,
+      twdDeg: 270,
+      twsKts: null,
+      twsMinKts: 8,
+      twsMaxKts: 14,
+    });
+  });
+
   it("orders window endpoints and drops zero-length windows", () => {
     expect(
       normalizeCorrections({ window: { startMs: 2000.7, endMs: 1000.2 } }).window,
@@ -121,5 +141,17 @@ describe("clampCorrectionsToTrackSpan", () => {
     );
     expect(clamped.window).toEqual({ startMs: 1_000, endMs: 5_000 });
     expect(clamped.startOverride).toEqual({ timeMs: 5_000 });
+  });
+
+  it("keeps start override inside a trimmed window", () => {
+    const clamped = clampCorrectionsToTrackSpan(
+      normalizeCorrections({
+        window: { startMs: 2_000, endMs: 4_000 },
+        startOverride: { timeMs: 4_500 },
+      }),
+      { startMs: 1_000, endMs: 5_000 },
+    );
+    expect(clamped.window).toEqual({ startMs: 2_000, endMs: 4_000 });
+    expect(clamped.startOverride).toEqual({ timeMs: 4_000 });
   });
 });

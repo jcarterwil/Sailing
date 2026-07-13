@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { angleDiff } from "@/lib/analytics/angles";
+import { angleDiff, norm180, norm360 } from "@/lib/analytics/angles";
 import { analyzeRace } from "@/lib/analytics/analyze";
 import { combineBoats, summarizePerBoat } from "@/lib/analytics/wind";
 import type {
@@ -9,7 +9,6 @@ import type {
   VkxExtras,
   WindSample,
 } from "@/lib/analytics/types";
-import { norm180, norm360 } from "@/lib/analytics/angles";
 
 const START = Date.UTC(2026, 6, 7, 22, 10, 0);
 
@@ -133,6 +132,22 @@ describe("summarizePerBoat / combineBoats", () => {
     expect(combined!.rejectedEntryIds).toEqual([]);
     expect(Math.abs(angleDiff(combined!.twdDeg, 275))).toBeLessThan(0.1);
     expect(combined!.twsKts).toBeCloseTo(10, 5);
+  });
+
+  it("rejects a fully split fleet instead of averaging opposites", () => {
+    const combined = combineBoats([
+      { entryId: "a", twdDeg: 0, twsKts: 10, strength: 0.9, sampleCount: 20 },
+      { entryId: "b", twdDeg: 180, twsKts: 10, strength: 0.9, sampleCount: 20 },
+    ]);
+    expect(combined).toBeNull();
+  });
+
+  it("reports confidence from per-boat internal strength, not a single-mean resultant", () => {
+    const combined = combineBoats([
+      { entryId: "a", twdDeg: 270, twsKts: 10, strength: 0.5, sampleCount: 20 },
+    ]);
+    expect(combined).not.toBeNull();
+    expect(combined!.strength).toBeCloseTo(0.5, 5);
   });
 });
 

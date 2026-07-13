@@ -1,4 +1,5 @@
 import { norm360 } from "@/lib/analytics/angles";
+import { CORRECTION_TWS_MAX_KTS } from "@/lib/analytics/constants";
 import type { RaceLegType } from "@/lib/analytics/types";
 
 /** Organizer corrections applied during race analysis (v1). Pure JSON-safe. */
@@ -41,19 +42,16 @@ export interface LegRelabelCorrection {
   type: RaceLegType;
 }
 
-export const EMPTY_CORRECTIONS: RaceCorrections = {
-  v: 1,
-  excludedWindSensorEntryIds: [],
+export const EMPTY_CORRECTIONS: Readonly<RaceCorrections> = Object.freeze({
+  v: 1 as const,
+  excludedWindSensorEntryIds: Object.freeze([]) as unknown as string[],
   manualWind: null,
   window: null,
   startOverride: null,
-  legRelabels: [],
-};
+  legRelabels: Object.freeze([]) as unknown as LegRelabelCorrection[],
+});
 
 const LEG_TYPES = new Set<RaceLegType>(["upwind", "downwind", "reach", "unknown"]);
-
-/** Clamp twd to [0, 360) and tws-like values to [0, 80]. */
-const TWS_MAX_KTS = 80;
 
 function finiteNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -63,7 +61,7 @@ function finiteNumber(value: unknown): number | null {
 function clampTws(value: number | null): number | null {
   if (value == null) return null;
   if (value < 0) return 0;
-  if (value > TWS_MAX_KTS) return TWS_MAX_KTS;
+  if (value > CORRECTION_TWS_MAX_KTS) return CORRECTION_TWS_MAX_KTS;
   return value;
 }
 
@@ -77,12 +75,19 @@ function normalizeManualWind(value: unknown): ManualWindCorrection | null {
   const twdRaw = finiteNumber(record.twdDeg);
   if (twdRaw == null) return null;
   const enabled = record.enabled === true;
+  let twsMinKts = clampTws(finiteNumber(record.twsMinKts));
+  let twsMaxKts = clampTws(finiteNumber(record.twsMaxKts));
+  if (twsMinKts != null && twsMaxKts != null && twsMinKts > twsMaxKts) {
+    const tmp = twsMinKts;
+    twsMinKts = twsMaxKts;
+    twsMaxKts = tmp;
+  }
   return {
     enabled,
     twdDeg: norm360(twdRaw),
     twsKts: clampTws(finiteNumber(record.twsKts)),
-    twsMinKts: clampTws(finiteNumber(record.twsMinKts)),
-    twsMaxKts: clampTws(finiteNumber(record.twsMaxKts)),
+    twsMinKts,
+    twsMaxKts,
   };
 }
 
@@ -183,9 +188,22 @@ export function clampCorrectionsToTrackSpan(
     next.window = startMs < endMs ? { startMs, endMs } : null;
   }
   if (next.startOverride) {
-    next.startOverride = {
-      timeMs: clampMs(next.startOverride.timeMs, span.startMs, span.endMs),
-    };
+    let lo = span.startMs;
+    let hi = span.endMs;
+    // Keep start inside the trimmed window when both are present.
+    if (next.window) {
+      lo = Math.max(lo, next.window.startMs);
+      hi = Math.min(hi, next.window.endMs);
+    }
+    if (lo <= hi) {
+      next.startOverride = {
+        timeMs: clampMs(next.startOverride.timeMs, lo, hi),
+      };
+    } else {
+      next.startOverride = {
+        timeMs: clampMs(next.startOverride.timeMs, span.startMs, span.endMs),
+      };
+    }
   }
   return normalizeCorrections(next);
 }

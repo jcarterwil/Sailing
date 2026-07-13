@@ -163,6 +163,8 @@ export interface RaceLeg {
   mark: RaceCoordinate | null;
   /** True when an organizer leg-relabel correction set this type. */
   relabeled?: boolean;
+  /** Auto-inferred type before any organizer relabel (set when `relabeled`). */
+  detectedType?: RaceLegType;
 }
 
 export interface RaceStructure {

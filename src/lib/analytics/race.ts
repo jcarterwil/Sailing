@@ -131,6 +131,23 @@ export function detectRaceWindow(
     }
   }
 
+  // Apply start / window overrides before finish selection so a late spurious
+  // auto-start cannot reject a valid race_end against the stale start.
+  if (overrideWindow) {
+    start = {
+      timeMs: overrideWindow.startMs,
+      source: "organizer-override",
+      confidence: "high",
+    };
+  }
+  if (overrideStart) {
+    start = {
+      timeMs: overrideStart.timeMs,
+      source: "organizer-override",
+      confidence: "high",
+    };
+  }
+
   const finishes = consensusTimestamp(timerEvents(tracks, "race_end"));
   let finish: RaceBoundary;
   if (finishes && (start.timeMs === null || finishes.timeMs > start.timeMs)) {
@@ -163,22 +180,8 @@ export function detectRaceWindow(
   }
 
   if (overrideWindow) {
-    start = {
-      timeMs: overrideWindow.startMs,
-      source: "organizer-override",
-      confidence: "high",
-    };
     finish = {
       timeMs: overrideWindow.endMs,
-      source: "organizer-override",
-      confidence: "high",
-    };
-  }
-
-  // Start override wins over window start (and auto-detected start).
-  if (overrideStart) {
-    start = {
-      timeMs: overrideStart.timeMs,
       source: "organizer-override",
       confidence: "high",
     };
@@ -379,7 +382,7 @@ export function applyLegRelabels(
       }
     }
     if (!relabeled) return { ...leg };
-    return { ...leg, type, relabeled: true };
+    return { ...leg, type, relabeled: true, detectedType: leg.type };
   });
 }
 

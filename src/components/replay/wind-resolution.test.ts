@@ -164,6 +164,49 @@ describe("createReplayWindResolver", () => {
     });
   });
 
+  it("preserves applied manual TWS ranges from organizer corrections", () => {
+    const analysis = {
+      ...withWind({
+        source: "manual",
+        twdDeg: 250,
+        twsKts: null,
+        samples: [{ timeMs: 1_000, twdDeg: 250, twsKts: null, source: "manual" }],
+        provenance: {
+          source: "manual",
+          method: "organizer-manual",
+          confidence: "high",
+          sensorEntryIds: [],
+          sensorSampleCount: 0,
+          estimatedHeadingSampleCount: 0,
+          overridden: true,
+        },
+      }),
+      appliedCorrections: {
+        v: 1 as const,
+        excludedWindSensorEntryIds: [],
+        manualWind: {
+          enabled: true,
+          twdDeg: 250,
+          twsKts: null,
+          twsMinKts: 8,
+          twsMaxKts: 14,
+        },
+        window: null,
+        startOverride: null,
+        legRelabels: [],
+      },
+    };
+    const resolver = createReplayWindResolver(EMPTY_META, analysis);
+
+    expect(resolver?.(1_000)).toEqual({
+      twdDeg: 250,
+      twsKts: null,
+      twsRangeKts: [8, 14],
+      source: "manual",
+      confidence: "high",
+    });
+  });
+
   it("returns no resolver when neither analysis nor manual direction is available", () => {
     expect(createReplayWindResolver(EMPTY_META, null)).toBeNull();
   });

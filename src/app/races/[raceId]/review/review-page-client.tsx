@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   RotateCcw,
   Save,
+  Sparkles,
 } from "lucide-react";
 
 import { useReviewPreview } from "@/components/replay/use-review-preview";
@@ -75,6 +76,9 @@ export function ReviewPageClient({
   const [processed, setProcessed] = useState<ProcessedTrack[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [explaining, setExplaining] = useState(false);
   const [pending, startTransition] = useTransition();
   const { preview, previewing } = useReviewPreview(
     processed,
@@ -166,6 +170,34 @@ export function ReviewPageClient({
     });
   }
 
+  async function explain() {
+    if (!quality) return;
+    setExplainError(null);
+    setExplaining(true);
+    try {
+      const res = await fetch(`/api/races/${raceId}/wind-review/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ windQuality: quality }),
+      });
+      const body = (await res.json()) as {
+        error?: string;
+        items?: Array<{ entryId: string; text: string }>;
+      };
+      if (!res.ok) {
+        setExplainError(body.error ?? "Could not explain wind quality.");
+        return;
+      }
+      const next: Record<string, string> = {};
+      for (const item of body.items ?? []) next[item.entryId] = item.text;
+      setExplanations(next);
+    } catch (err) {
+      setExplainError(err instanceof Error ? err.message : "Could not explain wind quality.");
+    } finally {
+      setExplaining(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 pb-28">
       <header className="flex flex-wrap items-center gap-3 border-b border-border/70 pb-4">
@@ -187,7 +219,7 @@ export function ReviewPageClient({
         )}
       </header>
 
-      {(analysisStale || loadError || applyError || allSensorsExcluded) && (
+      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded) && (
         <section className="space-y-3" aria-live="polite">
           {analysisStale && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
@@ -200,10 +232,10 @@ export function ReviewPageClient({
               All wind sensors are excluded — preview falls back to the GPS heading estimate.
             </div>
           )}
-          {(loadError || applyError) && (
+          {(loadError || applyError || explainError) && (
             <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
               <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-              <span>{applyError ?? loadError}</span>
+              <span>{applyError ?? explainError ?? loadError}</span>
             </div>
           )}
         </section>
@@ -233,7 +265,23 @@ export function ReviewPageClient({
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-sm font-medium">Per-boat wind quality</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">Per-boat wind quality</h2>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!quality || quality.boats.length === 0 || explaining}
+                  onClick={() => void explain()}
+                >
+                  {explaining ? (
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Sparkles className="size-4" aria-hidden="true" />
+                  )}
+                  Explain
+                </Button>
+              </div>
               {!quality || quality.boats.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No sensor-wind boats to review (CSV-only fleet or unavailable wind).
@@ -259,7 +307,12 @@ export function ReviewPageClient({
                         return (
                           <TableRow key={boat.entryId}>
                             <TableCell className="font-medium">
-                              {boatNameById.get(boat.entryId) ?? boat.entryId.slice(0, 8)}
+                              <div>{boatNameById.get(boat.entryId) ?? boat.entryId.slice(0, 8)}</div>
+                              {explanations[boat.entryId] && (
+                                <p className="mt-1 text-xs font-normal text-muted-foreground">
+                                  {explanations[boat.entryId]}
+                                </p>
+                              )}
                             </TableCell>
                             <TableCell className={statusClass(excluded ? "excluded" : boat.status)}>
                               {excluded ? "excluded" : boat.status}
@@ -419,7 +472,12 @@ export function ReviewPageClient({
                     value={corrections.startOverride?.timeMs ?? ""}
                     placeholder={String(preview?.race.start.timeMs ?? "")}
                     onChange={(event) => {
-                      const timeMs = Number(event.target.value);
+                      const raw = event.target.value.trim();
+                      if (raw === "") {
+                        updateCorrections({ startOverride: null });
+                        return;
+                      }
+                      const timeMs = Number(raw);
                       updateCorrections({
                         startOverride: Number.isFinite(timeMs) ? { timeMs } : null,
                       });
@@ -471,9 +529,10 @@ export function ReviewPageClient({
                               (row) =>
                                 !(row.atMs >= leg.startTimeMs && row.atMs <= leg.endTimeMs),
                             );
+                            const autoType = leg.detectedType ?? (!leg.relabeled ? leg.type : null);
                             updateCorrections({
                               legRelabels:
-                                type === leg.type && !leg.relabeled
+                                autoType != null && type === autoType
                                   ? others
                                   : [...others, { atMs, type }],
                             });

@@ -85,18 +85,18 @@ export function summarizePerBoat(vectors: readonly SensorVector[]): BoatWindSumm
 
 /**
  * Equal-weight consensus across boats, then drop boats > WIND_BOAT_OUTLIER_DEG
- * from that consensus and recombine. Falls back to the full set if every boat
- * would be rejected.
+ * from that consensus and recombine. Returns null when the fleet is fully
+ * split (no boat within the outlier threshold of the all-boat mean).
  */
 export function combineBoats(boats: readonly BoatWindSummary[]): CombinedBoatWind | null {
   if (boats.length === 0) return null;
   const consensusTwd = circularMean(boats.map((boat) => boat.twdDeg));
   if (!finite(consensusTwd)) return null;
 
-  let accepted = boats.filter(
+  const accepted = boats.filter(
     (boat) => Math.abs(angleDiff(boat.twdDeg, consensusTwd)) <= WIND_BOAT_OUTLIER_DEG,
   );
-  if (accepted.length === 0) accepted = [...boats];
+  if (accepted.length === 0) return null;
 
   const twdDeg = circularMean(accepted.map((boat) => boat.twdDeg));
   const twsKts = mean(accepted.map((boat) => boat.twsKts));
@@ -106,7 +106,9 @@ export function combineBoats(boats: readonly BoatWindSummary[]): CombinedBoatWin
   return {
     twdDeg,
     twsKts,
-    strength: resultantStrength(accepted.map((boat) => boat.twdDeg)),
+    // Per-boat internal consistency — a single accepted mean would otherwise
+    // always report resultant strength 1.
+    strength: mean(accepted.map((boat) => boat.strength)),
     boats: [...boats],
     acceptedEntryIds: [...acceptedIds].sort(),
     rejectedEntryIds: boats
@@ -120,14 +122,12 @@ function estimateDirectionFromFleet(
   tracks: readonly ProcessedTrack[],
   startTimeMs: number | null,
   finishTimeMs: number | null,
-  excludedEntryIds: ReadonlySet<string> = new Set(),
 ): EstimatedDirection | null {
   const headings: number[] = [];
   const binCount = Math.round(360 / WIND_HEADING_BIN_DEG);
   const histogram = new Array<number>(binCount).fill(0);
 
   for (const track of tracks) {
-    if (excludedEntryIds.has(track.entryId)) continue;
     const length = columnLength(track);
     if (length === 0) continue;
     let first = 0;
@@ -238,41 +238,65 @@ function trueWindVector(
   return { twdDeg: norm360(towardDeg + 180), twsKts: Math.hypot(east, north) * MS_TO_KTS };
 }
 
+type AwaConvention = "relative-plus" | "relative-minus" | "absolute";
+
+function vectorsForConvention(
+  tracks: readonly ProcessedTrack[],
+  convention: AwaConvention,
+  startTimeMs: number | null,
+  finishTimeMs: number | null,
+  excludedEntryIds: ReadonlySet<string> = new Set(),
+): SensorVector[] {
+  const vectors: SensorVector[] = [];
+  for (const track of tracks) {
+    if (excludedEntryIds.has(track.entryId)) continue;
+    const length = columnLength(track);
+    for (const sample of track.extras?.windSamples ?? []) {
+      if (!finite(sample.t) || !finite(sample.awaDeg) || !finite(sample.awsMs)) continue;
+      if (
+        (startTimeMs !== null && sample.t < startTimeMs) ||
+        (finishTimeMs !== null && sample.t > finishTimeMs)
+      ) {
+        continue;
+      }
+      if (sample.awsMs <= 0 || sample.awsMs > 40) continue;
+      const index = nearestIndex(track, sample.t, length);
+      if (index < 0 || Math.abs(epochAt(track, index) - sample.t) > WIND_SENSOR_MATCH_MS) continue;
+      const heading = track.hdg[index];
+      const course = track.cog[index];
+      const sog = track.sog[index];
+      if (!finite(heading) || !finite(course) || !finite(sog)) continue;
+      const vector = trueWindVector(heading, course, sog, sample.awaDeg, sample.awsMs, convention);
+      if (!finite(vector.twdDeg) || !finite(vector.twsKts) || vector.twsKts > 80) continue;
+      vectors.push({ timeMs: sample.t, ...vector, entryId: track.entryId });
+    }
+  }
+  return vectors;
+}
+
 function collectSensorVectors(
   tracks: readonly ProcessedTrack[],
   estimatedTwdDeg: number | null,
   startTimeMs: number | null,
   finishTimeMs: number | null,
   excludedEntryIds: ReadonlySet<string> = new Set(),
-): { vectors: SensorVector[]; entryIds: string[]; strength: number } | null {
-  const conventions = ["relative-plus", "relative-minus", "absolute"] as const;
-  let best: { vectors: SensorVector[]; strength: number; score: number } | null = null;
+): { vectors: SensorVector[]; entryIds: string[]; strength: number; convention: AwaConvention } | null {
+  const conventions: AwaConvention[] = ["relative-plus", "relative-minus", "absolute"];
+  let best: {
+    vectors: SensorVector[];
+    strength: number;
+    score: number;
+    convention: AwaConvention;
+  } | null = null;
 
   for (const convention of conventions) {
-    const vectors: SensorVector[] = [];
-    for (const track of tracks) {
-      if (excludedEntryIds.has(track.entryId)) continue;
-      const length = columnLength(track);
-      for (const sample of track.extras?.windSamples ?? []) {
-        if (!finite(sample.t) || !finite(sample.awaDeg) || !finite(sample.awsMs)) continue;
-        if (
-          (startTimeMs !== null && sample.t < startTimeMs) ||
-          (finishTimeMs !== null && sample.t > finishTimeMs)
-        ) {
-          continue;
-        }
-        if (sample.awsMs <= 0 || sample.awsMs > 40) continue;
-        const index = nearestIndex(track, sample.t, length);
-        if (index < 0 || Math.abs(epochAt(track, index) - sample.t) > WIND_SENSOR_MATCH_MS) continue;
-        const heading = track.hdg[index];
-        const course = track.cog[index];
-        const sog = track.sog[index];
-        if (!finite(heading) || !finite(course) || !finite(sog)) continue;
-        const vector = trueWindVector(heading, course, sog, sample.awaDeg, sample.awsMs, convention);
-        if (!finite(vector.twdDeg) || !finite(vector.twsKts) || vector.twsKts > 80) continue;
-        vectors.push({ timeMs: sample.t, ...vector, entryId: track.entryId });
-      }
-    }
+    const vectors = vectorsForConvention(
+      tracks,
+      convention,
+      startTimeMs,
+      finishTimeMs,
+      excludedEntryIds,
+    );
     if (vectors.length < 10) continue;
     const boats = summarizePerBoat(vectors);
     if (boats.length === 0) continue;
@@ -289,12 +313,19 @@ function collectSensorVectors(
     // Prefer the earlier convention on floating-point ties (resultant strength
     // of identical samples is not always bitwise-equal across conventions).
     const score = strength + agreement * 0.05;
-    if (!best || score > best.score + 1e-12) best = { vectors, strength, score };
+    if (!best || score > best.score + 1e-12) {
+      best = { vectors, strength, score, convention };
+    }
   }
 
   if (!best || best.strength < 0.4) return null;
   const entryIds = [...new Set(best.vectors.map((vector) => vector.entryId))].sort();
-  return { vectors: best.vectors, entryIds, strength: best.strength };
+  return {
+    vectors: best.vectors,
+    entryIds,
+    strength: best.strength,
+    convention: best.convention,
+  };
 }
 
 function binSensorVectors(vectors: readonly SensorVector[]): WindPoint[] {
@@ -335,36 +366,68 @@ export function analyzeWindDetailed(
 ): AnalyzeWindDetailed {
   const excluded = new Set(corrections?.excludedWindSensorEntryIds ?? []);
   const excludedList = [...excluded].sort();
-  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs, excluded);
-  // Collect with no exclusion so wind-quality can still see dominated/outlier boats.
-  const allSensor = collectSensorVectors(
+  // GPS heading estimate uses every track — excluding a wind sensor must not
+  // drop that boat's COG from the fleet heading modes.
+  const estimated = estimateDirectionFromFleet(tracks, startTimeMs, finishTimeMs);
+  // Choose AWA convention from active (non-excluded) sensors only.
+  const activeSensor = collectSensorVectors(
     tracks,
     estimated?.twdDeg ?? null,
     startTimeMs,
     finishTimeMs,
+    excluded,
   );
-  const sensorVectors = allSensor?.vectors ?? [];
+  // Quality report still sees excluded boats, under the same winning convention.
+  const sensorVectors = activeSensor
+    ? vectorsForConvention(
+        tracks,
+        activeSensor.convention,
+        startTimeMs,
+        finishTimeMs,
+      )
+    : collectSensorVectors(
+        tracks,
+        estimated?.twdDeg ?? null,
+        startTimeMs,
+        finishTimeMs,
+      )?.vectors ?? [];
 
   if (corrections?.manualWind?.enabled) {
-    const twdDeg = round(norm360(corrections.manualWind.twdDeg), 2);
-    const twsKts = nullable(
-      corrections.manualWind.twsKts != null && Number.isFinite(corrections.manualWind.twsKts)
-        ? corrections.manualWind.twsKts
-        : NaN,
-      2,
-    );
+    const manual = corrections.manualWind;
+    const twdDeg = round(norm360(manual.twdDeg), 2);
+    let twsKts =
+      manual.twsKts != null && Number.isFinite(manual.twsKts) ? manual.twsKts : null;
+    // Range-only manual wind: collapse equal bounds to a scalar speed.
+    if (
+      twsKts == null &&
+      manual.twsMinKts != null &&
+      manual.twsMaxKts != null &&
+      manual.twsMinKts === manual.twsMaxKts
+    ) {
+      twsKts = manual.twsMinKts;
+    }
     const samples: WindPoint[] = [];
     if (startTimeMs !== null) {
-      samples.push({ timeMs: startTimeMs, twdDeg, twsKts, source: "manual" });
+      samples.push({
+        timeMs: startTimeMs,
+        twdDeg,
+        twsKts: nullable(twsKts ?? NaN, 2),
+        source: "manual",
+      });
       if (finishTimeMs !== null && finishTimeMs > startTimeMs) {
-        samples.push({ timeMs: finishTimeMs, twdDeg, twsKts, source: "manual" });
+        samples.push({
+          timeMs: finishTimeMs,
+          twdDeg,
+          twsKts: nullable(twsKts ?? NaN, 2),
+          source: "manual",
+        });
       }
     }
     return {
       wind: {
         source: "manual",
         twdDeg,
-        twsKts,
+        twsKts: nullable(twsKts ?? NaN, 2),
         samples,
         provenance: {
           source: "manual",
@@ -382,7 +445,7 @@ export function analyzeWindDetailed(
     };
   }
 
-  const activeVectors = sensorVectors.filter((vector) => !excluded.has(vector.entryId));
+  const activeVectors = activeSensor?.vectors ?? [];
   if (activeVectors.length >= 10) {
     const combined = combineBoats(summarizePerBoat(activeVectors));
     if (combined) {
