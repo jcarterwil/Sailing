@@ -19,6 +19,7 @@ export const WIND_HEADING_BIN_DEG = 5; // fleet heading-mode resolution
 export const WIND_MIN_SOG_KTS = 2; // exclude drifting and pre-start loitering from wind inference
 export const WIND_SENSOR_MATCH_MS = 2_000; // maximum telemetry-to-wind sample alignment error
 export const WIND_OUTPUT_BIN_MS = 60_000; // compact persisted sensor-wind timeline
+export const WIND_BOAT_OUTLIER_DEG = 45; // reject per-boat means farther than this from equal-weight consensus
 export const LEG_BIN_MS = 60_000; // fleet course classification cadence
 export const LEG_MIN_BINS = 2; // suppress one-bin false leg changes
 export const LEG_UPWIND_MAX_ABS_TWA_DEG = 90; // |TWA| below this is upwind
