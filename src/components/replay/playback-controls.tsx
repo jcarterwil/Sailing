@@ -24,6 +24,7 @@ import { distanceToSegmentM, toLocalXY } from "@/lib/analytics/geo";
 import {
   activeStart,
   nextStart,
+  startLineAt,
   type StartLine,
 } from "@/lib/analytics/start-line";
 
@@ -53,9 +54,10 @@ function formatElapsed(msSince: number): string {
 
 function raceClockLabel(timeMs: number, startsMs: number[]): string | null {
   if (startsMs.length === 0) return null;
-  const upcoming = nextStart(startsMs, timeMs);
-  if (upcoming !== null) return formatCountdown(upcoming - timeMs);
   const gun = activeStart(startsMs, timeMs);
+  const upcoming = nextStart(startsMs, timeMs);
+  if (gun !== null && gun === timeMs) return formatElapsed(0);
+  if (upcoming !== null) return formatCountdown(upcoming - timeMs);
   if (gun !== null) return formatElapsed(timeMs - gun);
   return null;
 }
@@ -100,12 +102,16 @@ function distanceChipText(
   selectedEntryId: string | null,
   timeMs: number,
   startsMs: number[],
-  startLine: StartLine | null,
 ): string | null {
-  if (!selectedEntryId || !startLine || startsMs.length === 0) return null;
+  if (!selectedEntryId || startsMs.length === 0) return null;
   const upcoming = nextStart(startsMs, timeMs);
   if (upcoming === null) return null;
   if (timeMs < upcoming - PRESTART_WINDOW_MS || timeMs > upcoming) return null;
+  const startLine = startLineAt(
+    tracks.map((t) => t.extras),
+    upcoming,
+  );
+  if (!startLine) return null;
   const track = tracks.find((t) => t.entryId === selectedEntryId);
   if (!track) return null;
   const sample = sampleAt(track, timeMs);
@@ -138,14 +144,12 @@ export function PlaybackControls({
   styleId,
   onStyleChange,
   startsMs = [],
-  startLine = null,
   tracks = [],
 }: {
   tzOffsetMinutes: number | null;
   styleId: MapStyleId;
   onStyleChange: (style: MapStyleId) => void;
   startsMs?: number[];
-  startLine?: StartLine | null;
   tracks?: LoadedTrack[];
 }) {
   const playing = usePlaybackStore((s) => s.playing);
@@ -169,7 +173,7 @@ export function PlaybackControls({
       isRace: startsMs.length > 0 && raceClockLabel(timeMs, startsMs) !== null,
       isCountdown:
         startsMs.length > 0 && nextStart(startsMs, timeMs) !== null,
-      distance: distanceChipText(tracks, selectedEntryId, timeMs, startsMs, startLine),
+      distance: distanceChipText(tracks, selectedEntryId, timeMs, startsMs),
     };
   });
 
@@ -182,7 +186,7 @@ export function PlaybackControls({
         wall: formatWallClock(timeMs, tzOffsetMinutes),
         isRace: race !== null,
         isCountdown: startsMs.length > 0 && nextStart(startsMs, timeMs) !== null,
-        distance: distanceChipText(tracks, selected, timeMs, startsMs, startLine),
+        distance: distanceChipText(tracks, selected, timeMs, startsMs),
       });
     };
     publish(usePlaybackStore.getState().timeMs, usePlaybackStore.getState().selectedEntryId);
@@ -193,7 +197,7 @@ export function PlaybackControls({
         publish(state.timeMs, state.selectedEntryId);
       }
     });
-  }, [tzOffsetMinutes, startsMs, startLine, tracks]);
+  }, [tzOffsetMinutes, startsMs, tracks]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">

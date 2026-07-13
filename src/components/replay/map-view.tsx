@@ -15,7 +15,7 @@ import { indexAt, sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
 import { MIN_SOG_FOR_COG_KTS } from "@/lib/analytics/constants";
-import type { StartLine } from "@/lib/analytics/start-line";
+import { startForLine, startLineAt, type StartLine } from "@/lib/analytics/start-line";
 
 export type MapStyleId = "map" | "satellite";
 
@@ -39,6 +39,19 @@ const SATELLITE_STYLE: maplibregl.StyleSpecification = {
 };
 
 const TAIL_SECONDS = 60;
+
+function resolveStartLine(
+  tracks: LoadedTrack[],
+  startsMs: number[],
+  timeMs: number,
+): StartLine | null {
+  const gunMs = startForLine(startsMs, timeMs);
+  if (gunMs === null) return null;
+  return startLineAt(
+    tracks.map((t) => t.extras),
+    gunMs,
+  );
+}
 
 function startLineGeoJson(line: StartLine) {
   return {
@@ -153,11 +166,11 @@ function trailGeoJson(tracks: LoadedTrack[], timeMs: number, tailMs: number | nu
 export function MapView({
   tracks,
   styleId,
-  startLine = null,
+  startsMs = [],
 }: {
   tracks: LoadedTrack[];
   styleId: MapStyleId;
-  startLine?: StartLine | null;
+  startsMs?: number[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -211,6 +224,7 @@ export function MapView({
       }
       const timeMs = usePlaybackStore.getState().timeMs;
       const trailMode = usePlaybackStore.getState().trailMode;
+      const startLine = resolveStartLine(tracks, startsMs, timeMs);
       map.addSource("trails", {
         type: "geojson",
         data: trailGeoJson(tracks, timeMs, trailMode === "tail" ? TAIL_SECONDS * 1000 : null),
@@ -393,7 +407,7 @@ export function MapView({
       mapRef.current = null;
       map.remove();
     };
-  }, [speedTracks, tracks, startLine]);
+  }, [speedTracks, tracks, startsMs]);
 
   // Style switching.
   useEffect(() => {
@@ -513,6 +527,14 @@ export function MapView({
           trailGeoJson(tracks, timeMs, trailMode === "tail" ? TAIL_SECONDS * 1000 : null),
         );
       }
+
+      const startLine = resolveStartLine(tracks, startsMs, timeMs);
+      const startLineSource = map.getSource<maplibregl.GeoJSONSource>("start-line");
+      if (startLine && startLineSource) {
+        startLineSource.setData(startLineGeoJson(startLine));
+      } else if (!startLine && startLineSource) {
+        startLineSource.setData({ type: "FeatureCollection", features: [] });
+      }
     };
     const state = usePlaybackStore.getState();
     update(state.timeMs, state.trailMode, state.selectedEntryId, state.cameraMode);
@@ -520,7 +542,7 @@ export function MapView({
       update(s.timeMs, s.trailMode, s.selectedEntryId, s.cameraMode),
     );
     return unsub;
-  }, [tracks]);
+  }, [tracks, startsMs]);
 
   return (
     <div className="relative h-full w-full">

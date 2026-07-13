@@ -5,6 +5,7 @@ import {
   activeStart,
   fleetStarts,
   nextStart,
+  startForLine,
   startLineAt,
 } from "@/lib/analytics/start-line";
 import type { VkxExtras } from "@/lib/analytics/types";
@@ -74,6 +75,19 @@ describe("activeStart / nextStart", () => {
     expect(nextStart(starts, 500)).toBe(1000);
     expect(nextStart(starts, 1000)).toBe(2000);
     expect(nextStart(starts, 3000)).toBeNull();
+  });
+});
+
+describe("startForLine", () => {
+  const starts = [1000, 2000];
+
+  it("prefers the upcoming gun during pre-start", () => {
+    expect(startForLine(starts, 500)).toBe(1000);
+    expect(startForLine(starts, 1500)).toBe(2000);
+  });
+
+  it("falls back to the active gun after the last start", () => {
+    expect(startForLine(starts, 2500)).toBe(2000);
   });
 });
 

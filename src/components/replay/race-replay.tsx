@@ -13,7 +13,6 @@ import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   fleetStarts,
-  startLineAt,
 } from "@/lib/analytics/start-line";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import { windDirectionAt } from "@/lib/analytics/wind";
@@ -91,13 +90,6 @@ export function RaceReplay({
     () => (tracks ? fleetStarts(tracks.map((t) => t.extras)) : []),
     [tracks],
   );
-  const startLine = useMemo(() => {
-    if (!tracks || startsMs.length === 0) return null;
-    return startLineAt(
-      tracks.map((t) => t.extras),
-      startsMs[0],
-    );
-  }, [tracks, startsMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,7 +163,7 @@ export function RaceReplay({
     >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-w-0 flex-1">
-          <MapView tracks={tracks} styleId={styleId} startLine={startLine} />
+          <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
           <Leaderboard
             tracks={tracks}
             twdAt={twdAt}
@@ -188,7 +180,6 @@ export function RaceReplay({
             styleId={styleId}
             onStyleChange={setStyleId}
             startsMs={startsMs}
-            startLine={startLine}
             tracks={tracks}
           />
           <span className="hidden text-sm text-muted-foreground lg:inline">{raceName}</span>

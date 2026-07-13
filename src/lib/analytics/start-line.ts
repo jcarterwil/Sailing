@@ -62,6 +62,14 @@ export function nextStart(startsMs: number[], timeMs: number): number | null {
 }
 
 /**
+ * Gun whose line/end pings apply at `timeMs`: upcoming start when one exists,
+ * otherwise the latest start at or before `timeMs`.
+ */
+export function startForLine(startsMs: number[], timeMs: number): number | null {
+  return nextStart(startsMs, timeMs) ?? activeStart(startsMs, timeMs);
+}
+
+/**
  * Most-recent finite-coordinate ping per end at/before `startMs`, across all
  * boats. Null unless BOTH ends were pinged — never fabricate a line.
  */
