@@ -5,6 +5,7 @@ import type {
   RaceTimerEvent,
   VkxExtras,
 } from "@/lib/analytics/types";
+import { PERFORMANCE_KNOT_TO_MPS } from "@/lib/analytics/constants";
 
 export const FIXTURE_GUN_MS = Date.UTC(2026, 5, 20, 17, 0, 0);
 export const FIXTURE_TWD_DEG = 359;
@@ -136,7 +137,7 @@ function interpolate(frames: TimedPoint[], timeMs: number): { point: LocalPoint;
   return {
     point: { x: a.x + dx * fraction, y: a.y + dy * fraction },
     cogDeg: (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360,
-    speedKts: metresPerSecond / 0.514444,
+    speedKts: metresPerSecond / PERFORMANCE_KNOT_TO_MPS,
   };
 }
 

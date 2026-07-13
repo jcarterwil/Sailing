@@ -4,6 +4,10 @@ import type {
   PerformanceProvenanceV1,
 } from "@/lib/analytics/performance/types";
 import {
+  PERFORMANCE_KNOT_TO_MPS,
+  PERFORMANCE_START_WINDOW_MS,
+} from "@/lib/analytics/constants";
+import {
   FIXTURE_COURSE_POSITIONS,
   FIXTURE_GUN_MS,
   FIXTURE_LEG_TYPES,
@@ -154,8 +158,8 @@ export const VALID_PERFORMANCE_V1_FIXTURE: PerformanceAnalysisV1 = {
     gunTimeMs: FIXTURE_GUN_MS,
     line: { ...FIXTURE_START_LINE, lengthM: 90, bearingDeg: 90 },
     courseSideBearingDeg: 359,
-    windowStartMs: FIXTURE_GUN_MS - 60_000,
-    windowEndMs: FIXTURE_GUN_MS + 60_000,
+    windowStartMs: FIXTURE_GUN_MS - PERFORMANCE_START_WINDOW_MS,
+    windowEndMs: FIXTURE_GUN_MS + PERFORMANCE_START_WINDOW_MS,
     entries: ENTRY_IDS.map((entryId, index) => {
       const ocs = entryId === "charlie";
       const crossingTimeMs = SIX_BOAT_FIVE_LEG_FIXTURE.expected.startCrossingTimesMs[entryId as keyof typeof SIX_BOAT_FIVE_LEG_FIXTURE.expected.startCrossingTimesMs];
@@ -169,7 +173,7 @@ export const VALID_PERFORMANCE_V1_FIXTURE: PerformanceAnalysisV1 = {
         distanceToLineAtGunM: ocs ? 6 : index + 2,
         signedLineSideDistanceAtGunM: ocs ? 6 : -(index + 2),
         dmg30M: 85 - index * 3,
-        vmg30Kts: (85 - index * 3) / 30 / 0.514444,
+        vmg30Kts: (85 - index * 3) / 30 / PERFORMANCE_KNOT_TO_MPS,
         rank: SIX_BOAT_FIVE_LEG_FIXTURE.expected.startRanks[entryId as keyof typeof SIX_BOAT_FIVE_LEG_FIXTURE.expected.startRanks],
         warningCodes: [],
         provenance: provenance("line-crossing"),

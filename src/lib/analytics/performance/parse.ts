@@ -16,8 +16,10 @@ import {
   PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS,
   PERFORMANCE_MAX_WARNING_MESSAGE_CHARS,
   PERFORMANCE_MAX_WARNINGS,
+  PERFORMANCE_KNOT_TO_MPS,
   PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
   PERFORMANCE_RESAMPLE_HZ,
+  PERFORMANCE_START_WINDOW_MS,
 } from "@/lib/analytics/constants";
 import type {
   PerformanceAnalysisV1,
@@ -352,6 +354,14 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
   valid = finiteAt(row.courseSideBearingDeg, context, `${path}.courseSideBearingDeg`, { nullable: true, min: 0, maxExclusive: 360 }) && valid;
   valid = finiteAt(row.windowStartMs, context, `${path}.windowStartMs`, { nullable: true }) && valid;
   valid = finiteAt(row.windowEndMs, context, `${path}.windowEndMs`, { nullable: true }) && valid;
+  if (typeof row.gunTimeMs === "number") {
+    if (row.windowStartMs !== row.gunTimeMs - PERFORMANCE_START_WINDOW_MS ||
+        row.windowEndMs !== row.gunTimeMs + PERFORMANCE_START_WINDOW_MS) {
+      valid = issue(context, path, `start window must equal gun ±${PERFORMANCE_START_WINDOW_MS} ms`) && valid;
+    }
+  } else if (row.windowStartMs !== null || row.windowEndMs !== null) {
+    valid = issue(context, path, "start window must be null without a corrected gun") && valid;
+  }
   const entries = arrayAt(row.entries, context, `${path}.entries`, PERFORMANCE_MAX_ENTRY_COUNT);
   if (!entries) valid = false;
   entries?.forEach((entryValue, index) => {
@@ -365,6 +375,16 @@ function validateStart(value: unknown, context: ValidationContext, path: string)
     }
     for (const field of ["sogAtGunKts", "sogAtLineKts", "distanceToLineAtGunM", "dmg30M", "vmg30Kts"] as const) {
       valid = finiteAt(entry[field], context, `${entryPath}.${field}`, { nullable: true, min: 0 }) && valid;
+    }
+    if (entry.dmg30M === null) {
+      if (entry.vmg30Kts !== null) {
+        valid = issue(context, `${entryPath}.vmg30Kts`, "must be null when dmg30M is unavailable") && valid;
+      }
+    } else if (typeof entry.dmg30M === "number") {
+      const expectedVmg30Kts = entry.dmg30M / 30 / PERFORMANCE_KNOT_TO_MPS;
+      if (typeof entry.vmg30Kts !== "number" || Math.abs(entry.vmg30Kts - expectedVmg30Kts) > 1e-9) {
+        valid = issue(context, `${entryPath}.vmg30Kts`, "must equal dmg30M / 30 / knot conversion") && valid;
+      }
     }
     valid = finiteAt(entry.rank, context, `${entryPath}.rank`, { nullable: true, integer: true, min: 1 }) && valid;
     valid = validateWarningCodes(entry.warningCodes, context, `${entryPath}.warningCodes`) && valid;

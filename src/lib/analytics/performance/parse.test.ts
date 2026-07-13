@@ -5,6 +5,7 @@ import {
   PERFORMANCE_MAX_LEG_COUNT,
   PERFORMANCE_MAX_WARNINGS,
   PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
+  PERFORMANCE_START_WINDOW_MS,
 } from "@/lib/analytics/constants";
 import expected from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg.expected.json";
 import { SIX_BOAT_FIVE_LEG_FIXTURE } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
@@ -117,6 +118,20 @@ describe("parseStoredPerformance", () => {
     const missingGunResult = parsePerformanceV1(missingGun);
     expect(missingGunResult.status).toBe("malformed");
     expect(missingGunResult.issues.join(" ")).toContain("requires a corrected gun");
+
+    const driftedWindow = cloneFixture();
+    const driftedStart = driftedWindow.start as Record<string, unknown>;
+    driftedStart.windowStartMs = (driftedStart.windowStartMs as number) - 1;
+    const driftedWindowResult = parsePerformanceV1(driftedWindow);
+    expect(driftedWindowResult.status).toBe("malformed");
+    expect(driftedWindowResult.issues.join(" ")).toContain(`±${PERFORMANCE_START_WINDOW_MS} ms`);
+
+    const inconsistentVmg = cloneFixture();
+    const vmgStart = inconsistentVmg.start as { entries: Array<Record<string, unknown>> };
+    vmgStart.entries[0].vmg30Kts = (vmgStart.entries[0].vmg30Kts as number) + 0.01;
+    const inconsistentVmgResult = parsePerformanceV1(inconsistentVmg);
+    expect(inconsistentVmgResult.status).toBe("malformed");
+    expect(inconsistentVmgResult.issues.join(" ")).toContain("dmg30M / 30 / knot conversion");
 
     const cyclic: Record<string, unknown> = { v: 1 };
     cyclic.performance = cyclic;
