@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
 
-import { HelmPov } from "@/components/replay/helm-pov";
 import { MapView, type MapStyleId } from "@/components/replay/map-view";
 import { Leaderboard } from "@/components/replay/leaderboard";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
@@ -24,6 +24,19 @@ import {
 } from "@/lib/analytics/start-line";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
+
+const HelmPov = dynamic(
+  () => import("@/components/replay/helm-pov").then((module) => module.HelmPov),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-sky-100 text-sm text-sky-950">
+        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        Loading helm view…
+      </div>
+    ),
+  },
+);
 
 /**
  * Resolve true-wind direction at a scrub time for ladder / wind UI.

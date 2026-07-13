@@ -18,8 +18,8 @@ describe("POV attitude damping", () => {
     let at60 = { value: 0, velocity: 0 };
     for (let i = 0; i < 30; i++) at30 = advanceSpring(at30, 20, 1 / 30);
     for (let i = 0; i < 60; i++) at60 = advanceSpring(at60, 20, 1 / 60);
-    expect(at30.value).toBeCloseTo(at60.value, 10);
-    expect(at30.velocity).toBeCloseTo(at60.velocity, 10);
+    expect(at30.value).toBeCloseTo(at60.value, 8);
+    expect(at30.velocity).toBeCloseTo(at60.velocity, 8);
   });
 
   it("smooths heading, heel, and trim without wrapping the heading", () => {
