@@ -135,6 +135,35 @@ describe("createReplayWindResolver", () => {
     });
   });
 
+  it("maps analyzed manual wind to the replay manual source", () => {
+    const resolver = createReplayWindResolver(
+      EMPTY_META,
+      withWind({
+        source: "manual",
+        twdDeg: 250,
+        twsKts: 12,
+        samples: [{ timeMs: 1_000, twdDeg: 250, twsKts: 12, source: "manual" }],
+        provenance: {
+          source: "manual",
+          method: "organizer-manual",
+          confidence: "high",
+          sensorEntryIds: [],
+          sensorSampleCount: 0,
+          estimatedHeadingSampleCount: 0,
+          overridden: true,
+        },
+      }),
+    );
+
+    expect(resolver?.(1_000)).toEqual({
+      twdDeg: 250,
+      twsKts: 12,
+      twsRangeKts: null,
+      source: "manual",
+      confidence: "high",
+    });
+  });
+
   it("returns no resolver when neither analysis nor manual direction is available", () => {
     expect(createReplayWindResolver(EMPTY_META, null)).toBeNull();
   });

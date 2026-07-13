@@ -62,7 +62,11 @@ export function createReplayWindResolver(
   }
 
   const source: ReplayWindSource =
-    wind.source === "sensor-derived" ? "sensor" : "estimated";
+    wind.source === "sensor-derived"
+      ? "sensor"
+      : wind.source === "manual"
+        ? "manual"
+        : "estimated";
   const confidence =
     wind.provenance.confidence === "unavailable"
       ? null
