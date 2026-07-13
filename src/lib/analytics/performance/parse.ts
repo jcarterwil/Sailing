@@ -1,4 +1,6 @@
 import {
+  PERFORMANCE_DISTRIBUTION_BIN_KTS,
+  PERFORMANCE_DISTRIBUTION_MAX_KTS,
   PERFORMANCE_MAX_BINS_PER_DISTRIBUTION,
   PERFORMANCE_MAX_COURSE_POINT_COUNT,
   PERFORMANCE_MAX_DISTRIBUTIONS,
@@ -10,10 +12,12 @@ import {
   PERFORMANCE_MAX_PROVENANCE_INPUTS,
   PERFORMANCE_MAX_PROVENANCE_LABEL_CHARS,
   PERFORMANCE_MAX_RESULT_NOTE_CHARS,
+  PERFORMANCE_MAX_SOURCE_GAP_MS,
   PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS,
   PERFORMANCE_MAX_WARNING_MESSAGE_CHARS,
   PERFORMANCE_MAX_WARNINGS,
   PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
+  PERFORMANCE_RESAMPLE_HZ,
 } from "@/lib/analytics/constants";
 import type {
   PerformanceAnalysisV1,
@@ -241,6 +245,7 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
     const point = recordAt(pointValue, context, pointPath);
     if (!point) { valid = false; return; }
     valid = finiteAt(point.index, context, `${pointPath}.index`, { integer: true, min: 0 }) && valid;
+    if (point.index !== index) valid = issue(context, `${pointPath}.index`, `expected ${index}`) && valid;
     valid = literalAt(point.kind, ["start", "mark", "finish"], context, `${pointPath}.kind`) && valid;
     valid = finiteAt(point.atMs, context, `${pointPath}.atMs`, { nullable: true }) && valid;
     valid = validateNullableCoordinate(point.position, context, `${pointPath}.position`) && valid;
@@ -258,8 +263,25 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
     if (!leg) { valid = false; return; }
     valid = finiteAt(leg.index, context, `${legPath}.index`, { integer: true, min: 0 }) && valid;
     valid = literalAt(leg.type, ["upwind", "downwind", "reach", "unknown"], context, `${legPath}.type`) && valid;
-    valid = finiteAt(leg.startPointIndex, context, `${legPath}.startPointIndex`, { integer: true, min: 0 }) && valid;
-    valid = finiteAt(leg.endPointIndex, context, `${legPath}.endPointIndex`, { integer: true, min: 0 }) && valid;
+    if (leg.index !== index) valid = issue(context, `${legPath}.index`, `expected ${index}`) && valid;
+    valid = finiteAt(leg.startPointIndex, context, `${legPath}.startPointIndex`, {
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_COURSE_POINT_COUNT - 1,
+    }) && valid;
+    valid = finiteAt(leg.endPointIndex, context, `${legPath}.endPointIndex`, {
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_COURSE_POINT_COUNT - 1,
+    }) && valid;
+    if (typeof leg.startPointIndex === "number" && typeof leg.endPointIndex === "number") {
+      if (leg.startPointIndex >= (points?.length ?? 0) || leg.endPointIndex >= (points?.length ?? 0)) {
+        valid = issue(context, legPath, "leg indices must reference existing course points") && valid;
+      }
+      if (leg.endPointIndex <= leg.startPointIndex) {
+        valid = issue(context, legPath, "endPointIndex must follow startPointIndex") && valid;
+      }
+    }
     valid = validateNullableCoordinate(leg.start, context, `${legPath}.start`) && valid;
     valid = validateNullableCoordinate(leg.end, context, `${legPath}.end`) && valid;
     valid = finiteAt(leg.distanceM, context, `${legPath}.distanceM`, { nullable: true, min: 0 }) && valid;
@@ -316,8 +338,8 @@ function validateResult(value: unknown, context: ValidationContext, path: string
     if (row.elapsedMs === null || row.rank === null || row.deltaMs === null) {
       valid = issue(context, path, "finished result requires elapsedMs, rank, and deltaMs") && valid;
     }
-  } else if (row.finish !== null || row.elapsedMs !== null || row.rank !== null || row.deltaMs !== null) {
-    valid = issue(context, path, "non-finish or unresolved result cannot retain finish/rank/delta") && valid;
+  } else if (row.finish !== null || row.elapsedMs !== null || row.rank !== null || row.deltaMs !== null || row.tied !== false) {
+    valid = issue(context, path, "non-finish or unresolved result cannot retain finish/rank/delta/tie") && valid;
   }
   return valid;
 }
@@ -471,13 +493,13 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
       const binPath = `${path}.bins[${index}]`;
       const bin = recordAt(binValue, context, binPath);
       if (!bin) { valid = false; return; }
-      valid = finiteAt(bin.lowerKts, context, `${binPath}.lowerKts`, { min: 0, max: 50 }) && valid;
-      valid = finiteAt(bin.upperKts, context, `${binPath}.upperKts`, { min: 0, max: 50 }) && valid;
+      valid = finiteAt(bin.lowerKts, context, `${binPath}.lowerKts`, { min: 0, max: PERFORMANCE_DISTRIBUTION_MAX_KTS }) && valid;
+      valid = finiteAt(bin.upperKts, context, `${binPath}.upperKts`, { min: 0, max: PERFORMANCE_DISTRIBUTION_MAX_KTS }) && valid;
       valid = finiteAt(bin.seconds, context, `${binPath}.seconds`, { min: 0 }) && valid;
       valid = finiteAt(bin.densityPerKt, context, `${binPath}.densityPerKt`, { min: 0 }) && valid;
       if (typeof bin.lowerKts === "number" && typeof bin.upperKts === "number" &&
-          Math.abs((bin.upperKts - bin.lowerKts) - 0.25) > 1e-9) {
-        valid = issue(context, binPath, "bin width must equal 0.25 kt") && valid;
+          Math.abs((bin.upperKts - bin.lowerKts) - PERFORMANCE_DISTRIBUTION_BIN_KTS) > 1e-9) {
+        valid = issue(context, binPath, `bin width must equal ${PERFORMANCE_DISTRIBUTION_BIN_KTS} kt`) && valid;
       }
     });
   }
@@ -518,6 +540,9 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     valid = literalAt(timezone.source, ["race", "weather-location", "utc-fallback"], context, "performance.timezone.source") && valid;
   }
   valid = validateCourse(row.course, context, "performance.course") && valid;
+  const courseRecord = isRecord(row.course) ? row.course : null;
+  const coursePoints = Array.isArray(courseRecord?.points) ? courseRecord.points : null;
+  const courseLegs = Array.isArray(courseRecord?.legs) ? courseRecord.legs : null;
   const results = arrayAt(row.results, context, "performance.results", PERFORMANCE_MAX_ENTRY_COUNT);
   if (!results) valid = false;
   results?.forEach((result, index) => { valid = validateResult(result, context, `performance.results[${index}]`) && valid; });
@@ -526,26 +551,73 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   results?.forEach((resultValue, index) => {
     const result = isRecord(resultValue) ? resultValue : null;
     const finish = isRecord(result?.finish) ? result.finish : null;
-    if (result?.status === "finished" && typeof startRecord?.gunTimeMs === "number" &&
-        typeof finish?.timeMs === "number" && typeof result.elapsedMs === "number" &&
-        Math.abs(finish.timeMs - startRecord.gunTimeMs - result.elapsedMs) > 1e-6) {
-      valid = issue(context, `performance.results[${index}].elapsedMs`,
-        "must equal finish.timeMs - start.gunTimeMs") && valid;
+    if (result?.status === "finished") {
+      if (typeof startRecord?.gunTimeMs !== "number") {
+        valid = issue(context, `performance.results[${index}]`, "finished result requires a corrected gun") && valid;
+      } else if (typeof finish?.timeMs === "number" && typeof result.elapsedMs === "number" &&
+          Math.abs(finish.timeMs - startRecord.gunTimeMs - result.elapsedMs) > 1e-6) {
+        valid = issue(context, `performance.results[${index}].elapsedMs`,
+          "must equal finish.timeMs - start.gunTimeMs") && valid;
+      }
     }
   });
   const wholeRace = arrayAt(row.wholeRace, context, "performance.wholeRace", PERFORMANCE_MAX_ENTRY_COUNT);
   if (!wholeRace) valid = false;
   wholeRace?.forEach((metric, index) => { valid = validateMetrics(metric, context, `performance.wholeRace[${index}]`) && valid; });
+  const resultsByEntryId = new Map<string, Record<string, unknown>>();
+  results?.forEach((resultValue) => {
+    const result = isRecord(resultValue) ? resultValue : null;
+    if (result && typeof result.entryId === "string") resultsByEntryId.set(result.entryId, result);
+  });
+  wholeRace?.forEach((metricValue, index) => {
+    const metric = isRecord(metricValue) ? metricValue : null;
+    const result = typeof metric?.entryId === "string" ? resultsByEntryId.get(metric.entryId) : null;
+    if (!metric || !result) return;
+    for (const field of ["elapsedMs", "rank", "tied", "deltaMs"] as const) {
+      if (metric[field] !== result[field]) {
+        valid = issue(context, `performance.wholeRace[${index}].${field}`,
+          "must match performance.results for whole-race scope") && valid;
+      }
+    }
+  });
   const legs = arrayAt(row.legs, context, "performance.legs", PERFORMANCE_MAX_LEG_COUNT);
   if (!legs) valid = false;
+  if (legs && courseLegs && legs.length !== courseLegs.length) {
+    valid = issue(context, "performance.legs", "must match performance.course.legs length") && valid;
+  }
   legs?.forEach((legValue, index) => {
     const path = `performance.legs[${index}]`;
     const leg = recordAt(legValue, context, path);
     if (!leg) { valid = false; return; }
     valid = finiteAt(leg.index, context, `${path}.index`, { integer: true, min: 0 }) && valid;
     valid = literalAt(leg.type, ["upwind", "downwind", "reach", "unknown"], context, `${path}.type`) && valid;
-    valid = finiteAt(leg.startPointIndex, context, `${path}.startPointIndex`, { integer: true, min: 0 }) && valid;
-    valid = finiteAt(leg.endPointIndex, context, `${path}.endPointIndex`, { integer: true, min: 0 }) && valid;
+    if (leg.index !== index) valid = issue(context, `${path}.index`, `expected ${index}`) && valid;
+    valid = finiteAt(leg.startPointIndex, context, `${path}.startPointIndex`, {
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_COURSE_POINT_COUNT - 1,
+    }) && valid;
+    valid = finiteAt(leg.endPointIndex, context, `${path}.endPointIndex`, {
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_COURSE_POINT_COUNT - 1,
+    }) && valid;
+    if (typeof leg.startPointIndex === "number" && typeof leg.endPointIndex === "number") {
+      if (leg.startPointIndex >= (coursePoints?.length ?? 0) || leg.endPointIndex >= (coursePoints?.length ?? 0)) {
+        valid = issue(context, path, "leg indices must reference existing course points") && valid;
+      }
+      if (leg.endPointIndex <= leg.startPointIndex) {
+        valid = issue(context, path, "endPointIndex must follow startPointIndex") && valid;
+      }
+    }
+    const courseLeg = isRecord(courseLegs?.[index]) ? courseLegs[index] : null;
+    if (courseLeg) {
+      for (const field of ["index", "type", "startPointIndex", "endPointIndex"] as const) {
+        if (leg[field] !== courseLeg[field]) {
+          valid = issue(context, `${path}.${field}`, "must match performance.course.legs") && valid;
+        }
+      }
+    }
     const metrics = arrayAt(leg.metrics, context, `${path}.metrics`, PERFORMANCE_MAX_ENTRY_COUNT);
     if (!metrics) valid = false;
     metrics?.forEach((metric, metricIndex) => {
@@ -618,17 +690,16 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     const constants = recordAt(provenance.constants, context, "performance.provenance.constants");
     if (!constants) valid = false;
     else {
-      valid = (constants.resampleHz === 1 || issue(context, "performance.provenance.constants.resampleHz", "expected 1")) && valid;
-      valid = (constants.maxSourceGapMs === 10_000 || issue(context, "performance.provenance.constants.maxSourceGapMs", "expected 10000")) && valid;
-      valid = (constants.distributionBinKts === 0.25 || issue(context, "performance.provenance.constants.distributionBinKts", "expected 0.25")) && valid;
-      valid = (constants.distributionMaxKts === 50 || issue(context, "performance.provenance.constants.distributionMaxKts", "expected 50")) && valid;
+      valid = (constants.resampleHz === PERFORMANCE_RESAMPLE_HZ || issue(context, "performance.provenance.constants.resampleHz", `expected ${PERFORMANCE_RESAMPLE_HZ}`)) && valid;
+      valid = (constants.maxSourceGapMs === PERFORMANCE_MAX_SOURCE_GAP_MS || issue(context, "performance.provenance.constants.maxSourceGapMs", `expected ${PERFORMANCE_MAX_SOURCE_GAP_MS}`)) && valid;
+      valid = (constants.distributionBinKts === PERFORMANCE_DISTRIBUTION_BIN_KTS || issue(context, "performance.provenance.constants.distributionBinKts", `expected ${PERFORMANCE_DISTRIBUTION_BIN_KTS}`)) && valid;
+      valid = (constants.distributionMaxKts === PERFORMANCE_DISTRIBUTION_MAX_KTS || issue(context, "performance.provenance.constants.distributionMaxKts", `expected ${PERFORMANCE_DISTRIBUTION_MAX_KTS}`)) && valid;
     }
   }
   valid = validateSameEntrySet(entryIdsAt(results, context, "performance.results"), canonicalEntryIds, context, "performance.results") && valid;
   valid = validateSameEntrySet(entryIdsAt(wholeRace, context, "performance.wholeRace"), canonicalEntryIds, context, "performance.wholeRace") && valid;
   valid = validateSameEntrySet(entryIdsAt(best, context, "performance.bestIntervals"), canonicalEntryIds, context, "performance.bestIntervals") && valid;
   valid = validateSameEntrySet(entryIdsAt(Array.isArray(startRecord?.entries) ? startRecord.entries : null, context, "performance.start.entries"), canonicalEntryIds, context, "performance.start.entries") && valid;
-  const courseRecord = isRecord(row.course) ? row.course : null;
   valid = validateSameEntrySet(entryIdsAt(Array.isArray(courseRecord?.passagesByEntry) ? courseRecord.passagesByEntry : null, context, "performance.course.passagesByEntry"), canonicalEntryIds, context, "performance.course.passagesByEntry") && valid;
   legs?.forEach((legValue, index) => {
     const leg = isRecord(legValue) ? legValue : null;

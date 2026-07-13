@@ -188,6 +188,19 @@ describe("parseStoredPerformance", () => {
     const parsed = parsePerformanceV1(performance);
     expect(parsed.status).toBe("malformed");
     expect(parsed.issues.join(" ")).toContain("finish.timeMs - start.gunTimeMs");
+
+    const missingGun = cloneFixture();
+    const start = missingGun.start as { entries: Array<Record<string, unknown>> } & Record<string, unknown>;
+    start.gunTimeMs = null;
+    for (const entry of start.entries) {
+      entry.status = "unavailable";
+      entry.crossingTimeMs = null;
+      entry.timeToLineMs = null;
+      entry.rank = null;
+    }
+    const missingGunParsed = parsePerformanceV1(missingGun);
+    expect(missingGunParsed.status).toBe("malformed");
+    expect(missingGunParsed.issues.join(" ")).toContain("finished result requires a corrected gun");
   });
 
   it("uses the 200-character entry ID contract rather than provenance label limits", () => {
@@ -254,6 +267,28 @@ describe("parseStoredPerformance", () => {
     const unrankedParsed = parsePerformanceV1(unranked);
     expect(unrankedParsed.status).toBe("malformed");
     expect(unrankedParsed.issues.join(" ")).toContain("requires rank and delta");
+
+    const tiedNonFinish = cloneFixture();
+    const results = tiedNonFinish.results as Array<Record<string, unknown>>;
+    results[0] = {
+      ...results[0],
+      status: "dnf",
+      finish: null,
+      elapsedMs: null,
+      rank: null,
+      deltaMs: null,
+      tied: true,
+    };
+    const tiedParsed = parsePerformanceV1(tiedNonFinish);
+    expect(tiedParsed.status).toBe("malformed");
+    expect(tiedParsed.issues.join(" ")).toContain("finish/rank/delta/tie");
+
+    const driftedWholeRace = cloneFixture();
+    const wholeRace = driftedWholeRace.wholeRace as Array<Record<string, unknown>>;
+    wholeRace[0].deltaMs = (wholeRace[0].deltaMs as number) + 1;
+    const driftedParsed = parsePerformanceV1(driftedWholeRace);
+    expect(driftedParsed.status).toBe("malformed");
+    expect(driftedParsed.issues.join(" ")).toContain("must match performance.results");
   });
 
   it("keeps per-leg directional VMG on the matching leg type", () => {
@@ -364,6 +399,22 @@ describe("parseStoredPerformance", () => {
     const warningParsed = parsePerformanceV1(warning);
     expect(warningParsed.status).toBe("malformed");
     expect(warningParsed.issues.join(" ")).toContain("canonical fleet");
+  });
+
+  it("keeps course and metric legs on existing ordered points", () => {
+    const missingPoint = cloneFixture();
+    const course = missingPoint.course as { legs: Array<Record<string, unknown>> };
+    course.legs[0].endPointIndex = 99;
+    const missingPointParsed = parsePerformanceV1(missingPoint);
+    expect(missingPointParsed.status).toBe("malformed");
+    expect(missingPointParsed.issues.join(" ")).toContain("existing course points");
+
+    const driftedLeg = cloneFixture();
+    const legs = driftedLeg.legs as Array<Record<string, unknown>>;
+    legs[0].endPointIndex = 2;
+    const driftedLegParsed = parsePerformanceV1(driftedLeg);
+    expect(driftedLegParsed.status).toBe("malformed");
+    expect(driftedLegParsed.issues.join(" ")).toContain("must match performance.course.legs");
   });
 });
 
