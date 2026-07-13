@@ -44,6 +44,10 @@ export type Database = {
           id: boolean
           model: string
           provider: string
+          report_effort: string | null
+          report_max_tokens: number
+          report_system_prompt: string | null
+          report_thinking: string
           updated_at: string
           updated_by: string | null
         }
@@ -51,6 +55,10 @@ export type Database = {
           id?: boolean
           model?: string
           provider?: string
+          report_effort?: string | null
+          report_max_tokens?: number
+          report_system_prompt?: string | null
+          report_thinking?: string
           updated_at?: string
           updated_by?: string | null
         }
@@ -58,6 +66,10 @@ export type Database = {
           id?: boolean
           model?: string
           provider?: string
+          report_effort?: string | null
+          report_max_tokens?: number
+          report_system_prompt?: string | null
+          report_thinking?: string
           updated_at?: string
           updated_by?: string | null
         }

@@ -21,17 +21,56 @@ Give each boat/entryId a concise conclusion with 2–3 prioritized actions.
 ## Provenance Appendix
 State the analysis version, wind source/method/confidence, warnings, missing fields, and that conclusions were generated from the supplied statistical payload.`;
 
-/** Anthropic Messages create params for a Race Dossier. Omits `temperature` — newer Claude models reject it. */
-export function buildDossierCreateParams(model: string, statsPayload: DossierStats) {
+export type DossierThinkingMode = "off" | "adaptive";
+export type DossierEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export const DEFAULT_DOSSIER_MAX_TOKENS = 16_000;
+export const DEFAULT_DOSSIER_THINKING: DossierThinkingMode = "off";
+
+export interface DossierAiConfig {
+  model: string;
+  systemPrompt: string;
+  maxTokens: number;
+  thinking: DossierThinkingMode;
+  effort: DossierEffort | null;
+}
+
+/**
+ * Anthropic Messages create params for a Race Dossier.
+ *
+ * - Omits `temperature` — newer Claude models reject it (see #45).
+ * - Sends an explicit `thinking` config — newer models (e.g. Sonnet 5) run adaptive thinking by
+ *   default when `thinking` is omitted, which spends the `max_tokens` budget on reasoning and
+ *   truncates the dossier (`stop_reason: "max_tokens"`, see #52). Defaulting to disabled keeps the
+ *   full output budget for the dossier itself.
+ * - `output_config.effort` is only sent when thinking is adaptive.
+ */
+export function buildDossierCreateParams(config: DossierAiConfig, statsPayload: DossierStats) {
+  // Fable 5 / Mythos 5 always think and reject an explicit `{ type: "disabled" }` (400); for them
+  // "off" means omit the `thinking` field entirely. Every other current model must receive an
+  // explicit disabled config so newer models (e.g. Sonnet 5) do not run adaptive thinking by
+  // default and exhaust the max_tokens budget (#52).
+  const alwaysThinks = /^claude-(fable|mythos)/.test(config.model);
+  const thinking =
+    config.thinking === "adaptive"
+      ? ({ type: "adaptive" } as const)
+      : alwaysThinks
+        ? null
+        : ({ type: "disabled" } as const);
+
   return {
-    model,
-    max_tokens: 12_000,
-    system: DOSSIER_SYSTEM_PROMPT,
+    model: config.model,
+    max_tokens: config.maxTokens,
+    ...(thinking ? { thinking } : {}),
+    system: config.systemPrompt,
     messages: [
       {
         role: "user" as const,
         content: `Race-analysis statistics (JSON data):\n${JSON.stringify(statsPayload)}`,
       },
     ],
+    ...(config.thinking === "adaptive" && config.effort
+      ? { output_config: { effort: config.effort } }
+      : {}),
   };
 }
