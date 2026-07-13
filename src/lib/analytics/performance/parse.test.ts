@@ -175,6 +175,15 @@ describe("parseStoredPerformance", () => {
     expect(markParsed.issues.join(" ")).toContain("mark point geometry requires a null line");
   });
 
+  it("reconciles finished elapsed time to the corrected gun", () => {
+    const performance = cloneFixture();
+    const results = performance.results as Array<Record<string, unknown>>;
+    results[0].elapsedMs = (results[0].elapsedMs as number) + 1;
+    const parsed = parsePerformanceV1(performance);
+    expect(parsed.status).toBe("malformed");
+    expect(parsed.issues.join(" ")).toContain("finish.timeMs - start.gunTimeMs");
+  });
+
   it("uses the 200-character entry ID contract rather than provenance label limits", () => {
     const replaceEntryId = (entryId: string) => JSON.parse(
       JSON.stringify(VALID_PERFORMANCE_V1_FIXTURE).replaceAll('"alpha"', JSON.stringify(entryId)),
@@ -308,6 +317,26 @@ describe("parseStoredPerformance", () => {
     const warningParsed = parsePerformanceV1(warning);
     expect(warningParsed.status).toBe("malformed");
     expect(warningParsed.issues.join(" ")).toContain(`must be <= ${PERFORMANCE_MAX_LEG_COUNT - 1}`);
+  });
+
+  it("bounds passage points and warning entries to canonical references", () => {
+    const passage = cloneFixture();
+    const course = passage.course as { passagesByEntry: Array<{ passages: Array<Record<string, unknown>> }> };
+    course.passagesByEntry[0].passages[0].pointIndex = 6;
+    const passageParsed = parsePerformanceV1(passage);
+    expect(passageParsed.status).toBe("malformed");
+    expect(passageParsed.issues.join(" ")).toContain("existing course point");
+
+    const warning = cloneFixture();
+    warning.warnings = [{
+      code: "source-gap",
+      message: "Unknown entry reference.",
+      entryId: "not-in-race",
+      legIndex: null,
+    }];
+    const warningParsed = parsePerformanceV1(warning);
+    expect(warningParsed.status).toBe("malformed");
+    expect(warningParsed.issues.join(" ")).toContain("canonical fleet");
   });
 });
 

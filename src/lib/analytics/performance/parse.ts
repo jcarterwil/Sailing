@@ -214,7 +214,11 @@ function validatePassages(value: unknown, context: ValidationContext, path: stri
     const passagePath = `${path}.passages[${index}]`;
     const passage = recordAt(passageValue, context, passagePath);
     if (!passage) { valid = false; return; }
-    valid = finiteAt(passage.pointIndex, context, `${passagePath}.pointIndex`, { integer: true, min: 0 }) && valid;
+    valid = finiteAt(passage.pointIndex, context, `${passagePath}.pointIndex`, {
+      integer: true,
+      min: 0,
+      max: PERFORMANCE_MAX_COURSE_POINT_COUNT - 1,
+    }) && valid;
     valid = finiteAt(passage.timeMs, context, `${passagePath}.timeMs`, { nullable: true }) && valid;
     valid = finiteAt(passage.minDistanceM, context, `${passagePath}.minDistanceM`, { nullable: true, min: 0 }) && valid;
     valid = literalAt(passage.source, ["gun", "segment-approach", "finite-line-crossing", "timer-event", "organizer-override", "unavailable"], context, `${passagePath}.source`) && valid;
@@ -266,6 +270,15 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
   });
   passages?.forEach((entry, index) => {
     valid = validatePassages(entry, context, `${path}.passagesByEntry[${index}]`) && valid;
+    const passageEntry = isRecord(entry) ? entry : null;
+    const entryPassages = Array.isArray(passageEntry?.passages) ? passageEntry.passages : [];
+    entryPassages.forEach((passageValue, passageIndex) => {
+      const passage = isRecord(passageValue) ? passageValue : null;
+      if (typeof passage?.pointIndex === "number" && passage.pointIndex >= (points?.length ?? 0)) {
+        valid = issue(context, `${path}.passagesByEntry[${index}].passages[${passageIndex}].pointIndex`,
+          "does not reference an existing course point") && valid;
+      }
+    });
   });
   valid = finiteAt(row.courseDistanceM, context, `${path}.courseDistanceM`, { nullable: true, min: 0 }) && valid;
   valid = booleanAt(row.reviewRequired, context, `${path}.reviewRequired`) && valid;
@@ -506,6 +519,17 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   if (!results) valid = false;
   results?.forEach((result, index) => { valid = validateResult(result, context, `performance.results[${index}]`) && valid; });
   valid = validateStart(row.start, context, "performance.start") && valid;
+  const startRecord = isRecord(row.start) ? row.start : null;
+  results?.forEach((resultValue, index) => {
+    const result = isRecord(resultValue) ? resultValue : null;
+    const finish = isRecord(result?.finish) ? result.finish : null;
+    if (result?.status === "finished" && typeof startRecord?.gunTimeMs === "number" &&
+        typeof finish?.timeMs === "number" && typeof result.elapsedMs === "number" &&
+        Math.abs(finish.timeMs - startRecord.gunTimeMs - result.elapsedMs) > 1e-6) {
+      valid = issue(context, `performance.results[${index}].elapsedMs`,
+        "must equal finish.timeMs - start.gunTimeMs") && valid;
+    }
+  });
   const wholeRace = arrayAt(row.wholeRace, context, "performance.wholeRace", PERFORMANCE_MAX_ENTRY_COUNT);
   if (!wholeRace) valid = false;
   wholeRace?.forEach((metric, index) => { valid = validateMetrics(metric, context, `performance.wholeRace[${index}]`) && valid; });
@@ -588,7 +612,6 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   valid = validateSameEntrySet(entryIdsAt(results, context, "performance.results"), canonicalEntryIds, context, "performance.results") && valid;
   valid = validateSameEntrySet(entryIdsAt(wholeRace, context, "performance.wholeRace"), canonicalEntryIds, context, "performance.wholeRace") && valid;
   valid = validateSameEntrySet(entryIdsAt(best, context, "performance.bestIntervals"), canonicalEntryIds, context, "performance.bestIntervals") && valid;
-  const startRecord = isRecord(row.start) ? row.start : null;
   valid = validateSameEntrySet(entryIdsAt(Array.isArray(startRecord?.entries) ? startRecord.entries : null, context, "performance.start.entries"), canonicalEntryIds, context, "performance.start.entries") && valid;
   const courseRecord = isRecord(row.course) ? row.course : null;
   valid = validateSameEntrySet(entryIdsAt(Array.isArray(courseRecord?.passagesByEntry) ? courseRecord.passagesByEntry : null, context, "performance.course.passagesByEntry"), canonicalEntryIds, context, "performance.course.passagesByEntry") && valid;
@@ -600,6 +623,12 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
     const distribution = isRecord(distributionValue) ? distributionValue : null;
     if (typeof distribution?.entryId === "string" && !canonicalEntryIds.includes(distribution.entryId)) {
       valid = issue(context, `performance.distributions[${index}].entryId`, "entry ID is not in the canonical fleet") && valid;
+    }
+  });
+  warnings?.forEach((warningValue, index) => {
+    const warning = isRecord(warningValue) ? warningValue : null;
+    if (typeof warning?.entryId === "string" && !canonicalEntryIds.includes(warning.entryId)) {
+      valid = issue(context, `performance.warnings[${index}].entryId`, "entry ID is not in the canonical fleet") && valid;
     }
   });
   return valid && context.issues.length === 0;
