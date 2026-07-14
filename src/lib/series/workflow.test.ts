@@ -199,6 +199,64 @@ describe("projectSeriesWorkflowV1", () => {
     );
   });
 
+  it("creates an explicit confirmable DNS row when a competitor skips a race", () => {
+    const competitors = [
+      { boatId: "boat-alpha", boatName: "Alpha", role: "competitor" as const },
+      { boatId: "boat-bravo", boatName: "Bravo", role: "competitor" as const },
+      { boatId: "boat-charlie", boatName: "Charlie", role: "competitor" as const },
+    ];
+    const unconfirmed = projectSeriesWorkflowV1(input({ competitors }));
+    expect(unconfirmed.status).toBe("blocked");
+    expect(unconfirmed.raceDrafts[0].rows).toContainEqual(expect.objectContaining({
+      entryId: "dns:boat-charlie",
+      origin: "absent-competitor",
+      boatId: "boat-charlie",
+      status: "dns",
+      confirmed: false,
+    }));
+
+    const ready = projectSeriesWorkflowV1(input({
+      competitors,
+      draftOfficialResults: [{
+        raceId: "race-1",
+        rows: [
+          ...confirmedRows()[0].rows as Array<Record<string, unknown>>,
+          {
+            entryId: "dns:boat-charlie",
+            sourceBoatId: "boat-charlie",
+            status: "dns",
+            place: null,
+            tied: false,
+            penaltyPoints: 0,
+            confirmed: true,
+          },
+        ],
+      }],
+    }));
+    expect(ready.status).toBe("ready");
+    expect(ready.applyRaces[0].officialResults).toContainEqual(expect.objectContaining({
+      entryId: "dns:boat-charlie",
+      boatId: "boat-charlie",
+      identity: "competitor",
+      status: "dns",
+    }));
+  });
+
+  it("never carries confirmation when the draft omits its source boat", () => {
+    const rows = confirmedRows()[0].rows.map((row) => ({ ...row }));
+    delete (rows[0] as Partial<typeof rows[number]>).sourceBoatId;
+    const projection = projectSeriesWorkflowV1(input({
+      draftOfficialResults: [{ raceId: "race-1", rows }],
+    }));
+    expect(projection.status).toBe("blocked");
+    expect(projection.raceDrafts[0].rows.find((row) => row.entryId === "entry-alpha"))
+      .toMatchObject({ confirmed: false, sourceBoatId: "boat-alpha" });
+    expect(projection.issues).toContainEqual(expect.objectContaining({
+      code: "official-result-unconfirmed",
+      entryId: "entry-alpha",
+    }));
+  });
+
   it("accepts only explicit competitor aliases and keeps guests non-eligible", () => {
     const aliasedRace = race({
       entries: [

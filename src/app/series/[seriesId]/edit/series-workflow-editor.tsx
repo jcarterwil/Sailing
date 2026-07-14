@@ -658,7 +658,14 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                       {rows.map((row) => (
                         <TableRow key={row.entryId}>
                           <TableCell>
-                            <p className="font-medium">{row.boatName}</p>
+                            <p className="font-medium">
+                              {boatById.get(row.boatId)?.name ?? row.boatName}
+                            </p>
+                            {row.origin === "absent-competitor" ? (
+                              <p className="text-xs text-muted-foreground">
+                                No race entry · explicit DNS
+                              </p>
+                            ) : null}
                             <p className="max-w-48 truncate text-xs text-muted-foreground">{row.sourceBoatId}</p>
                           </TableCell>
                           <TableCell>
@@ -669,6 +676,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                           <TableCell>
                             <Select
                               value={row.status}
+                              disabled={row.origin === "absent-competitor"}
                               onValueChange={(status: SeriesOfficialStatus) => setOfficialRow(
                                 race.raceId,
                                 row.entryId,

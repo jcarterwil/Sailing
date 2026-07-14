@@ -21,6 +21,7 @@ export type SeriesWorkflowAnalysisStatus =
 
 export interface SeriesWorkflowCompetitorV1 {
   boatId: string;
+  boatName?: string;
   role: "competitor" | "guest";
 }
 
@@ -54,6 +55,7 @@ export interface SeriesWorkflowRaceV1 {
 
 export interface SeriesOfficialDraftRowV1 {
   entryId: string;
+  origin: "race-entry" | "absent-competitor";
   sourceBoatId: string;
   boatId: string;
   boatName: string;
@@ -252,6 +254,10 @@ function resolvedIdentity(
   return { boatId: sourceBoatId, identity: "unresolved" };
 }
 
+function absentCompetitorEntryId(boatId: string): string {
+  return `dns:${boatId}`;
+}
+
 function canonicalAppliedRows(
   rows: readonly SeriesOfficialDraftRowV1[],
 ): SeriesWorkflowApplyRaceV1["officialResults"] {
@@ -332,7 +338,22 @@ export function projectSeriesWorkflowV1(
       ? draftsByRace.get(race.raceId)
       : race.storedOfficialResults;
     const editedByEntryId = parseEditableRows(supplied, race, issues);
-    const currentEntryIds = new Set(race.entries.map((entry) => entry.entryId));
+    const requireComplete = race.included && race.state === "completed";
+    const representedCompetitorIds = new Set(race.entries.flatMap((entry) => {
+      const resolution = resolvedIdentity(entry.sourceBoatId, competitors, aliases);
+      return resolution.identity === "competitor" ? [resolution.boatId] : [];
+    }));
+    const absentCompetitors = requireComplete
+      ? input.competitors
+          .filter((competitor) =>
+            competitor.role === "competitor" &&
+            !representedCompetitorIds.has(competitor.boatId))
+          .sort((left, right) => compareText(left.boatId, right.boatId))
+      : [];
+    const currentEntryIds = new Set([
+      ...race.entries.map((entry) => entry.entryId),
+      ...absentCompetitors.map((competitor) => absentCompetitorEntryId(competitor.boatId)),
+    ]);
     for (const entryId of editedByEntryId.keys()) {
       if (!currentEntryIds.has(entryId)) {
         issues.push({
@@ -344,7 +365,6 @@ export function projectSeriesWorkflowV1(
       }
     }
 
-    const requireComplete = race.included && race.state === "completed";
     if (requireComplete && race.analysisStatus !== "current") {
       issues.push({
         code: "analysis-not-current",
@@ -360,9 +380,10 @@ export function projectSeriesWorkflowV1(
         const resolution = resolvedIdentity(entry.sourceBoatId, competitors, aliases);
         const edited = editedByEntryId.get(entry.entryId);
         const defaultStatus = mapPerformanceStatus(entry.result);
-        const sourceMatches = !edited?.sourceBoatId || edited.sourceBoatId === entry.sourceBoatId;
+        const sourceMatches = edited?.sourceBoatId === entry.sourceBoatId;
         const row: SeriesOfficialDraftRowV1 = {
           entryId: entry.entryId,
+          origin: "race-entry",
           sourceBoatId: entry.sourceBoatId,
           boatId: resolution.boatId,
           boatName: entry.boatName,
@@ -408,6 +429,45 @@ export function projectSeriesWorkflowV1(
         }
         return row;
       });
+
+    for (const competitor of absentCompetitors) {
+      const entryId = absentCompetitorEntryId(competitor.boatId);
+      const edited = editedByEntryId.get(entryId);
+      const validDnsDecision = !edited || (
+        edited.status === "dns" && edited.place === null && !edited.tied
+      );
+      if (edited && !validDnsDecision) {
+        issues.push({
+          code: "invalid-official-result",
+          raceId: race.raceId,
+          entryId,
+          message: `${competitor.boatName ?? competitor.boatId} has no race entry and must be DNS.`,
+        });
+      }
+      const row: SeriesOfficialDraftRowV1 = {
+        entryId,
+        origin: "absent-competitor",
+        sourceBoatId: competitor.boatId,
+        boatId: competitor.boatId,
+        boatName: competitor.boatName ?? competitor.boatId,
+        identity: "competitor",
+        status: "dns",
+        place: null,
+        tied: false,
+        penaltyPoints: edited?.penaltyPoints ?? 0,
+        confirmed: edited?.confirmed === true && validDnsDecision &&
+          edited.sourceBoatId === competitor.boatId,
+      };
+      if (!row.confirmed) {
+        issues.push({
+          code: "official-result-unconfirmed",
+          raceId: race.raceId,
+          entryId,
+          message: `${row.boatName}'s DNS in ${race.raceName} needs confirmation.`,
+        });
+      }
+      rows.push(row);
+    }
 
     const officialResults = canonicalAppliedRows(rows);
     const storedRows = storedCanonicalRows(race.storedOfficialResults);

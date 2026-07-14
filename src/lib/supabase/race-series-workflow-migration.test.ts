@@ -74,7 +74,9 @@ describe("race series organizer workflow migration", () => {
     expect(migration).toContain(
       "corrections.source_revision is distinct from requested.expected_corrections_version",
     );
-    expect(migration).toContain("entry.boat_id = (result ->> 'sourceboatid')::uuid");
+    expect(migration).toContain("entry.boat_id::text = result ->> 'sourceboatid'");
+    expect(migration).toContain("'dns:' || (result ->> 'boatid')");
+    expect(migration).toContain("explicit absent-competitor dns");
     expect(migration).toContain(
       "(scored.race_result -> 'source' ->> 'analysisversion')::bigint",
     );

@@ -50,6 +50,7 @@ export interface SeriesEditorModelV1 {
   availableRaces: SeriesEditorRaceChoiceV1[];
   competitors: Array<{
     boatId: string;
+    boatName?: string;
     role: "competitor" | "guest";
   }>;
   aliases: Array<{
@@ -258,6 +259,10 @@ export async function loadSeriesEditorModel(
     entriesByRaceId.set(entry.race_id, rows);
   }
   const boatById = new Map((boatsResult.data ?? []).map((boat) => [boat.id, boat]));
+  const workflowCompetitors = competitors.map((competitor) => ({
+    ...competitor,
+    boatName: boatById.get(competitor.boatId)?.name ?? competitor.boatId,
+  }));
   const raceById = new Map(availableRaces.map((race) => [race.id, race]));
   const analysisStateByRaceId = new Map(availableRaces.map((race) => [
     race.id,
@@ -303,7 +308,7 @@ export async function loadSeriesEditorModel(
     seriesId: series.id,
     scoringVersion: series.scoring_version,
     scoringConfig: series.scoring_config,
-    competitors,
+    competitors: workflowCompetitors,
     aliases,
     races: workflowRaces,
   });
@@ -339,7 +344,7 @@ export async function loadSeriesEditorModel(
       analysisStatus: analysisStateByRaceId.get(race.id)!.status,
       entryBoatIds: (entriesByRaceId.get(race.id) ?? []).map((entry) => entry.boat_id),
     })),
-    competitors,
+    competitors: workflowCompetitors,
     aliases,
     races: workflowRaces,
     projection,

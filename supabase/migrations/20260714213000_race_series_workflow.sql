@@ -471,13 +471,55 @@ begin
         next_official_results_revision bigint, expected_analysis_version bigint,
         expected_corrections_version bigint, official_results jsonb)
     cross join lateral jsonb_array_elements(requested.official_results) result
-    left join public.race_entries entry
-      on entry.race_id = requested.race_id
-      and entry.id = (result ->> 'entryId')::uuid
-      and entry.boat_id = (result ->> 'sourceBoatId')::uuid
-    where entry.id is null or result ->> 'confirmed' is distinct from 'true'
+    where result ->> 'confirmed' is distinct from 'true'
+      or not (
+        exists (
+          select 1
+          from public.race_entries entry
+          where entry.race_id = requested.race_id
+            and entry.id::text = result ->> 'entryId'
+            and entry.boat_id::text = result ->> 'sourceBoatId'
+        )
+        or (
+          result ->> 'entryId' = ('dns:' || (result ->> 'boatId'))
+          and result ->> 'sourceBoatId' = result ->> 'boatId'
+          and result ->> 'identity' = 'competitor'
+          and result ->> 'status' = 'dns'
+          and result -> 'place' = 'null'::jsonb
+          and result ->> 'tied' = 'false'
+          and exists (
+            select 1
+            from public.race_series_competitors competitor
+            where competitor.series_id = series_id_input
+              and competitor.role = 'competitor'
+              and competitor.boat_id::text = result ->> 'boatId'
+          )
+          and not exists (
+            select 1
+            from public.race_entries entrant
+            where entrant.race_id = requested.race_id
+              and (
+                exists (
+                  select 1
+                  from public.race_series_competitors direct_competitor
+                  where direct_competitor.series_id = series_id_input
+                    and direct_competitor.role = 'competitor'
+                    and direct_competitor.boat_id = entrant.boat_id
+                    and direct_competitor.boat_id::text = result ->> 'boatId'
+                )
+                or exists (
+                  select 1
+                  from public.race_series_boat_aliases alias
+                  where alias.series_id = series_id_input
+                    and alias.source_boat_id = entrant.boat_id
+                    and alias.canonical_boat_id::text = result ->> 'boatId'
+                )
+              )
+          )
+        )
+      )
   ) then
-    raise exception 'Official results must be confirmed against current race entries'
+    raise exception 'Official results must reconcile to current entries or an explicit absent-competitor DNS'
       using errcode = '40001';
   end if;
 
@@ -492,10 +534,33 @@ begin
     where linked.series_id = series_id_input
       and linked.included
       and linked.state = 'completed'
-      and jsonb_array_length(requested.official_results) <>
-        (select count(*) from public.race_entries entry where entry.race_id = linked.race_id)
+      and (
+        exists (
+          select 1
+          from public.race_entries entry
+          where entry.race_id = linked.race_id
+            and not exists (
+              select 1
+              from jsonb_array_elements(requested.official_results) result
+              where result ->> 'entryId' = entry.id::text
+                and result ->> 'sourceBoatId' = entry.boat_id::text
+            )
+        )
+        or exists (
+          select 1
+          from public.race_series_competitors competitor
+          where competitor.series_id = series_id_input
+            and competitor.role = 'competitor'
+            and not exists (
+              select 1
+              from jsonb_array_elements(requested.official_results) result
+              where result ->> 'boatId' = competitor.boat_id::text
+                and result ->> 'identity' = 'competitor'
+            )
+        )
+      )
   ) then
-    raise exception 'Completed included races require every official result';
+    raise exception 'Completed included races require every entry and competitor result';
   end if;
 
   if exists (
