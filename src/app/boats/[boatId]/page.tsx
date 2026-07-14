@@ -1,0 +1,162 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { CalendarDays, Users } from "lucide-react";
+
+import { BoatSettingsForm } from "@/app/boats/[boatId]/boat-settings-form";
+import { AppNav } from "@/components/layout/app-nav";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageShell } from "@/components/layout/page-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+
+export default async function BoatHubPage({
+  params,
+}: {
+  params: Promise<{ boatId: string }>;
+}) {
+  const { boatId } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const [{ data: profile }, { data: canView }, { data: canManage }] =
+    await Promise.all([
+      supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
+      supabase.rpc("can_view_boat", { bid: boatId }),
+      supabase.rpc("can_manage_boat", { bid: boatId }),
+    ]);
+  if (!canView) notFound();
+
+  const [{ data: boat }, { data: entries }] = await Promise.all([
+    supabase
+      .from("boats")
+      .select("id, name, sail_number, boat_class, owner_id")
+      .eq("id", boatId)
+      .maybeSingle(),
+    supabase
+      .from("race_entries")
+      .select("id, races(id, name, venue, starts_at, created_at), tracks(status)")
+      .eq("boat_id", boatId),
+  ]);
+  if (!boat) notFound();
+
+  const races = (entries ?? [])
+    .filter((entry) => entry.races)
+    .sort((a, b) => {
+      const aTime = new Date(a.races!.starts_at ?? a.races!.created_at).getTime();
+      const bTime = new Date(b.races!.starts_at ?? b.races!.created_at).getTime();
+      return bTime - aTime;
+    });
+
+  const subtitle =
+    [boat.sail_number ? `#${boat.sail_number}` : null, boat.boat_class]
+      .filter(Boolean)
+      .join(" · ") || "Boat";
+
+  return (
+    <>
+      <AppNav
+        email={user.email ?? ""}
+        displayName={profile?.display_name}
+        isAdmin={profile?.is_admin ?? false}
+      />
+      <PageShell>
+        <PageHeader
+          title={boat.name}
+          description={subtitle}
+          backHref="/boats"
+          backLabel="My boats"
+          actions={
+            canManage ? (
+              <Button variant="outline" asChild>
+                <Link href={`/boats/${boat.id}/crew`}>
+                  <Users className="size-4" aria-hidden="true" />
+                  Manage crew
+                </Link>
+              </Button>
+            ) : null
+          }
+        />
+
+        <section className="space-y-6 py-8">
+          {canManage ? (
+            <Card className="bg-card/70">
+              <CardHeader>
+                <CardTitle>Boat details</CardTitle>
+                <CardDescription>Name, sail number, and class.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BoatSettingsForm
+                  boatId={boat.id}
+                  name={boat.name}
+                  sailNumber={boat.sail_number}
+                  boatClass={boat.boat_class}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card className="bg-card/70">
+            <CardHeader>
+              <CardTitle>Races</CardTitle>
+              <CardDescription>
+                {races.length} race{races.length === 1 ? "" : "s"} for this boat
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {races.length > 0 ? (
+                <ul className="divide-y divide-border/60">
+                  {races.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          href={`/races/${entry.races!.id}`}
+                          className="font-medium hover:text-primary"
+                        >
+                          {entry.races!.name}
+                        </Link>
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <CalendarDays className="size-3.5" aria-hidden="true" />
+                          {new Date(
+                            entry.races!.starts_at ?? entry.races!.created_at,
+                          ).toLocaleDateString()}
+                          {entry.races!.venue ? ` · ${entry.races!.venue}` : ""}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          entry.tracks?.status === "processed" ? "secondary" : "outline"
+                        }
+                      >
+                        {entry.tracks?.status ?? "no track"}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  This boat isn&apos;t in any races yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </PageShell>
+    </>
+  );
+}
