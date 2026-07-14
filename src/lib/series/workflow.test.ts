@@ -258,6 +258,48 @@ describe("projectSeriesWorkflowV1", () => {
     );
   });
 
+  it("scores an entryless completed race from explicit confirmed DNS rows without analysis", () => {
+    const competitors = [
+      { boatId: "boat-alpha", boatName: "Alpha", role: "competitor" as const },
+      { boatId: "boat-bravo", boatName: "Bravo", role: "competitor" as const },
+    ];
+    const draft = competitors.map((competitor) => ({
+      entryId: `dns:${competitor.boatId}`,
+      sourceBoatId: competitor.boatId,
+      status: "dns",
+      place: null,
+      tied: false,
+      penaltyPoints: 0,
+      confirmed: true,
+    }));
+    const projection = projectSeriesWorkflowV1(input({
+      competitors,
+      races: [race({
+        analysisStatus: "missing",
+        analysisVersion: null,
+        performanceCalculationVersion: null,
+        correctionsVersion: null,
+        entries: [],
+      })],
+      draftOfficialResults: [{ raceId: "race-1", rows: draft }],
+    }));
+
+    expect(projection.status).toBe("ready");
+    expect(projection.issues).toEqual([]);
+    expect(projection.applyRaces[0]).toMatchObject({
+      expectedAnalysisVersion: null,
+      expectedCorrectionsVersion: null,
+      officialResults: [
+        { entryId: "dns:boat-alpha", status: "dns", confirmed: true },
+        { entryId: "dns:boat-bravo", status: "dns", confirmed: true },
+      ],
+    });
+    expect(projection.result?.races[0].source).toMatchObject({
+      analysisVersion: 0,
+      performanceCalculationVersion: "unavailable",
+    });
+  });
+
   it("never carries confirmation when the draft omits its source boat", () => {
     const rows = confirmedRows()[0].rows.map((row) => ({ ...row }));
     delete (rows[0] as Partial<typeof rows[number]>).sourceBoatId;

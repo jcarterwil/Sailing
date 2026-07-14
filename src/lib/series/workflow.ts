@@ -365,7 +365,7 @@ export function projectSeriesWorkflowV1(
       }
     }
 
-    if (requireComplete && race.analysisStatus !== "current") {
+    if (requireComplete && race.entries.length > 0 && race.analysisStatus !== "current") {
       issues.push({
         code: "analysis-not-current",
         raceId: race.raceId,

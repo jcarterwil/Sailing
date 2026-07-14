@@ -433,7 +433,14 @@ begin
         linked.included
         and linked.state = 'completed'
         and (
-          analysis.race_id is null
+          (
+            analysis.race_id is null
+            and exists (
+              select 1
+              from public.race_entries source_entry
+              where source_entry.race_id = requested.race_id
+            )
+          )
           or exists (
             select 1
             from public.race_entries source_entry

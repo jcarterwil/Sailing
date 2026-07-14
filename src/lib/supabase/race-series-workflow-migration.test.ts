@@ -37,6 +37,9 @@ describe("race series organizer workflow migration", () => {
     expect(migration).not.toMatch(
       /not exists \(\s*select 1\s*from public\.race_entries source_entry\s*where source_entry\.race_id = requested\.race_id\s*\)/,
     );
+    expect(migration).toMatch(
+      /analysis\.race_id is null\s*and exists \(\s*select 1\s*from public\.race_entries source_entry\s*where source_entry\.race_id = requested\.race_id/,
+    );
   });
 
   it("keeps both transactional write functions service-role only", () => {
