@@ -44,7 +44,7 @@ export default async function SharedReplayPage({
   const { admin, race } = await resolveSharedRace(slug);
   if (!race) notFound();
 
-  const raceMeta = parseRaceMeta(race.conditions, race.tags);
+  const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
 
   const [{ data: entries, error: entriesError }, { data: analysisRow }, { data: correctionsRow }] =
     await Promise.all([

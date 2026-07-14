@@ -1,5 +1,9 @@
+import type { PerformanceTimezoneV1 } from "@/lib/analytics/performance/types";
 import type { Json } from "@/lib/supabase/database.types";
-import type { WeatherEvidence } from "@/lib/weather/open-meteo";
+import {
+  normalizeWeatherHourlySamples,
+  type WeatherEvidence,
+} from "@/lib/weather/open-meteo";
 
 /** One crew member on a race entry. */
 export interface CrewMember {
@@ -31,6 +35,7 @@ export interface EntryMeta {
 export interface RaceMeta {
   conditions: RaceConditions | null;
   tags: string[];
+  timezone: PerformanceTimezoneV1;
 }
 
 /**
@@ -82,6 +87,33 @@ function optionalNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+export function isValidIanaTimezone(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const timezone = value.trim();
+  if (!timezone || timezone.length > 100) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeIanaTimezone(value: unknown): string | null {
+  return isValidIanaTimezone(value) ? value.trim() : null;
+}
+
+export function resolvePerformanceTimezone(
+  raceTimezone: unknown,
+  conditions: RaceConditions | null,
+): PerformanceTimezoneV1 {
+  const explicit = normalizeIanaTimezone(raceTimezone);
+  if (explicit) return { iana: explicit, source: "race" };
+  const weatherTimezone = normalizeIanaTimezone(conditions?.source?.evidence.location?.timezone);
+  if (weatherTimezone) return { iana: weatherTimezone, source: "weather-location" };
+  return { iana: "UTC", source: "utc-fallback" };
+}
+
 function normalizeConditionsSource(value: unknown): RaceConditionsSource | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -100,8 +132,8 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
     "archive-api.open-meteo.com",
   ]);
   const marineSourceValue = weather.marineSourceUrl;
+  let marineSourceUrl: URL | null = null;
   if (marineSourceValue !== null && marineSourceValue !== undefined) {
-    let marineSourceUrl: URL;
     try {
       marineSourceUrl = new URL(String(marineSourceValue));
     } catch {
@@ -109,7 +141,10 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
     }
     if (
       marineSourceUrl.protocol !== "https:" ||
-      marineSourceUrl.hostname !== "marine-api.open-meteo.com"
+      marineSourceUrl.hostname !== "marine-api.open-meteo.com" ||
+      marineSourceUrl.username !== "" ||
+      marineSourceUrl.password !== "" ||
+      marineSourceUrl.toString().length > 4_000
     ) {
       return null;
     }
@@ -117,6 +152,9 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
   if (
     weather.provider !== "open-meteo" ||
     sourceUrl.protocol !== "https:" ||
+    sourceUrl.username !== "" ||
+    sourceUrl.password !== "" ||
+    sourceUrl.toString().length > 4_000 ||
     !allowedWeatherHosts.has(sourceUrl.hostname) ||
     typeof weather.windMinKts !== "number" ||
     !Number.isFinite(weather.windMinKts) ||
@@ -127,6 +165,82 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
   ) {
     return null;
   }
+  const hourlyValue = weather.hourly;
+  const hourly = hourlyValue === undefined
+    ? undefined
+    : normalizeWeatherHourlySamples(hourlyValue);
+  if (hourlyValue !== undefined && hourly === null) return null;
+  const averageWindKts = weather.averageWindKts === undefined
+    ? undefined
+    : (() => {
+        const value = optionalNumber(weather.averageWindKts);
+        return value !== null && value >= 0 ? value : null;
+      })();
+  const conditionCode = weather.conditionCode === undefined || weather.conditionCode === null
+    ? weather.conditionCode as undefined | null
+    : typeof weather.conditionCode === "number" &&
+        Number.isInteger(weather.conditionCode) &&
+        weather.conditionCode >= 0 &&
+        weather.conditionCode <= 99
+      ? weather.conditionCode
+      : null;
+  const locationValue = weather.location;
+  const location = locationValue && typeof locationValue === "object" && !Array.isArray(locationValue)
+    ? {
+        name: String((locationValue as Record<string, unknown>).name ?? "").trim().slice(0, 180),
+        country: String((locationValue as Record<string, unknown>).country ?? "").trim().slice(0, 120) || null,
+        admin1: String((locationValue as Record<string, unknown>).admin1 ?? "").trim().slice(0, 120) || null,
+        latitude: optionalNumber((locationValue as Record<string, unknown>).latitude),
+        longitude: optionalNumber((locationValue as Record<string, unknown>).longitude),
+        timezone: normalizeIanaTimezone((locationValue as Record<string, unknown>).timezone),
+      }
+    : undefined;
+  const normalizedEvidence: Record<string, unknown> = {
+    provider: "open-meteo",
+    sourceUrl: sourceUrl.toString(),
+    marineSourceUrl: marineSourceUrl?.toString() ?? null,
+    windMinKts: weather.windMinKts,
+    windMaxKts: weather.windMaxKts,
+    windDirectionDeg: weather.windDirectionDeg,
+  };
+  if (
+    weather.dataset === "forecast" ||
+    weather.dataset === "historical-forecast" ||
+    weather.dataset === "historical-weather"
+  ) normalizedEvidence.dataset = weather.dataset;
+  if (location) normalizedEvidence.location = location;
+  for (const key of ["windowStart", "windowEnd", "fetchedAt"] as const) {
+    if (typeof weather[key] === "string" && Number.isFinite(Date.parse(weather[key]))) {
+      normalizedEvidence[key] = new Date(weather[key]).toISOString();
+    }
+  }
+  const sampleCount = optionalNumber(weather.sampleCount);
+  if (sampleCount !== null) {
+    normalizedEvidence.sampleCount = Math.min(26, Math.max(0, Math.round(sampleCount)));
+  }
+  for (const key of [
+    "gustMaxKts",
+    "temperatureMinC",
+    "temperatureMaxC",
+    "precipitationMm",
+    "cloudCoverPct",
+    "pressureMslHpa",
+    "waveHeightMinM",
+    "waveHeightMaxM",
+    "wavePeriodS",
+    "waveDirectionDeg",
+  ] as const) {
+    normalizedEvidence[key] = optionalNumber(weather[key]);
+  }
+  if (Array.isArray(weather.weatherCodes)) {
+    normalizedEvidence.weatherCodes = [...new Set(weather.weatherCodes.flatMap((code): number[] =>
+      typeof code === "number" && Number.isInteger(code) && code >= 0 && code <= 99
+        ? [code]
+        : []))].slice(0, 26);
+  }
+  if (hourly !== undefined) normalizedEvidence.hourly = hourly;
+  if (averageWindKts !== undefined) normalizedEvidence.averageWindKts = averageWindKts;
+  if (conditionCode !== undefined) normalizedEvidence.conditionCode = conditionCode;
   const aiValue = record.ai;
   const ai =
     aiValue &&
@@ -142,7 +256,7 @@ function normalizeConditionsSource(value: unknown): RaceConditionsSource | null 
       : null;
   const seaStateBasis = String(record.seaStateBasis ?? "").trim().slice(0, 300);
   return {
-    evidence: evidence as unknown as WeatherEvidence,
+    evidence: normalizedEvidence as unknown as WeatherEvidence,
     ai,
     seaStateBasis,
   };
@@ -189,10 +303,16 @@ export function parseEntryMeta(crew: Json | null, tags: string[] | null): EntryM
   };
 }
 
-export function parseRaceMeta(conditions: Json | null, tags: string[] | null): RaceMeta {
+export function parseRaceMeta(
+  conditions: Json | null,
+  tags: string[] | null,
+  timezone: string | null = null,
+): RaceMeta {
+  const normalizedConditions = normalizeConditions(conditions);
   return {
-    conditions: normalizeConditions(conditions),
+    conditions: normalizedConditions,
     tags: normalizeTags(tags),
+    timezone: resolvePerformanceTimezone(timezone, normalizedConditions),
   };
 }
 

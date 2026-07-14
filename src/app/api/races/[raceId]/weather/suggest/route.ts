@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { interpretWeatherWithAi } from "@/lib/ai/settings";
-import type { RaceConditions } from "@/lib/races/meta";
+import { normalizeIanaTimezone, type RaceConditions } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
 import {
   fetchRaceWeatherEvidence,
@@ -88,6 +88,7 @@ export async function POST(
     return NextResponse.json({
       conditions,
       resolvedLocation: formatWeatherLocation(location),
+      timezone: normalizeIanaTimezone(location.timezone),
       warning: interpretation.warning,
     });
   } catch (error) {

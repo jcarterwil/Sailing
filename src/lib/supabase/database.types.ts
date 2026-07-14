@@ -543,6 +543,7 @@ export type Database = {
           share_slug: string | null
           starts_at: string | null
           tags: string[]
+          timezone: string | null
           updated_at: string
           venue: string | null
         }
@@ -556,6 +557,7 @@ export type Database = {
           share_slug?: string | null
           starts_at?: string | null
           tags?: string[]
+          timezone?: string | null
           updated_at?: string
           venue?: string | null
         }
@@ -569,6 +571,7 @@ export type Database = {
           share_slug?: string | null
           starts_at?: string | null
           tags?: string[]
+          timezone?: string | null
           updated_at?: string
           venue?: string | null
         }

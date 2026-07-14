@@ -18,10 +18,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { RaceConditions } from "@/lib/races/meta";
+import { weatherCodeToText } from "@/lib/weather/open-meteo";
 
 interface SuggestionResponse {
   conditions: RaceConditions;
   resolvedLocation: string;
+  timezone: string | null;
   warning: string | null;
 }
 
@@ -48,7 +50,7 @@ export function WeatherFillWizard({
   defaultLocation: string;
   defaultStartsAt: string;
   defaultEndsAt: string;
-  onApply: (conditions: RaceConditions) => void;
+  onApply: (conditions: RaceConditions, timezone: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"configure" | "review">("configure");
@@ -87,7 +89,7 @@ export function WeatherFillWizard({
 
   function apply() {
     if (!suggestion) return;
-    onApply(suggestion.conditions);
+    onApply(suggestion.conditions, suggestion.timezone);
     setOpen(false);
     setStep("configure");
   }
@@ -200,6 +202,7 @@ export function WeatherFillWizard({
                 {new Date(evidence.windowStart).toLocaleString()}–
                 {new Date(evidence.windowEnd).toLocaleString()} · {evidence.sampleCount} hourly
                 sample{evidence.sampleCount === 1 ? "" : "s"}
+                {suggestion.timezone ? ` · ${suggestion.timezone}` : " · UTC fallback"}
               </p>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                 <div>
@@ -213,9 +216,23 @@ export function WeatherFillWizard({
                   <dd className="font-medium">{evidence.windDirectionDeg}°</dd>
                 </div>
                 <div>
+                  <dt className="text-xs text-muted-foreground">Average wind</dt>
+                  <dd className="font-medium">
+                    {evidence.averageWindKts === null || evidence.averageWindKts === undefined
+                      ? "Not available"
+                      : `${evidence.averageWindKts} kt`}
+                  </dd>
+                </div>
+                <div>
                   <dt className="text-xs text-muted-foreground">Max gust</dt>
                   <dd className="font-medium">
                     {evidence.gustMaxKts === null ? "Not available" : `${evidence.gustMaxKts} kt`}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Conditions</dt>
+                  <dd className="font-medium">
+                    {weatherCodeToText(evidence.conditionCode ?? null)}
                   </dd>
                 </div>
                 <div>

@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 import {
   conditionsToJson,
   crewToJson,
+  isValidIanaTimezone,
+  normalizeIanaTimezone,
   normalizeConditions,
   normalizeCrew,
   normalizeTags,
@@ -331,12 +333,20 @@ export async function updateEntryMeta(
 
 export async function updateRaceMeta(
   raceId: string,
-  meta: { conditions: RaceConditions | null; tags: string[] },
+  meta: { conditions: RaceConditions | null; tags: string[]; timezone: string | null },
 ) {
   const { supabase } = await requireUser();
 
   const conditions = normalizeConditions(meta.conditions);
   const tags = normalizeTags(meta.tags);
+  if (meta.timezone !== null && typeof meta.timezone !== "string") {
+    throw new Error("Race timezone must be a string or null.");
+  }
+  const requestedTimezone = meta.timezone?.trim() || null;
+  if (requestedTimezone !== null && !isValidIanaTimezone(requestedTimezone)) {
+    throw new Error("Race timezone must be a valid IANA identifier, such as America/Detroit.");
+  }
+  const timezone = normalizeIanaTimezone(requestedTimezone);
 
   // RLS-visible read proves membership; organizer check is app-level.
   const { data: race, error: raceError } = await supabase
@@ -359,7 +369,7 @@ export async function updateRaceMeta(
 
   const { error } = await supabase
     .from("races")
-    .update({ conditions: conditionsToJson(conditions), tags })
+    .update({ conditions: conditionsToJson(conditions), tags, timezone })
     .eq("id", raceId);
   if (error) throw new Error(`Could not update race metadata: ${error.message}`);
 
