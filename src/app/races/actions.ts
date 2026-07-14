@@ -19,16 +19,17 @@ import { normalizeOwnerInvitationCode } from "@/lib/boats/owner-invitations";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-const ENTRY_COLORS = [
-  "#7c3aed",
-  "#16a34a",
-  "#e11d48",
-  "#0e7490",
-  "#db2777",
-  "#4f46e5",
-  "#ca8a04",
-  "#0891b2",
-];
+export type BoatSelection =
+  | { kind: "existing"; boatId: string }
+  | {
+      kind: "new";
+      name: string;
+      sailNumber?: string;
+      boatClass?: string;
+    };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -55,81 +56,75 @@ export async function createRace(formData: FormData) {
   redirect(`/races/${race.id}`);
 }
 
-export async function joinRace(formData: FormData) {
-  const { user } = await requireUser();
-  const code = String(formData.get("code") ?? "").trim().toLowerCase();
-  const boatName = String(formData.get("boatName") ?? "").trim();
-  if (!code || !boatName) throw new Error("Join code and boat name are required.");
-
-  // The joiner is not yet a member, so RLS cannot see the race; resolve the
-  // code and insert with the service role after validating it.
-  const admin = createAdminClient();
-  const { data: race } = await admin
-    .from("races")
-    .select("id")
-    .eq("join_code", code)
-    .maybeSingle();
-  if (!race) throw new Error("No race found for that join code.");
-
-  const { data: boat, error: boatError } = await admin
-    .from("boats")
-    .insert({ owner_id: user.id, created_by: user.id, name: boatName })
-    .select("id")
-    .single();
-  if (boatError) throw new Error(`Could not create boat: ${boatError.message}`);
-
-  const { count } = await admin
-    .from("race_entries")
-    .select("id", { count: "exact", head: true })
-    .eq("race_id", race.id);
-  const { error: entryError } = await admin.from("race_entries").insert({
-    race_id: race.id,
-    boat_id: boat.id,
-    added_by: user.id,
-    color: ENTRY_COLORS[(count ?? 0) % ENTRY_COLORS.length],
-  });
-  if (entryError) {
-    throw new Error(`Could not join race: ${entryError.message}`);
+function validateBoatSelection(selection: BoatSelection) {
+  if (selection.kind === "existing") {
+    if (!UUID_PATTERN.test(selection.boatId)) throw new Error("Choose a valid boat.");
+    return;
   }
 
-  redirect(`/races/${race.id}`);
+  const name = selection.name.trim();
+  if (!name) throw new Error("A boat name is required.");
+  if (name.length > 120) throw new Error("Boat name must be 120 characters or fewer.");
+  if ((selection.sailNumber?.trim().length ?? 0) > 80) {
+    throw new Error("Sail number must be 80 characters or fewer.");
+  }
+  if ((selection.boatClass?.trim().length ?? 0) > 80) {
+    throw new Error("Boat class must be 80 characters or fewer.");
+  }
 }
 
-// Boat display name from an uploaded filename, e.g.
-// "Rock Steady 2 7-7-2026.vkx" -> "Rock Steady 2".
-function boatNameFromFilename(filename: string): string {
-  const stem = filename.replace(/\.[^.]+$/, "");
-  return stem.replace(/[\s_-]*\d{1,2}-\d{1,2}-\d{4}\s*$/, "").trim() || stem;
+export async function joinRace(input: { code: string; selection: BoatSelection }) {
+  const { supabase } = await requireUser();
+  const code = input.code.trim().toLowerCase();
+  if (!code || code.length > 64) throw new Error("Enter a valid join code.");
+  validateBoatSelection(input.selection);
+
+  const existing = input.selection.kind === "existing" ? input.selection.boatId : null;
+  const newBoat = input.selection.kind === "new" ? input.selection : null;
+  const { data, error } = await supabase.rpc("join_race_with_boat", {
+    join_code_input: code,
+    existing_boat_id: existing,
+    new_boat_name: newBoat?.name.trim() ?? null,
+    new_sail_number: newBoat?.sailNumber?.trim() || null,
+    new_boat_class: newBoat?.boatClass?.trim() || null,
+  });
+  const joined = data?.[0];
+  if (error || !joined) {
+    if (error?.code === "PGRST202") {
+      throw new Error("Boat selection is being updated. Try again in a moment.");
+    }
+    throw new Error(error?.message ?? "Could not join the race.");
+  }
+
+  revalidatePath("/boats");
+  revalidatePath("/dashboard");
+  redirect(`/races/${joined.race_id}`);
 }
 
-export async function createEntryFromFile(raceId: string, filename: string) {
-  const { supabase, user } = await requireUser();
+export async function createRaceEntryForFleetFile(input: {
+  raceId: string;
+  selection: Extract<BoatSelection, { kind: "existing" }> | { kind: "new"; name: string };
+}): Promise<{ entryId: string; boatId: string }> {
+  const { supabase } = await requireUser();
+  if (!UUID_PATTERN.test(input.raceId)) throw new Error("Choose a valid race.");
+  validateBoatSelection(input.selection);
 
-  // Organizer check happens naturally: entry insert RLS requires organizer.
-  const { data: boat, error: boatError } = await supabase
-    .from("boats")
-    .insert({ created_by: user.id, name: boatNameFromFilename(filename) })
-    .select("id")
-    .single();
-  if (boatError) throw new Error(`Could not create boat: ${boatError.message}`);
+  const { data, error } = await supabase.rpc("create_race_entry_for_boat", {
+    target_race_id: input.raceId,
+    existing_boat_id: input.selection.kind === "existing" ? input.selection.boatId : null,
+    new_boat_name: input.selection.kind === "new" ? input.selection.name.trim() : null,
+  });
+  const created = data?.[0];
+  if (error || !created) {
+    if (error?.code === "PGRST202") {
+      throw new Error("Fleet mapping is being updated. Try again in a moment.");
+    }
+    throw new Error(error?.message ?? "Could not add the mapped boat.");
+  }
 
-  const { count } = await supabase
-    .from("race_entries")
-    .select("id", { count: "exact", head: true })
-    .eq("race_id", raceId);
-  const { data: entry, error: entryError } = await supabase
-    .from("race_entries")
-    .insert({
-      race_id: raceId,
-      boat_id: boat.id,
-      added_by: user.id,
-      color: ENTRY_COLORS[(count ?? 0) % ENTRY_COLORS.length],
-    })
-    .select("id")
-    .single();
-  if (entryError) throw new Error(`Could not add entry: ${entryError.message}`);
-
-  return { entryId: entry.id, boatId: boat.id };
+  revalidatePath(`/races/${input.raceId}`);
+  revalidatePath("/boats");
+  return { entryId: created.entry_id, boatId: created.boat_id };
 }
 
 export interface TrackUploadGrant {

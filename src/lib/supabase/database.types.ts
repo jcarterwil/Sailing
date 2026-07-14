@@ -669,9 +669,36 @@ export type Database = {
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }
+      create_race_entry_for_boat: {
+        Args: {
+          existing_boat_id?: string | null
+          new_boat_name?: string | null
+          target_race_id: string
+        }
+        Returns: {
+          boat_id: string
+          created_boat: boolean
+          entry_id: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }
       is_race_organizer: { Args: { rid: string }; Returns: boolean }
+      join_race_with_boat: {
+        Args: {
+          existing_boat_id?: string | null
+          join_code_input: string
+          new_boat_class?: string | null
+          new_boat_name?: string | null
+          new_sail_number?: string | null
+        }
+        Returns: {
+          boat_id: string
+          created_boat: boolean
+          entry_id: string
+          race_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

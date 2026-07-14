@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Sailboat } from "lucide-react";
 
+import { CreateBoatDialog } from "@/app/boats/create-boat-dialog";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ export default async function BoatsIndexPage() {
           description="Boats you own, plus boats you've been given crew access to."
           actions={
             <>
+              <CreateBoatDialog existingNames={(owned ?? []).map((boat) => boat.name)} />
               <Button variant="outline" asChild>
                 <Link href="/claim">Claim a boat</Link>
               </Button>
@@ -83,7 +85,7 @@ export default async function BoatsIndexPage() {
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted-foreground">
-              No boat claimed yet. Claim one or join a race by code.
+              No owned boat yet. Add your boat, accept an owner invitation, or join a race.
             </p>
           )}
         </section>
