@@ -346,6 +346,8 @@ export function MapView({
       }
 
       const frame = frameSource.frameRef.current;
+      const currentTrailMode =
+        usePlaybackStore.getState().trailMode;
       const startLine = frame.course.startLine;
       addNauticalChartLayer(map, {
         beforeLayerId: "trails",
@@ -359,7 +361,9 @@ export function MapView({
         data: trailGeoJson(
           tracks,
           frame.timeMs,
-          currentTrailMode === "tail"\n            ? TAIL_SECONDS * 1_000\n            : null,
+          currentTrailMode === "tail"
+            ? TAIL_SECONDS * 1_000
+            : null,
         ),
       });
       map.addLayer({
@@ -375,7 +379,7 @@ export function MapView({
           "line-cap": "round",
           "line-join": "round",
           visibility:
-            trailMode === "speed" ? "none" : "visible",
+            currentTrailMode === "speed" ? "none" : "visible",
         },
       });
 
@@ -413,7 +417,7 @@ export function MapView({
             "line-cap": "round",
             "line-join": "round",
             visibility:
-              trailMode === "speed" ? "visible" : "none",
+              currentTrailMode === "speed" ? "visible" : "none",
           },
         });
       });
