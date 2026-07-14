@@ -32,6 +32,8 @@ describe("race series organizer workflow migration", () => {
     expect(migration).toContain(
       "corrections.source_revision is distinct from requested.expected_corrections_version",
     );
+    expect(migration).toContain("source_track.updated_at > analysis.computed_at");
+    expect(migration).toContain("corrections.updated_at > analysis.computed_at");
   });
 
   it("keeps both transactional write functions service-role only", () => {

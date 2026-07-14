@@ -429,6 +429,30 @@ begin
       or requested.next_official_results_revision is null
       or analysis.source_revision is distinct from requested.expected_analysis_version
       or corrections.source_revision is distinct from requested.expected_corrections_version
+      or (
+        linked.included
+        and linked.state = 'completed'
+        and (
+          analysis.race_id is null
+          or not exists (
+            select 1
+            from public.race_entries source_entry
+            where source_entry.race_id = requested.race_id
+          )
+          or exists (
+            select 1
+            from public.race_entries source_entry
+            left join public.tracks source_track on source_track.entry_id = source_entry.id
+            where source_entry.race_id = requested.race_id
+              and (
+                source_track.entry_id is null
+                or source_track.status is distinct from 'processed'
+                or source_track.updated_at > analysis.computed_at
+              )
+          )
+          or corrections.updated_at > analysis.computed_at
+        )
+      )
       or jsonb_typeof(requested.official_results) is distinct from 'array'
       or jsonb_array_length(requested.official_results) > 300
       or requested.next_official_results_revision < requested.expected_official_results_revision
