@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import {
+  IMPERSONATION_COOKIE,
+  readExpiryUnverified,
+} from "@/lib/auth/impersonation-cookie";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 export async function updateSession(request: NextRequest) {
@@ -26,5 +30,21 @@ export async function updateSession(request: NextRequest) {
   });
 
   await supabase.auth.getClaims();
+
+  // Enforce the impersonation hard time-cap. Clearing cookies is always safe,
+  // so no signature check is needed here — a malformed cookie is just dropped.
+  const impersonation = request.cookies.get(IMPERSONATION_COOKIE)?.value;
+  if (impersonation) {
+    const expiresAt = readExpiryUnverified(impersonation);
+    if (expiresAt === null || Date.now() >= expiresAt) {
+      response.cookies.delete(IMPERSONATION_COOKIE);
+      for (const cookie of request.cookies.getAll()) {
+        if (cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token")) {
+          response.cookies.delete(cookie.name);
+        }
+      }
+    }
+  }
+
   return response;
 }

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Users } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
+import { ActAsOwnerButton } from "@/app/admin/users/act-as-button";
 import { UserAccessEditor } from "@/app/admin/users/user-access-editor";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -100,23 +102,11 @@ export default async function AdminUsersPage() {
     .sort((a, b) => (a.authUser.email ?? "").localeCompare(b.authUser.email ?? ""));
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl px-6 py-8 sm:px-10 lg:px-12">
-      <header className="border-b border-border/70 pb-6">
-        <Link
-          href="/dashboard"
-          className="mb-4 inline-flex w-fit text-sm text-muted-foreground hover:text-foreground"
-        >
-          Back to dashboard
-        </Link>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          <Users className="size-6 text-primary" aria-hidden="true" />
-          Users
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Every Supabase Auth account with editable administrator and boat-level access. This
-          directory does not delete or suspend accounts.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        title="Users"
+        description="Every Supabase Auth account with editable administrator and boat-level access. This directory does not delete or suspend accounts."
+      />
 
       <section className="py-8">
         <Card className="bg-card/70">
@@ -182,14 +172,22 @@ export default async function AdminUsersPage() {
                     <TableCell>{formatDate(authUser.created_at)}</TableCell>
                     <TableCell>{formatDate(authUser.last_sign_in_at)}</TableCell>
                     <TableCell className="text-right">
-                      <UserAccessEditor
-                        userId={authUser.id}
-                        userLabel={profile?.display_name ?? authUser.email ?? "Unknown user"}
-                        currentUserId={user.id}
-                        initialIsAdmin={profile?.is_admin ?? false}
-                        initialBoatAccess={boatAccess}
-                        boats={accessBoats}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        {!profile?.is_admin && authUser.id !== user.id ? (
+                          <ActAsOwnerButton
+                            userId={authUser.id}
+                            label={profile?.display_name ?? authUser.email ?? "user"}
+                          />
+                        ) : null}
+                        <UserAccessEditor
+                          userId={authUser.id}
+                          userLabel={profile?.display_name ?? authUser.email ?? "Unknown user"}
+                          currentUserId={user.id}
+                          initialIsAdmin={profile?.is_admin ?? false}
+                          initialBoatAccess={boatAccess}
+                          boats={accessBoats}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -198,6 +196,6 @@ export default async function AdminUsersPage() {
           </CardContent>
         </Card>
       </section>
-    </main>
+    </>
   );
 }

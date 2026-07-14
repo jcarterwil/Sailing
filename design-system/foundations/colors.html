@@ -1,0 +1,95 @@
+<!-- @dsCard group="Foundations" -->
+<style>
+  .ds-colors {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+  .ds-theme {
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+  }
+  .ds-theme[data-mode="light"] {
+    background: oklch(0.99 0.006 240);
+    color: oklch(0.21 0.03 250);
+  }
+  .ds-theme[data-mode="dark"] {
+    background: oklch(0.17 0.02 250);
+    color: oklch(0.96 0.01 240);
+  }
+  .ds-theme h3 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .ds-swatches {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .ds-swatch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+  }
+  .ds-chip {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    flex: none;
+  }
+  .ds-charts {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .ds-charts .ds-chip {
+    width: 28px;
+    height: 28px;
+  }
+</style>
+<div class="ds-colors">
+  <div class="ds-theme" data-mode="light">
+    <h3>Light</h3>
+    <div class="ds-swatches">
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.51 0.13 245)"></span>primary</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.96 0.012 240)"></span>secondary</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.93 0.03 220)"></span>accent</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.96 0.012 240)"></span>muted</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(1 0.004 240)"></span>card</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.577 0.245 27.325)"></span>destructive</div>
+    </div>
+    <div class="ds-charts">
+      <span class="ds-chip" style="background: oklch(0.55 0.14 245)"></span>
+      <span class="ds-chip" style="background: oklch(0.68 0.12 195)"></span>
+      <span class="ds-chip" style="background: oklch(0.75 0.14 85)"></span>
+      <span class="ds-chip" style="background: oklch(0.62 0.17 25)"></span>
+      <span class="ds-chip" style="background: oklch(0.63 0.14 155)"></span>
+    </div>
+  </div>
+  <div class="ds-theme" data-mode="dark">
+    <h3>Dark</h3>
+    <div class="ds-swatches">
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.64 0.14 240)"></span>primary</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.27 0.03 250)"></span>secondary</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.32 0.05 230)"></span>accent</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.27 0.03 250)"></span>muted</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.21 0.025 250)"></span>card</div>
+      <div class="ds-swatch"><span class="ds-chip" style="background: oklch(0.704 0.191 22.216)"></span>destructive</div>
+    </div>
+    <div class="ds-charts">
+      <span class="ds-chip" style="background: oklch(0.64 0.14 245)"></span>
+      <span class="ds-chip" style="background: oklch(0.72 0.12 195)"></span>
+      <span class="ds-chip" style="background: oklch(0.78 0.14 85)"></span>
+      <span class="ds-chip" style="background: oklch(0.68 0.17 25)"></span>
+      <span class="ds-chip" style="background: oklch(0.7 0.14 155)"></span>
+    </div>
+  </div>
+</div>
