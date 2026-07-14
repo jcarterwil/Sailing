@@ -267,6 +267,7 @@ export type Database = {
           computed_at: string
           corrections_applied_at: string | null
           race_id: string
+          source_revision: number
           version: number
         }
         Insert: {
@@ -274,6 +275,7 @@ export type Database = {
           computed_at?: string
           corrections_applied_at?: string | null
           race_id: string
+          source_revision?: number
           version?: number
         }
         Update: {
@@ -281,6 +283,7 @@ export type Database = {
           computed_at?: string
           corrections_applied_at?: string | null
           race_id?: string
+          source_revision?: number
           version?: number
         }
         Relationships: [
@@ -297,6 +300,7 @@ export type Database = {
         Row: {
           corrections: Json
           race_id: string
+          source_revision: number
           updated_at: string
           updated_by: string | null
           version: number
@@ -304,6 +308,7 @@ export type Database = {
         Insert: {
           corrections?: Json
           race_id: string
+          source_revision?: number
           updated_at?: string
           updated_by?: string | null
           version?: number
@@ -311,6 +316,7 @@ export type Database = {
         Update: {
           corrections?: Json
           race_id?: string
+          source_revision?: number
           updated_at?: string
           updated_by?: string | null
           version?: number
@@ -609,30 +615,52 @@ export type Database = {
           created_at: string
           discard_eligible: boolean
           included: boolean
+          official_results: Json
+          official_results_revision: number
+          official_results_updated_at: string | null
+          official_results_updated_by: string | null
           race_id: string
           sequence: number
           series_id: string
+          state: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           discard_eligible?: boolean
           included?: boolean
+          official_results?: Json
+          official_results_revision?: number
+          official_results_updated_at?: string | null
+          official_results_updated_by?: string | null
           race_id: string
           sequence: number
           series_id: string
+          state?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           discard_eligible?: boolean
           included?: boolean
+          official_results?: Json
+          official_results_revision?: number
+          official_results_updated_at?: string | null
+          official_results_updated_by?: string | null
           race_id?: string
           sequence?: number
           series_id?: string
+          state?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "race_series_races_official_results_updated_by_fkey"
+            columns: ["official_results_updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "race_series_races_race_id_fkey"
             columns: ["race_id"]
@@ -916,6 +944,23 @@ export type Database = {
           transferred: boolean
         }[]
       }
+      apply_race_series_score_snapshot: {
+        Args: {
+          actor_id_input: string
+          expected_revision_input: number
+          race_updates_input: Json
+          series_id_input: string
+          snapshot_fingerprint_input: string
+          snapshot_result_input: Json
+          snapshot_scoring_version_input: string
+        }
+        Returns: {
+          idempotent: boolean
+          series_revision: number
+          snapshot_id: string
+          snapshot_revision: number
+        }[]
+      }
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }
@@ -949,6 +994,24 @@ export type Database = {
           entry_id: string
           race_id: string
         }[]
+      }
+      save_race_series_setup: {
+        Args: {
+          actor_id_input: string
+          aliases_input: Json
+          competitors_input: Json
+          ends_on_input: string | null
+          expected_revision_input: number
+          name_input: string
+          races_input: Json
+          scoring_config_input: Json
+          scoring_version_input: string
+          series_id_input: string
+          starts_on_input: string | null
+          timezone_input: string
+          venue_input: string
+        }
+        Returns: number
       }
     }
     Enums: {
