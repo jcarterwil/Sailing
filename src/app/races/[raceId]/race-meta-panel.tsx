@@ -17,7 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { RaceConditions } from "@/lib/races/meta";
+import {
+  resolvePerformanceTimezone,
+  type RaceConditions,
+} from "@/lib/races/meta";
 
 function TagsInput({
   tags,
@@ -97,6 +100,7 @@ export function RaceMetaPanel({
   canEdit,
   initialConditions,
   initialTags,
+  initialTimezone,
   defaultWeatherLocation,
   defaultWeatherStartsAt,
   defaultWeatherEndsAt,
@@ -105,6 +109,7 @@ export function RaceMetaPanel({
   canEdit: boolean;
   initialConditions: RaceConditions | null;
   initialTags: string[];
+  initialTimezone: string | null;
   defaultWeatherLocation: string;
   defaultWeatherStartsAt: string;
   defaultWeatherEndsAt: string;
@@ -120,6 +125,7 @@ export function RaceMetaPanel({
     },
   );
   const [tags, setTags] = useState(initialTags);
+  const [timezone, setTimezone] = useState(initialTimezone ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -136,7 +142,11 @@ export function RaceMetaPanel({
     setError(null);
     startTransition(async () => {
       try {
-        await updateRaceMeta(raceId, { conditions, tags });
+        await updateRaceMeta(raceId, {
+          conditions,
+          tags,
+          timezone: timezone.trim() || null,
+        });
       } catch (err) {
         if (err instanceof Error && !err.message.includes("NEXT_REDIRECT")) {
           setError(err.message);
@@ -153,6 +163,12 @@ export function RaceMetaPanel({
   }
   if (conditions.windDirDeg !== null) summaryBits.push(`${conditions.windDirDeg}°`);
   if (conditions.seaState) summaryBits.push(conditions.seaState);
+  const resolvedTimezone = resolvePerformanceTimezone(timezone, conditions);
+  const timezoneSource = resolvedTimezone.source === "race"
+    ? "Saved on this race"
+    : resolvedTimezone.source === "weather-location"
+      ? "Weather-location fallback — save to make explicit"
+      : "UTC fallback — set the race timezone before publishing local times";
 
   return (
     <Card className="bg-card/70">
@@ -170,6 +186,20 @@ export function RaceMetaPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="race-timezone">Race timezone (IANA)</Label>
+          <Input
+            id="race-timezone"
+            disabled={!canEdit}
+            maxLength={100}
+            placeholder="America/Detroit"
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            {resolvedTimezone.iana} · {timezoneSource}. Analytics remain stored in UTC.
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="wind-min">Wind min (kts)</Label>
@@ -253,6 +283,9 @@ export function RaceMetaPanel({
             >
               View source request
             </a>
+            {!conditions.source.evidence.hourly?.length && (
+              <p className="mt-1">Refresh weather to add timeline.</p>
+            )}
           </div>
         )}
         {canEdit && (
@@ -262,7 +295,10 @@ export function RaceMetaPanel({
               defaultLocation={defaultWeatherLocation}
               defaultStartsAt={defaultWeatherStartsAt}
               defaultEndsAt={defaultWeatherEndsAt}
-              onApply={setConditions}
+              onApply={(nextConditions, suggestedTimezone) => {
+                setConditions(nextConditions);
+                if (suggestedTimezone) setTimezone(suggestedTimezone);
+              }}
             />
             <Button type="button" onClick={save} disabled={pending}>
               <Save className="size-4" aria-hidden="true" />

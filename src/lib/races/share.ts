@@ -11,6 +11,7 @@ export type SharedRace = {
   created_at: string;
   conditions: Json | null;
   tags: string[];
+  timezone: string | null;
   share_slug: string;
 };
 
@@ -22,7 +23,7 @@ export async function resolveSharedRace(slug: string): Promise<{
   const admin = createAdminClient();
   const { data: race, error } = await admin
     .from("races")
-    .select("id, name, venue, starts_at, created_at, conditions, tags, share_slug")
+    .select("*")
     .eq("share_slug", slug)
     .maybeSingle();
   if (error) {
@@ -41,6 +42,7 @@ export async function resolveSharedRace(slug: string): Promise<{
       created_at: race.created_at,
       conditions: race.conditions,
       tags: race.tags,
+      timezone: race.timezone,
       share_slug: race.share_slug,
     },
   };

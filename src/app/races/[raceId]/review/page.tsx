@@ -34,7 +34,7 @@ export default async function RaceReviewPage({
 
   const { data: race } = await supabase
     .from("races")
-    .select("id, name, conditions, tags")
+    .select("*")
     .eq("id", raceId)
     .maybeSingle();
   if (!race) notFound();
@@ -109,7 +109,7 @@ export default async function RaceReviewPage({
     <ReviewPageClient
       raceId={race.id}
       raceName={race.name}
-      raceMeta={parseRaceMeta(race.conditions, race.tags)}
+      raceMeta={parseRaceMeta(race.conditions, race.tags, race.timezone)}
       trackMetas={trackMetas}
       initialAnalysis={fresh ? analysis : null}
       analysisStale={!fresh && analysis != null}

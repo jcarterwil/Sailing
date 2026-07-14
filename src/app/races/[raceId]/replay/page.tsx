@@ -66,14 +66,14 @@ export default async function ReplayPage({
   // RLS-visible read proves membership.
   const { data: race } = await supabase
     .from("races")
-    .select("id, name, conditions, tags")
+    .select("*")
     .eq("id", raceId)
     .maybeSingle();
   if (!race) {
     notFound();
   }
 
-  const raceMeta = parseRaceMeta(race.conditions, race.tags);
+  const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
 
   const [{ data: entries }, { data: analysisRow }, { data: correctionsRow }, { data: videoRows }] =
     await Promise.all([

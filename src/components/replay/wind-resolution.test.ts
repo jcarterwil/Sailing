@@ -8,7 +8,11 @@ function withWind(wind: WindAnalysis): RaceAnalysis {
   return { wind } as RaceAnalysis;
 }
 
-const EMPTY_META: RaceMeta = { conditions: null, tags: [] };
+const EMPTY_META: RaceMeta = {
+  conditions: null,
+  tags: [],
+  timezone: { iana: "UTC", source: "utc-fallback" },
+};
 
 describe("createReplayWindResolver", () => {
   it("interpolates sensor direction across north and speed at scrub time", () => {
@@ -73,6 +77,7 @@ describe("createReplayWindResolver", () => {
   it("falls back to manual race conditions and preserves a speed range", () => {
     const meta: RaceMeta = {
       tags: [],
+      timezone: { iana: "UTC", source: "utc-fallback" },
       conditions: {
         windDirDeg: -80,
         windMinKts: 14,
@@ -115,6 +120,7 @@ describe("createReplayWindResolver", () => {
     const resolver = createReplayWindResolver(
       {
         tags: [],
+        timezone: { iana: "UTC", source: "utc-fallback" },
         conditions: {
           windDirDeg: 270,
           windMinKts,

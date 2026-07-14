@@ -40,9 +40,9 @@ export default async function RaceManagePage({
 
   const { data: race, error: raceError } = await supabase
     .from("races")
-    .select(
-      "id, name, venue, starts_at, created_at, organizer_id, join_code, share_slug, conditions, tags",
-    )
+    // Select the row shape so an app-first deploy still works before the
+    // additive timezone column reaches PostgREST.
+    .select("*")
     .eq("id", raceId)
     .maybeSingle();
   if (raceError) {
@@ -108,7 +108,7 @@ export default async function RaceManagePage({
   const membershipByBoatId = new Map(
     (boatMemberships ?? []).map((membership) => [membership.boat_id, membership.role]),
   );
-  const raceMeta = parseRaceMeta(race.conditions, race.tags);
+  const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
   const panelEntries = (entries ?? []).map((entry) => {
     const entryMeta = parseEntryMeta(entry.crew, entry.tags);
     return {
@@ -267,11 +267,12 @@ export default async function RaceManagePage({
 
       <section className="space-y-6 py-8">
         <RaceMetaPanel
-          key={`${race.id}:${raceMeta.tags.join("|")}:${JSON.stringify(raceMeta.conditions)}`}
+          key={`${race.id}:${race.timezone ?? "fallback"}:${raceMeta.tags.join("|")}:${JSON.stringify(raceMeta.conditions)}`}
           raceId={race.id}
           canEdit={canManageRace}
           initialConditions={raceMeta.conditions}
           initialTags={raceMeta.tags}
+          initialTimezone={race.timezone}
           defaultWeatherLocation={race.venue ?? ""}
           defaultWeatherStartsAt={new Date(weatherStartMs).toISOString()}
           defaultWeatherEndsAt={new Date(weatherEndMs).toISOString()}

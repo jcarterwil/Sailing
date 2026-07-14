@@ -9,6 +9,15 @@ export interface WeatherLocation {
   timezone: string | null;
 }
 
+export interface WeatherHourlySample {
+  time: string;
+  windSpeedKts: number | null;
+  windDirectionDeg: number | null;
+  gustKts: number | null;
+  temperatureC: number | null;
+  weatherCode: number | null;
+}
+
 export interface WeatherEvidence {
   provider: "open-meteo";
   dataset: WeatherDataset;
@@ -33,6 +42,10 @@ export interface WeatherEvidence {
   waveHeightMaxM: number | null;
   wavePeriodS: number | null;
   waveDirectionDeg: number | null;
+  /** Added in #84. Optional so persisted pre-#84 snapshots remain readable. */
+  hourly?: WeatherHourlySample[];
+  averageWindKts?: number | null;
+  conditionCode?: number | null;
 }
 
 interface OpenMeteoGeocodingResponse {
@@ -67,6 +80,9 @@ type Fetcher = typeof fetch;
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+export const MAX_WEATHER_HOURLY_SAMPLES = 26;
+export const ANALYZED_WIND_REPORT_LABEL = "Analyzed wind used for VMG";
+export const WEATHER_CONTEXT_REPORT_LABEL = "Weather context (Open-Meteo)";
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -80,11 +96,14 @@ function numericArray(value: unknown): Array<number | null> {
   return Array.isArray(value) ? value.map(finiteNumber) : [];
 }
 
-function timeArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+function timeArray(value: unknown): Array<string | null> {
+  return Array.isArray(value)
+    ? value.map((item) => typeof item === "string" ? item : null)
+    : [];
 }
 
-function parseApiTime(value: string): number {
+function parseApiTime(value: string | null): number {
+  if (value === null) return Number.NaN;
   const hasZone = /(?:Z|[+-]\d\d:\d\d)$/i.test(value);
   return Date.parse(hasZone ? value : `${value}Z`);
 }
@@ -105,13 +124,140 @@ function circularMeanDeg(directions: number[], weights: number[]): number | null
   let y = 0;
   for (let index = 0; index < directions.length; index++) {
     const radians = (directions[index] * Math.PI) / 180;
-    const weight = Math.max(weights[index] ?? 1, 0.1);
+    const weight = Math.max(weights[index] ?? 1, 0);
     x += Math.cos(radians) * weight;
     y += Math.sin(radians) * weight;
   }
   if (Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9) return null;
   const normalized = (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
   return normalized > 359.999999 ? 0 : normalized;
+}
+
+function nonNegativeNumber(value: unknown): number | null {
+  const number = finiteNumber(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function normalizedDirection(value: unknown): number | null {
+  const number = finiteNumber(value);
+  if (number === null) return null;
+  return round(((number % 360) + 360) % 360);
+}
+
+function normalizedWeatherCode(value: unknown): number | null {
+  const number = finiteNumber(value);
+  if (number === null || !Number.isInteger(number) || number < 0 || number > 99) return null;
+  return number;
+}
+
+function normalizeHourlySample(value: unknown): WeatherHourlySample | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.time !== "string") return null;
+  const timeMs = parseApiTime(row.time);
+  if (!Number.isFinite(timeMs)) return null;
+  return {
+    time: new Date(timeMs).toISOString(),
+    windSpeedKts: nonNegativeNumber(row.windSpeedKts),
+    windDirectionDeg: normalizedDirection(row.windDirectionDeg),
+    gustKts: nonNegativeNumber(row.gustKts),
+    temperatureC: finiteNumber(row.temperatureC),
+    weatherCode: normalizedWeatherCode(row.weatherCode),
+  };
+}
+
+/** Normalize stored hourly evidence with a strict payload bound and stable ordering. */
+export function normalizeWeatherHourlySamples(value: unknown): WeatherHourlySample[] | null {
+  if (!Array.isArray(value) || value.length > MAX_WEATHER_HOURLY_SAMPLES) return null;
+  const byTime = new Map<string, WeatherHourlySample>();
+  for (const row of value) {
+    const sample = normalizeHourlySample(row);
+    if (sample && !byTime.has(sample.time)) byTime.set(sample.time, sample);
+  }
+  return [...byTime.values()].sort((a, b) => a.time.localeCompare(b.time));
+}
+
+function sampleDurationMs(time: string, start: Date, end: Date): number {
+  const timeMs = Date.parse(time);
+  const overlap = Math.min(end.getTime(), timeMs + HOUR_MS / 2)
+    - Math.max(start.getTime(), timeMs - HOUR_MS / 2);
+  // A nearest-hour fallback can sit just outside the window. Keep it usable,
+  // while real overlapping samples retain their duration weighting.
+  return Math.max(overlap, 1);
+}
+
+function durationWeightedMean(
+  samples: Array<{ value: number; durationMs: number }>,
+): number | null {
+  const totalDuration = samples.reduce((sum, sample) => sum + sample.durationMs, 0);
+  if (totalDuration <= 0) return null;
+  return samples.reduce(
+    (sum, sample) => sum + sample.value * sample.durationMs,
+    0,
+  ) / totalDuration;
+}
+
+function modalConditionCode(
+  samples: readonly WeatherHourlySample[],
+  start: Date,
+  end: Date,
+): number | null {
+  const contribution = new Map<number, { count: number; durationMs: number; first: number }>();
+  for (let index = 0; index < samples.length; index++) {
+    const sample = samples[index];
+    if (sample.weatherCode === null) continue;
+    const current = contribution.get(sample.weatherCode) ?? {
+      count: 0,
+      durationMs: 0,
+      first: index,
+    };
+    current.count++;
+    current.durationMs += sampleDurationMs(sample.time, start, end);
+    contribution.set(sample.weatherCode, current);
+  }
+  return [...contribution.entries()]
+    .sort(([codeA, a], [codeB, b]) =>
+      b.count - a.count ||
+      b.durationMs - a.durationMs ||
+      a.first - b.first ||
+      codeA - codeB)
+    .at(0)?.[0] ?? null;
+}
+
+/** Deterministic WMO/Open-Meteo weather-code wording for report cards. */
+export function weatherCodeToText(code: number | null): string {
+  const labels: Record<number, string> = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snowfall",
+    73: "Moderate snowfall",
+    75: "Heavy snowfall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+  };
+  if (code === null) return "Unavailable";
+  return labels[code] ?? `Weather code ${code}`;
 }
 
 async function getJson<T>(url: URL, fetcher: Fetcher): Promise<T> {
@@ -217,7 +363,7 @@ function buildMarineUrl(location: WeatherLocation, start: Date, end: Date): URL 
   return url;
 }
 
-function selectedIndices(times: string[], start: Date, end: Date): number[] {
+function selectedIndices(times: Array<string | null>, start: Date, end: Date): number[] {
   const from = start.getTime() - HOUR_MS / 2;
   const through = end.getTime() + HOUR_MS / 2;
   const indices = times
@@ -237,6 +383,33 @@ function selectedIndices(times: string[], start: Date, end: Date): number[] {
     }
   }
   return closestIndex >= 0 && closestDistance <= 3 * HOUR_MS ? [closestIndex] : [];
+}
+
+function buildHourlySamples(
+  hourly: NonNullable<OpenMeteoHourlyResponse["hourly"]>,
+  indices: readonly number[],
+): WeatherHourlySample[] {
+  const times = timeArray(hourly.time);
+  const speeds = numericArray(hourly.wind_speed_10m);
+  const directions = numericArray(hourly.wind_direction_10m);
+  const gusts = numericArray(hourly.wind_gusts_10m);
+  const temperatures = numericArray(hourly.temperature_2m);
+  const codes = numericArray(hourly.weather_code);
+  const samples = indices.flatMap((index): WeatherHourlySample[] => {
+    const rawTime = times[index];
+    const timeMs = parseApiTime(rawTime);
+    if (!Number.isFinite(timeMs)) return [];
+    return [{
+      time: new Date(timeMs).toISOString(),
+      windSpeedKts: nonNegativeNumber(speeds[index]),
+      windDirectionDeg: normalizedDirection(directions[index]),
+      gustKts: nonNegativeNumber(gusts[index]),
+      temperatureC: finiteNumber(temperatures[index]),
+      weatherCode: normalizedWeatherCode(codes[index]),
+    }];
+  });
+  const normalized = normalizeWeatherHourlySamples(samples);
+  return normalized ?? [];
 }
 
 function selectedNumbers(values: Array<number | null>, indices: number[]): number[] {
@@ -287,37 +460,46 @@ export function summarizeOpenMeteoWeather(
   marineSourceUrl: string | null = null,
   fetchedAt = new Date(),
 ): WeatherEvidence {
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    throw new Error("Race start and end must be valid dates in chronological order.");
+  }
+  if (end.getTime() - start.getTime() > DAY_MS) {
+    throw new Error("The weather window cannot exceed 24 hours.");
+  }
   const hourly = payload.hourly;
   if (!hourly) throw new Error("Weather service returned no hourly data.");
   const indices = selectedIndices(timeArray(hourly.time), start, end);
   if (indices.length === 0) throw new Error("Weather service returned no data during the race window.");
 
-  const speedValues = numericArray(hourly.wind_speed_10m);
-  const directionValues = numericArray(hourly.wind_direction_10m);
-  const windPairs = indices
-    .map((index) => ({ speed: speedValues[index], direction: directionValues[index] }))
-    .filter(
-      (pair): pair is { speed: number; direction: number } =>
-        typeof pair.speed === "number" &&
-        Number.isFinite(pair.speed) &&
-        typeof pair.direction === "number" &&
-        Number.isFinite(pair.direction),
-    );
+  const hourlySamples = buildHourlySamples(hourly, indices);
+  const windPairs = hourlySamples.flatMap((sample) =>
+    sample.windSpeedKts !== null && sample.windDirectionDeg !== null
+      ? [{
+          speed: sample.windSpeedKts,
+          direction: sample.windDirectionDeg,
+          durationMs: sampleDurationMs(sample.time, start, end),
+        }]
+      : []);
   if (windPairs.length === 0) {
     throw new Error("Weather service returned no usable wind data during the race window.");
   }
-  const gusts = selectedNumbers(numericArray(hourly.wind_gusts_10m), indices);
-  const temperatures = selectedNumbers(numericArray(hourly.temperature_2m), indices);
+  const gusts = hourlySamples.flatMap((sample) => sample.gustKts === null ? [] : [sample.gustKts]);
+  const temperatures = hourlySamples.flatMap(
+    (sample) => sample.temperatureC === null ? [] : [sample.temperatureC],
+  );
   const precipitation = selectedNumbers(numericArray(hourly.precipitation), indices);
   const clouds = selectedNumbers(numericArray(hourly.cloud_cover), indices);
   const pressures = selectedNumbers(numericArray(hourly.pressure_msl), indices);
-  const codes = selectedNumbers(numericArray(hourly.weather_code), indices).map(Math.round);
   const direction = circularMeanDeg(
     windPairs.map((pair) => pair.direction),
-    windPairs.map((pair) => pair.speed),
+    windPairs.map((pair) => pair.durationMs * pair.speed),
   );
   const pairedSpeeds = windPairs.map((pair) => pair.speed);
+  const averageWindKts = durationWeightedMean(
+    windPairs.map((pair) => ({ value: pair.speed, durationMs: pair.durationMs })),
+  );
   if (direction === null) throw new Error("Weather service wind direction was indeterminate.");
+  const conditionCode = modalConditionCode(hourlySamples, start, end);
 
   return {
     provider: "open-meteo",
@@ -328,7 +510,7 @@ export function summarizeOpenMeteoWeather(
     windowStart: start.toISOString(),
     windowEnd: end.toISOString(),
     fetchedAt: fetchedAt.toISOString(),
-    sampleCount: indices.length,
+    sampleCount: hourlySamples.length,
     windMinKts: round(Math.min(...pairedSpeeds)),
     windMaxKts: round(Math.max(...pairedSpeeds)),
     windDirectionDeg: Math.round(direction) % 360,
@@ -340,7 +522,12 @@ export function summarizeOpenMeteoWeather(
       : null,
     cloudCoverPct: clouds.length ? Math.round(mean(clouds)!) : null,
     pressureMslHpa: pressures.length ? round(mean(pressures)!) : null,
-    weatherCodes: [...new Set(codes)],
+    weatherCodes: [...new Set(hourlySamples.flatMap(
+      (sample) => sample.weatherCode === null ? [] : [sample.weatherCode],
+    ))],
+    hourly: hourlySamples,
+    averageWindKts: averageWindKts === null ? null : round(averageWindKts),
+    conditionCode,
     ...summarizeMarine(marinePayload, start, end),
   };
 }
