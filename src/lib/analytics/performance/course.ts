@@ -9,7 +9,6 @@ import {
   PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M,
   PERFORMANCE_COURSE_MIN_OUTLIER_RADIUS_M,
   PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES,
-  PERFORMANCE_LINE_ENDPOINT_TOLERANCE_M,
   PERFORMANCE_MAX_ENTRY_COUNT,
   PERFORMANCE_MAX_LEG_COUNT,
   PERFORMANCE_MAX_SOURCE_GAP_MS,
@@ -48,6 +47,11 @@ import type {
   RaceStructure,
   WindAnalysis,
 } from "@/lib/analytics/types";
+import {
+  intersectFiniteLineSegment,
+  interpolateCoordinate,
+  midpointCoordinate,
+} from "@/lib/analytics/performance/geometry";
 
 interface TimedCoordinate {
   entryId: string;
@@ -124,11 +128,6 @@ function lowestConfidence(values: readonly PerformanceConfidence[]): Performance
     confidenceRank(value) < confidenceRank(lowest) ? value : lowest, "high");
 }
 
-function midpoint(a: PerformanceCoordinateV1, b: PerformanceCoordinateV1): PerformanceCoordinateV1 {
-  const local = toLocalXY(a.lat, a.lon, b.lat, b.lon);
-  return fromLocalXY(a.lat, a.lon, local.x / 2, local.y / 2);
-}
-
 function performanceLine(value: Pick<RaceLine, "pin" | "boat"> | null | undefined): PerformanceLineV1 | null {
   const pin = coordinate(value?.pin);
   const boat = coordinate(value?.boat);
@@ -145,15 +144,6 @@ function performanceLine(value: Pick<RaceLine, "pin" | "boat"> | null | undefine
 
 function validTrackCoordinate(track: ProcessedTrack, index: number): PerformanceCoordinateV1 | null {
   return coordinate({ lat: track.lat[index], lon: track.lon[index] });
-}
-
-function interpolateCoordinate(
-  a: PerformanceCoordinateV1,
-  b: PerformanceCoordinateV1,
-  fraction: number,
-): PerformanceCoordinateV1 {
-  const local = toLocalXY(a.lat, a.lon, b.lat, b.lon);
-  return fromLocalXY(a.lat, a.lon, local.x * fraction, local.y * fraction);
 }
 
 function positionAtTime(track: ProcessedTrack, timeMs: number): PerformanceCoordinateV1 | null {
@@ -283,21 +273,11 @@ function closestPointApproach(
   return result ? { ...result, gapSkipped } : null;
 }
 
-function cross(ax: number, ay: number, bx: number, by: number): number {
-  return ax * by - ay * bx;
-}
-
 function finiteLineCrossing(
   track: ProcessedTrack,
   line: PerformanceLineV1,
   window: SearchWindow,
 ): ApproachResult | null {
-  const center = midpoint(line.pin, line.boat);
-  const lineA = toLocalXY(center.lat, center.lon, line.pin.lat, line.pin.lon);
-  const lineB = toLocalXY(center.lat, center.lon, line.boat.lat, line.boat.lon);
-  const lineDx = lineB.x - lineA.x;
-  const lineDy = lineB.y - lineA.y;
-  const endpointTolerance = line.lengthM > 0 ? PERFORMANCE_LINE_ENDPOINT_TOLERANCE_M / line.lengthM : 0;
   const length = columnLength(track);
   let best: ApproachResult | null = null;
   let gapSkipped = false;
@@ -318,28 +298,14 @@ function finiteLineCrossing(
     const endMs = Math.min(rawEndMs, window.endMs);
     const start = interpolateCoordinate(rawStart, rawEnd, (startMs - rawStartMs) / duration);
     const end = interpolateCoordinate(rawStart, rawEnd, (endMs - rawStartMs) / duration);
-    const a = toLocalXY(center.lat, center.lon, start.lat, start.lon);
-    const b = toLocalXY(center.lat, center.lon, end.lat, end.lon);
-    const trackDx = b.x - a.x;
-    const trackDy = b.y - a.y;
-    const denominator = cross(trackDx, trackDy, lineDx, lineDy);
-    if (Math.abs(denominator) < 1e-9) continue;
-    const offsetX = lineA.x - a.x;
-    const offsetY = lineA.y - a.y;
-    const trackFraction = cross(offsetX, offsetY, lineDx, lineDy) / denominator;
-    const lineFraction = cross(offsetX, offsetY, trackDx, trackDy) / denominator;
-    if (
-      trackFraction < 0 ||
-      trackFraction > 1 ||
-      lineFraction < -endpointTolerance ||
-      lineFraction > 1 + endpointTolerance
-    ) continue;
-    const timeMs = startMs + (endMs - startMs) * trackFraction;
+    const intersection = intersectFiniteLineSegment(start, end, line);
+    if (!intersection) continue;
+    const timeMs = startMs + (endMs - startMs) * intersection.trackFraction;
     if (!best || timeMs < best.timeMs) {
       best = {
         timeMs,
         minDistanceM: 0,
-        position: fromLocalXY(center.lat, center.lon, a.x + trackDx * trackFraction, a.y + trackDy * trackFraction),
+        position: intersection.position,
         gapSkipped,
       };
     }
@@ -487,7 +453,7 @@ export function buildPerformanceCourse(
   let startSupport = 0;
   let startProvenance: PerformanceProvenanceV1;
   if (startLine) {
-    startPosition = midpoint(startLine.pin, startLine.boat);
+    startPosition = midpointCoordinate(startLine.pin, startLine.boat);
     startSupport = Math.min(PERFORMANCE_MAX_ENTRY_COUNT, Math.max(1, race.startLine?.entryIds.length ?? 0));
     startProvenance = provenance(
       "detected-geometry",
@@ -587,7 +553,7 @@ export function buildPerformanceCourse(
   let finishSpreadM: number | null = null;
   let finishProvenance: PerformanceProvenanceV1;
   if (finishLine) {
-    finishPosition = midpoint(finishLine.pin, finishLine.boat);
+    finishPosition = midpointCoordinate(finishLine.pin, finishLine.boat);
     finishSupport = 1;
     finishProvenance = provenance("organizer-override", "high", ["correctedFinish.line"], 100);
   } else if (correctedFinishPoint) {

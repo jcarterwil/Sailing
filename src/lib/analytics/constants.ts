@@ -83,6 +83,7 @@ export const PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M = 250;
 export const PERFORMANCE_COURSE_MARK_SEARCH_RADIUS_M = 300;
 export const PERFORMANCE_PASSAGE_MAX_RADIUS_M = 75;
 export const PERFORMANCE_LINE_ENDPOINT_TOLERANCE_M = 5;
+export const PERFORMANCE_START_OCS_DISTANCE_M = 2;
 
 // Live ladder / leaderboard (#21).
 export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped boats
