@@ -17,10 +17,11 @@ describe("authenticated Performance Overview integration", () => {
     expect(page).toContain('rpc("is_race_organizer"');
   });
 
-  it("never requests processed paths or creates track download URLs", () => {
+  it("never handles Storage paths or service-role signing inside the route page", () => {
     expect(page).not.toContain("processed_path");
     expect(page).not.toContain("createAdminClient");
     expect(page).not.toContain("createSignedUrl");
+    expect(page).toContain("loadPerformanceTrackMetas");
   });
 
   it("links the race page and visibly distinguishes required report sections", () => {
@@ -29,6 +30,6 @@ describe("authenticated Performance Overview integration", () => {
     expect(overview).toContain("Best sustained performance");
     expect(overview).toContain("VMG distributions");
     expect(overview).toContain("Weather context is reported separately");
-    expect(overview).toContain("no raw tracks downloaded for this page");
+    expect(overview).toContain("signed tracks are used only for bounded drilldown displays");
   });
 });
