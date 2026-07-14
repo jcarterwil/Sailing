@@ -3,6 +3,7 @@ import {
   formatDelta,
   formatDuration,
   formatNumber,
+  formatPerformanceWarningMessage,
   formatRaceDate,
   type PerformanceOverviewModel,
 } from "@/components/performance/view-model";
@@ -162,6 +163,7 @@ export const PerformancePrintReport = memo(function PerformancePrintReport({
               <span>{best.targetDistanceM === 1852 ? "1 nm" : `${best.targetDistanceM} m`}</span>
               <strong>{best.entryId ? <BoatLabel entryId={best.entryId} model={model} /> : "Unavailable"}</strong>
               <small>{best.interval ? `${formatDuration(best.interval.elapsedMs)} · ${formatNumber(best.interval.averageSpeedKts, 2)} kt` : best.coverageWarning}</small>
+              {best.interval && best.coverageWarning ? <small>{best.coverageWarning}</small> : null}
             </div>
           ))}
         </div>
@@ -256,7 +258,9 @@ export const PerformancePrintReport = memo(function PerformancePrintReport({
               <div className="performance-print-warnings">
                 <h2>Quality notes</h2>
                 <ul>{model.warnings.filter((warning) => warning.legIndex === leg.index).map((warning) => (
-                  <li key={`${warning.code}:${warning.entryId}:${warning.message}`}>{warning.code}: {warning.message}</li>
+                  <li key={`${warning.code}:${warning.entryId}:${warning.message}`}>
+                    {warning.code}{warning.entryId ? <> · <BoatLabel entryId={warning.entryId} model={model} /></> : null}: {formatPerformanceWarningMessage(warning)}
+                  </li>
                 ))}</ul>
               </div>
             )}

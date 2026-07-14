@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { PERFORMANCE_CALCULATION_VERSION } from "@/lib/analytics/constants";
 import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
@@ -65,11 +66,24 @@ describe("parseStoredRaceAnalysis", () => {
   it("accepts fresh Performance V1 and distinguishes legacy upgrade state", () => {
     const current = analysis();
     current.performance = structuredClone(VALID_PERFORMANCE_V1_FIXTURE);
+    current.performance.calculationVersion = PERFORMANCE_CALCULATION_VERSION;
+    current.performance.provenance.calculationVersion = PERFORMANCE_CALCULATION_VERSION;
     expect(parse(current)).toMatchObject({ status: "valid", performance: current.performance });
     expect(parse(analysis())).toMatchObject({
       status: "upgrade-required",
       performance: null,
     });
+  });
+
+  it("requires reanalysis when a valid payload uses an older calculation version", () => {
+    const outdated = analysis();
+    outdated.performance = structuredClone(VALID_PERFORMANCE_V1_FIXTURE);
+    outdated.performance.calculationVersion = "performance-v1.1.0";
+    outdated.performance.provenance.calculationVersion = "performance-v1.1.0";
+    const parsed = parse(outdated);
+    expect(parsed).toMatchObject({ status: "upgrade-required", performance: null });
+    expect(parsed.analysis).not.toHaveProperty("performance");
+    expect(parsed.issues[0]).toContain(PERFORMANCE_CALCULATION_VERSION);
   });
 
   it("distinguishes unsupported, malformed, stale, and malformed outer states", () => {

@@ -1,3 +1,4 @@
+import { PERFORMANCE_CALCULATION_VERSION } from "@/lib/analytics/constants";
 import { parseStoredPerformance } from "@/lib/analytics/performance/parse";
 import type { PerformanceAnalysisV1 } from "@/lib/analytics/performance/types";
 import type { RaceAnalysis } from "@/lib/analytics/types";
@@ -104,6 +105,21 @@ export function parseStoredRaceAnalysis(
   }
   const performance = parseStoredPerformance(analysis);
   if (performance.status === "valid") {
+    const calculationVersions = [
+      performance.performance.calculationVersion,
+      performance.performance.provenance.calculationVersion,
+    ];
+    if (calculationVersions.some((version) => version !== PERFORMANCE_CALCULATION_VERSION)) {
+      return {
+        status: "upgrade-required",
+        analysis: withoutPerformance(analysis),
+        performance: null,
+        issues: [
+          `Performance analysis was calculated with ${calculationVersions.join(" / ")}; ` +
+          `${PERFORMANCE_CALCULATION_VERSION} requires reanalysis.`,
+        ],
+      };
+    }
     const current = { ...analysis, performance: performance.performance };
     return {
       status: "valid",

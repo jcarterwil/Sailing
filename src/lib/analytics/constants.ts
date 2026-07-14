@@ -52,6 +52,7 @@ export const BOTCHED_MIN_SPEED_RATIO = 0.6; // SOG-out / SOG-in threshold
 export const BOTCHED_MIN_VMG_RETENTION = 0.5; // made-good efficiency threshold
 
 /** Performance Overview V1 contract bounds (#76). */
+export const PERFORMANCE_CALCULATION_VERSION = "performance-v1.2.0";
 export const PERFORMANCE_RESAMPLE_HZ = 1;
 export const PERFORMANCE_MAX_SOURCE_GAP_MS = 10_000;
 export const PERFORMANCE_START_WINDOW_MS = 60_000;
@@ -94,6 +95,8 @@ export const PERFORMANCE_MARK_RECOVERY_WINDOW_SECONDS = 20;
 export const PERFORMANCE_MARK_RECOVERY_MIN_SAMPLES = 10;
 /** Course geometry and passage thresholds (#77). */
 export const PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES = 2;
+/** A fleet-boundary finish cluster must exceed this share of all canonical entries. */
+export const PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO = 0.5;
 export const PERFORMANCE_COURSE_MIN_OUTLIER_RADIUS_M = 150;
 export const PERFORMANCE_COURSE_MAD_MULTIPLIER = 3;
 export const PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M = 250;

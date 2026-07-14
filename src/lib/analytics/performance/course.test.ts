@@ -275,6 +275,60 @@ describe("buildPerformanceCourse", () => {
     expect(result.warnings.some((warning) => warning.code === "unavailable-finish-geometry")).toBe(true);
   });
 
+  it("rejects a fleet-boundary finish that lacks majority entry support", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishMs = FIXTURE_GUN_MS + 60_000;
+    const race = simpleRace(origin, [], [finishMs], finishMs);
+    const tracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      index < 2
+        ? [
+            { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+            { timeMs: finishMs, x: 0, y: 200 },
+          ]
+        : [
+            { timeMs: FIXTURE_GUN_MS, x: index * 10, y: 0 },
+            { timeMs: finishMs - 30_000, x: index * 10, y: 100 },
+          ],
+    ));
+
+    const result = buildPerformanceCourse(tracks, race, fixtureWind());
+    const finish = result.course.points.at(-1)!;
+    expect(finish.position).toBeNull();
+    expect(finish.supportingEntryCount).toBe(2);
+    expect(finish.provenance.note).toContain("2 of 6 entries");
+    expect(result.course.legs.at(-1)?.distanceM).toBeNull();
+    expect(result.warnings.find((warning) => warning.code === "unavailable-finish-geometry")?.message)
+      .toContain("only 2 of 6 entries");
+  });
+
+  it("retains a fleet-boundary finish when a strict majority supports it", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishMs = FIXTURE_GUN_MS + 60_000;
+    const race = simpleRace(origin, [], [finishMs], finishMs);
+    const tracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      index < 4
+        ? [
+            { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+            { timeMs: finishMs, x: index, y: 200 },
+          ]
+        : [
+            { timeMs: FIXTURE_GUN_MS, x: index * 10, y: 0 },
+            { timeMs: finishMs - 30_000, x: index * 10, y: 100 },
+          ],
+    ));
+
+    const result = buildPerformanceCourse(tracks, race, fixtureWind());
+    const finish = result.course.points.at(-1)!;
+    expect(finish.position).not.toBeNull();
+    expect(finish.supportingEntryCount).toBe(4);
+    expect(finish.provenance).toMatchObject({ source: "detected-geometry", confidence: "low" });
+    expect(result.course.legs.at(-1)?.distanceM).not.toBeNull();
+  });
+
   it("uses a low-confidence fleet centroid when the two-ended start line is missing", () => {
     const race = fixtureRace();
     race.startLine = null;

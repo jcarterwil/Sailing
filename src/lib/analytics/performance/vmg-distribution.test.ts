@@ -111,6 +111,7 @@ describe("analyzeVmgDistributions", () => {
       entryIds: SIX_BOAT_FIVE_LEG_FIXTURE.expected.entryIds,
       tracks: built.tracks,
       analysis: built.analysis,
+      course: built.course,
       results: built.results,
       gunTimeMs: SIX_BOAT_FIVE_LEG_FIXTURE.gunTimeMs,
     });
