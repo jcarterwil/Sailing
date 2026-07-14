@@ -1,5 +1,9 @@
 import { norm180 } from "@/lib/analytics/angles";
 import {
+  correctedFinishGeometry,
+  type RaceCorrections,
+} from "@/lib/analytics/corrections";
+import {
   PERFORMANCE_COURSE_MAD_MULTIPLIER,
   PERFORMANCE_COURSE_MARK_SEARCH_RADIUS_M,
   PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M,
@@ -38,6 +42,7 @@ import type {
 } from "@/lib/analytics/performance/types";
 import type {
   ProcessedTrack,
+  RaceAnalysis,
   RaceCoordinate,
   RaceLine,
   RaceStructure,
@@ -810,4 +815,18 @@ export function buildPerformanceCourse(
     ),
   };
   return { course, warnings };
+}
+
+/** Shared server/worker adapter so corrected course previews cannot drift. */
+export function buildCorrectedPerformanceCourse(
+  tracks: readonly ProcessedTrack[],
+  analysis: Pick<RaceAnalysis, "race" | "wind">,
+  corrections: RaceCorrections,
+): PerformanceCourseBuildResult {
+  return buildPerformanceCourse(
+    tracks,
+    analysis.race,
+    analysis.wind,
+    correctedFinishGeometry(corrections),
+  );
 }

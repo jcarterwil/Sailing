@@ -1,4 +1,4 @@
-import type { RaceCorrections } from "@/lib/analytics/corrections";
+import type { StoredRaceCorrections } from "@/lib/analytics/corrections";
 
 export interface TrackPoint {
   t: number; // epoch ms UTC
@@ -137,7 +137,7 @@ export interface RaceLine {
   boat: RaceCoordinate;
   bearingDeg: number;
   lengthM: number;
-  source: "vkx-line-pings";
+  source: "vkx-line-pings" | "organizer-override";
   entryIds: string[];
 }
 
@@ -165,6 +165,10 @@ export interface RaceLeg {
   relabeled?: boolean;
   /** Auto-inferred type before any organizer relabel (set when `relabeled`). */
   detectedType?: RaceLegType;
+  /** True when an organizer course correction replaced the detected mark. */
+  markOverridden?: boolean;
+  /** Auto-inferred mark before an organizer override. */
+  detectedMark?: RaceCoordinate | null;
 }
 
 export interface RaceStructure {
@@ -289,7 +293,7 @@ export interface RaceAnalysis {
   /** Present when wind-quality heuristics were run (Phase 2+). */
   windQuality?: WindQualityReport;
   /** Snapshot of corrections that produced this analysis, when any were applied. */
-  appliedCorrections?: RaceCorrections;
+  appliedCorrections?: StoredRaceCorrections;
 }
 
 export class ParseError extends Error {}
