@@ -14,7 +14,6 @@ import {
   resetPovAttitude,
   type PovAttitude,
 } from "@/components/replay/pov-attitude";
-import type { ReplayRenderBoat } from "@/components/replay/replay-render-frame";
 import type { ReplayRenderFrameSource } from "@/components/replay/replay-render-source";
 import {
   boomRotationForSide,
