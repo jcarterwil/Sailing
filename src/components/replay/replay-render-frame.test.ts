@@ -159,7 +159,9 @@ describe("buildReplayRenderFrame", () => {
       heelDeg: 0,
       trimDeg: 0,
     });
-    expect(Number.isFinite(boat.pose.headingDeg)).toBe(true);\n    expect(Number.isFinite(boat.pose.heelDeg)).toBe(true);\n    expect(Number.isFinite(boat.pose.trimDeg)).toBe(true);
+    expect(Number.isFinite(boat.pose.headingDeg)).toBe(true);
+    expect(Number.isFinite(boat.pose.heelDeg)).toBe(true);
+    expect(Number.isFinite(boat.pose.trimDeg)).toBe(true);
     expect(boat.provenance.pose).toMatchObject({
       headingDeg: "recorded-cog-fallback",
       heelDeg: "default-zero",
