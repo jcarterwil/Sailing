@@ -113,8 +113,8 @@ export function createReplayRenderFrameSource(
     // the same frame that was just published.
     frameRef.current = nextFrame;
     if (notifyListeners) {
-      for (const listener of Array.from(listeners)) {
-        listener(nextFrame, previousFrame);
+      for (const registration of Array.from(listeners)) {
+        registration.listener(nextFrame, previousFrame);
       }
     }
   };
