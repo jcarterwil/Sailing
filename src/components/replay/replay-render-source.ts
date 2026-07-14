@@ -91,7 +91,7 @@ export function createReplayRenderFrameSource(
       updateKind: "initial",
     }),
   };
-  const listeners = new Set<ReplayRenderFrameListener>();
+  const listeners = new Set<{ listener: ReplayRenderFrameListener }>();
   let unsubscribeStore: (() => void) | null = null;
 
   const publish = (
@@ -131,15 +131,16 @@ export function createReplayRenderFrameSource(
   return {
     frameRef,
     subscribe(listener) {
+      const registration = { listener };
       const wasEmpty = listeners.size === 0;
-      listeners.add(listener);
+      listeners.add(registration);
       if (wasEmpty) attach();
 
       let subscribed = true;
       return () => {
         if (!subscribed) return;
         subscribed = false;
-        listeners.delete(listener);
+        listeners.delete(registration);
         if (listeners.size === 0 && unsubscribeStore) {
           unsubscribeStore();
           unsubscribeStore = null;
