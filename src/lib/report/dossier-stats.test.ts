@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
+import { analyzePerformanceOpportunities } from "@/lib/analytics/performance/opportunities";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
   analysisMatchesCurrentFleet,
@@ -112,6 +113,10 @@ describe("buildDossierStats", () => {
   it("adds bounded performance conclusions without time series or histogram data", () => {
     const current = structuredClone(analysis);
     current.performance = structuredClone(VALID_PERFORMANCE_V1_FIXTURE);
+    current.performance.opportunities = analyzePerformanceOpportunities({
+      entryIds: current.performance.provenance.entryIds,
+      performance: current.performance,
+    });
     const payload = buildDossierStats(current);
     expect(payload.performance).toMatchObject({
       v: 1,
@@ -121,6 +126,7 @@ describe("buildDossierStats", () => {
     });
     expect(payload.performance?.entries).toHaveLength(6);
     expect(payload.performance?.legs).toHaveLength(5);
+    expect(payload.performance?.opportunities).toEqual(current.performance.opportunities.entries);
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toContain('"samples"');
     expect(serialized).not.toContain('"bins"');

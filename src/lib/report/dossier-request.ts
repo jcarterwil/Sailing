@@ -8,6 +8,7 @@ Rules:
 - Distinguish measured values, estimates, and unavailable data. Carry the wind provenance and analysis warnings into your confidence language.
 - Use knots, degrees, seconds, meters, and nautical miles consistently. Round for readability without changing meaning.
 - Compare boats only when the payload supports the comparison. Do not equate correlation with cause.
+- Opportunity cards are deterministic facts. Preserve their estimates, benchmarks, assumptions, caveats, priority, and suppression meaning exactly; never recalculate, add, or relabel them as causal. There is no valid "total time lost."
 - Make the coaching concrete: identify strengths, losses, and the next drill or decision to test.
 
 Return Markdown only, without a code fence, using exactly this top-level structure:

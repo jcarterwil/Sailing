@@ -4,6 +4,7 @@ import type {
   RaceAnalysis,
 } from "@/lib/analytics/types";
 import type {
+  PerformanceEntryOpportunitiesV1,
   PerformanceProvenanceV1,
   PerformanceResultStatus,
   PerformanceStartStatus,
@@ -91,6 +92,7 @@ export interface DossierPerformanceSummary {
   courseProvenance: PerformanceProvenanceV1;
   entries: DossierPerformanceEntrySummary[];
   legs: DossierPerformanceLegSummary[];
+  opportunities: PerformanceEntryOpportunitiesV1[];
   warningCount: number;
   provenance: NonNullable<RaceAnalysis["performance"]>["provenance"];
 }
@@ -223,6 +225,7 @@ export function buildDossierStats(analysis: RaceAnalysis): DossierStats {
           provenance: leg.provenance,
         };
       }),
+      opportunities: performance.opportunities?.entries ?? [],
       warningCount: performance.warnings.length,
       provenance: performance.provenance,
     } : null,

@@ -10,6 +10,7 @@ import {
 import expected from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg.expected.json";
 import { SIX_BOAT_FIVE_LEG_FIXTURE } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
 import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
+import { analyzePerformanceOpportunities } from "@/lib/analytics/performance/opportunities";
 import {
   parsePerformanceV1,
   parseStoredPerformance,
@@ -64,6 +65,35 @@ describe("parseStoredPerformance", () => {
     if (parsed.status !== "valid") throw new Error(parsed.issues.join("\n"));
     expect(parsed.performance).toEqual(performance);
     expect(JSON.parse(JSON.stringify(parsed.performance))).toEqual(parsed.performance);
+  });
+
+  it("accepts old V1 rows without opportunities and strictly validates the optional sub-contract", () => {
+    const typed = structuredClone(VALID_PERFORMANCE_V1_FIXTURE);
+    typed.opportunities = analyzePerformanceOpportunities({
+      entryIds: typed.provenance.entryIds,
+      performance: typed,
+    });
+    expect(parsePerformanceV1(typed).status).toBe("valid");
+
+    const invalidPriority = structuredClone(typed);
+    const firstPrimary = invalidPriority.opportunities!.entries
+      .find((entry) => entry.primary.length > 0)!.primary[0];
+    firstPrimary.priority = 2;
+    const priorityResult = parsePerformanceV1(invalidPriority);
+    expect(priorityResult.status).toBe("malformed");
+    expect(priorityResult.issues.join(" ")).toContain("expected bounded rank 1");
+
+    const invalidScope = structuredClone(typed);
+    invalidScope.opportunities!.entries.find((entry) => entry.primary.length > 0)!
+      .primary[0].scope.entryId = "not-in-fleet";
+    const scopeResult = parsePerformanceV1(invalidScope);
+    expect(scopeResult.status).toBe("malformed");
+    expect(scopeResult.issues.join(" ")).toContain("must match the containing entry");
+
+    const tooMany = structuredClone(typed);
+    const entry = tooMany.opportunities!.entries.find((candidate) => candidate.primary.length > 0)!;
+    entry.primary = [entry.primary[0], entry.primary[0], entry.primary[0], entry.primary[0]];
+    expect(parsePerformanceV1(tooMany).status).toBe("malformed");
   });
 
   it("reports unsupported versions separately from malformed V1", () => {

@@ -9,6 +9,7 @@ describe("authenticated Performance Overview integration", () => {
   const page = source("src/app/races/[raceId]/performance/page.tsx");
   const racePage = source("src/app/races/[raceId]/page.tsx");
   const overview = source("src/components/performance/performance-overview.tsx");
+  const opportunities = source("src/components/performance/performance-opportunities.tsx");
 
   it("authorizes with an RLS-visible race and uses the centralized stored parser", () => {
     expect(page).toContain("An RLS-visible race row proves organizer/member access");
@@ -28,8 +29,15 @@ describe("authenticated Performance Overview integration", () => {
     expect(racePage).toContain(`/performance`);
     expect(overview).toContain("Single-race performance results");
     expect(overview).toContain("Best sustained performance");
+    expect(overview).toContain("PerformanceOpportunities");
     expect(overview).toContain("VMG distributions");
     expect(overview).toContain("Weather context is reported separately");
     expect(overview).toContain("signed tracks are used only for bounded drilldown displays");
+    expect(opportunities).toContain("must not be summed into total time lost");
+    expect(opportunities).toContain("Benchmark ·");
+    expect(opportunities).toContain("Assumption:");
+    expect(opportunities).toContain("Caveat:");
+    expect(opportunities).toContain("#start-analysis-heading");
+    expect(opportunities).toContain("#leg-drilldown-heading");
   });
 });

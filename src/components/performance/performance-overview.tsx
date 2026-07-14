@@ -19,6 +19,7 @@ import { DistributionChart } from "@/components/performance/distribution-chart";
 import type { DrilldownAnalysisInput } from "@/components/performance/drilldown-data";
 import type { PerformanceTrackMeta } from "@/components/performance/drilldown-worker-contract";
 import { PerformanceDrilldowns } from "@/components/performance/performance-drilldowns";
+import { PerformanceOpportunities } from "@/components/performance/performance-opportunities";
 import {
   formatDateTime,
   formatDelta,
@@ -280,6 +281,12 @@ export function PerformanceOverview({
             ))}
           </div>
         </section>
+
+        <PerformanceOpportunities
+          entries={model.entries}
+          opportunities={model.opportunities}
+          selectedEntryId={boatFilter}
+        />
 
         <section aria-labelledby="fleet-metrics-heading" className="space-y-4">
           <div>
