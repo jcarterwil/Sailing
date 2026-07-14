@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fromLocalXY, haversineM } from "@/lib/analytics/geo";
 import { median } from "@/lib/analytics/internal";
 import { buildPerformanceCourse } from "@/lib/analytics/performance/course";
+import { analyzeRaceResults } from "@/lib/analytics/performance/results";
 import {
   FIXTURE_COURSE_POSITIONS,
   FIXTURE_GUN_MS,
@@ -309,6 +310,40 @@ describe("buildPerformanceCourse", () => {
         -3,
       );
     }
+  });
+
+  it("uses the earliest legal crossing when a track crosses the finish line multiple times", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishMs = FIXTURE_GUN_MS + 60_000;
+    const finishLine = {
+      pin: fromLocalXY(origin.lat, origin.lon, -50, 100),
+      boat: fromLocalXY(origin.lat, origin.lon, 50, 100),
+    };
+    const track = localTrack("one", origin, [
+      { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+      { timeMs: FIXTURE_GUN_MS + 30_000, x: 0, y: 50 },
+      { timeMs: FIXTURE_GUN_MS + 40_000, x: 0, y: 150 },
+      { timeMs: FIXTURE_GUN_MS + 45_000, x: 0, y: 50 },
+      { timeMs: FIXTURE_GUN_MS + 50_000, x: 0, y: 150 },
+      { timeMs: finishMs, x: 0, y: 175 },
+    ]);
+    const course = buildPerformanceCourse(
+      [track],
+      simpleRace(origin, [], [finishMs], finishMs),
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    const result = analyzeRaceResults({
+      entryIds: ["one"],
+      tracks: [track],
+      course,
+      gunTimeMs: FIXTURE_GUN_MS,
+    }).results[0];
+    expect(result.finish).toMatchObject({
+      timeMs: FIXTURE_GUN_MS + 35_000,
+      source: "finite-line-crossing",
+      crossing: true,
+    });
   });
 
   it("rejects a dispersed mark cluster and retains only the low-confidence seed", () => {

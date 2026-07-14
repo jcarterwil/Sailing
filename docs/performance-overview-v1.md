@@ -147,6 +147,7 @@ Finish resolution order is: organizer correction; legal corrected-finish crossin
 |---|---|---|
 | `status` | finished, DNS, DNF, RET, OCS, DSQ, unresolved | organizer status wins; otherwise finished requires evidence |
 | `finish.timeMs` | epoch ms UTC | null finish object when absent |
+| `finish.source` | organizer override, finite-line crossing, passage approach, timer event | explicit; passage approach is never labeled as a line crossing |
 | `finish.distanceM` | crossing/approach evidence metres | null when not applicable to organizer/timer source |
 | `elapsedMs` | `finish.timeMs - corrected gun` | null without valid finish |
 | `rank` | integer displayed place | null for non-finish/unresolved |

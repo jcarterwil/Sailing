@@ -54,6 +54,7 @@ export const BOTCHED_MIN_VMG_RETENTION = 0.5; // made-good efficiency threshold
 export const PERFORMANCE_RESAMPLE_HZ = 1;
 export const PERFORMANCE_MAX_SOURCE_GAP_MS = 10_000;
 export const PERFORMANCE_START_WINDOW_MS = 60_000;
+export const PERFORMANCE_TIE_MS = 500;
 export const PERFORMANCE_KNOT_TO_MPS = 0.514444;
 export const PERFORMANCE_MAX_ENTRY_COUNT = 100;
 export const PERFORMANCE_MAX_LEG_COUNT = 16;
