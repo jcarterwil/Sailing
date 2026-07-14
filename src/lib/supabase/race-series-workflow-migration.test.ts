@@ -90,7 +90,12 @@ describe("race series organizer workflow migration", () => {
 
   it("makes unchanged apply idempotent and changed apply append history", () => {
     expect(migration).toContain("where snapshot.series_id = series_id_input");
-    expect(migration).toContain("snapshot.source_fingerprint = snapshot_fingerprint_input");
+    expect(migration).toMatch(
+      /where snapshot\.series_id = series_id_input\s+order by snapshot\.revision desc\s+limit 1/,
+    );
+    expect(migration).toContain(
+      "existing_snapshot_fingerprint = snapshot_fingerprint_input",
+    );
     expect(migration).toContain("return query select current_revision, existing_snapshot_id");
     expect(migration).toContain("insert into public.race_series_score_snapshots");
     expect(migration).not.toMatch(/update public\.race_series_score_snapshots/);

@@ -350,10 +350,11 @@ create table public.race_series_score_snapshots (
   constraint race_series_score_snapshots_result_object
     check (jsonb_typeof(result) = 'object'),
   constraint race_series_score_snapshots_revision_unique
-    unique (series_id, revision),
-  constraint race_series_score_snapshots_fingerprint_unique
-    unique (series_id, source_fingerprint)
+    unique (series_id, revision)
 );
+
+create index race_series_score_snapshots_fingerprint_idx
+  on public.race_series_score_snapshots (series_id, source_fingerprint);
 
 alter table public.race_series_score_snapshots enable row level security;
 

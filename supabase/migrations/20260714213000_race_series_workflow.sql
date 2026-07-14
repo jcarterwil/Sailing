@@ -363,6 +363,7 @@ declare
   actor_is_admin boolean;
   existing_snapshot_id uuid;
   existing_snapshot_revision bigint;
+  existing_snapshot_fingerprint text;
   inserted_snapshot_id uuid;
 begin
   select s.revision, s.organizer_id
@@ -588,13 +589,15 @@ begin
     raise exception 'Snapshot race revisions do not reconcile';
   end if;
 
-  select snapshot.id, snapshot.revision
-    into existing_snapshot_id, existing_snapshot_revision
+  select snapshot.id, snapshot.revision, snapshot.source_fingerprint
+    into existing_snapshot_id, existing_snapshot_revision, existing_snapshot_fingerprint
   from public.race_series_score_snapshots snapshot
   where snapshot.series_id = series_id_input
-    and snapshot.source_fingerprint = snapshot_fingerprint_input;
+  order by snapshot.revision desc
+  limit 1;
 
-  if existing_snapshot_id is not null then
+  if existing_snapshot_id is not null
+      and existing_snapshot_fingerprint = snapshot_fingerprint_input then
     if exists (
       select 1
       from jsonb_to_recordset(race_updates_input)

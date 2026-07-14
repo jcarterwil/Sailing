@@ -64,7 +64,8 @@ describe("race series foundation migration", () => {
       "grant update (sequence, included, discard_eligible, updated_at)",
     );
     expect(migration).toContain("unique (series_id, revision)");
-    expect(migration).toContain("unique (series_id, source_fingerprint)");
+    expect(migration).toContain("race_series_score_snapshots_fingerprint_idx");
+    expect(migration).not.toContain("unique (series_id, source_fingerprint)");
     expect(migration).toContain(
       "grant select on table public.race_series_score_snapshots to authenticated",
     );
