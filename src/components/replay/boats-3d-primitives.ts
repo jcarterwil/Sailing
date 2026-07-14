@@ -1,5 +1,7 @@
 import type { Group } from "three";
 
+export const BOAT_RIG_NAME = "boat-sail-rig";
+
 /** Shared procedural art for the helm spike and the future MapLibre 3D layer (#23). */
 export function createProceduralBoat(
   THREE: typeof import("three"),
@@ -23,6 +25,17 @@ export function createProceduralBoat(
   mast.position.set(0, 3.7, -0.5);
   group.add(mast);
 
+  // The mast stays fixed while the boom and sail swing together by tack.
+  const rig = new THREE.Group();
+  rig.name = BOAT_RIG_NAME;
+  const boom = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.055, 2.6, 8),
+    whiteMaterial,
+  );
+  boom.rotation.x = Math.PI / 2;
+  boom.position.set(0, 1.05, 0.8);
+  rig.add(boom);
+
   const sailGeometry = new THREE.BufferGeometry();
   sailGeometry.setAttribute(
     "position",
@@ -38,7 +51,8 @@ export function createProceduralBoat(
       transparent: true,
     }),
   );
-  group.add(sail);
+  rig.add(sail);
+  group.add(rig);
   return group;
 }
 

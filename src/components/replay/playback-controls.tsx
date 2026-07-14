@@ -159,12 +159,16 @@ export function PlaybackControls({
   tzOffsetMinutes,
   styleId,
   onStyleChange,
+  show3d,
+  onShow3dChange,
   startsMs = [],
   tracks = [],
 }: {
   tzOffsetMinutes: number | null;
   styleId: MapStyleId;
   onStyleChange: (style: MapStyleId) => void;
+  show3d: boolean;
+  onShow3dChange: (show: boolean) => void;
   startsMs?: number[];
   tracks?: LoadedTrack[];
 }) {
@@ -274,6 +278,23 @@ export function PlaybackControls({
         <SelectContent>
           <SelectItem value="map">Map</SelectItem>
           <SelectItem value="satellite">Satellite</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={show3d ? "3d" : "2d"}
+        onValueChange={(value) => onShow3dChange(value === "3d")}
+      >
+        <SelectTrigger
+          className="w-28 sm:w-32"
+          aria-label="Boat display"
+          title="3D hulls appear when zoomed in; arrows remain as the fleet-zoom fallback"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="2d">2D arrows</SelectItem>
+          <SelectItem value="3d">3D hulls</SelectItem>
         </SelectContent>
       </Select>
 

@@ -98,6 +98,7 @@ export function RaceReplay({
   const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [styleId, setStyleId] = useState<MapStyleId>("map");
+  const [show3d, setShow3d] = useState(false);
   const povEnabled =
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pov") === "1";
   const windAt = useMemo(
@@ -186,7 +187,13 @@ export function RaceReplay({
           {povEnabled ? (
             <HelmPov tracks={tracks} />
           ) : (
-            <MapView tracks={tracks} styleId={styleId} startsMs={startsMs} />
+            <MapView
+              tracks={tracks}
+              styleId={styleId}
+              startsMs={startsMs}
+              show3d={show3d}
+              twdAt={twdAt}
+            />
           )}
           <Leaderboard
             tracks={tracks}
@@ -208,6 +215,8 @@ export function RaceReplay({
             tzOffsetMinutes={tracks[0]?.tzOffsetMinutes ?? null}
             styleId={styleId}
             onStyleChange={setStyleId}
+            show3d={show3d}
+            onShow3dChange={setShow3d}
             startsMs={startsMs}
             tracks={tracks}
           />
