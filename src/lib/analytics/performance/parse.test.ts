@@ -226,6 +226,15 @@ describe("parseStoredPerformance", () => {
     const missingGunParsed = parsePerformanceV1(missingGun);
     expect(missingGunParsed.status).toBe("malformed");
     expect(missingGunParsed.issues.join(" ")).toContain("finished result requires a corrected gun");
+
+    const wrongFleetDelta = cloneFixture();
+    const wrongResults = wrongFleetDelta.results as Array<Record<string, unknown>>;
+    const wrongWholeRace = wrongFleetDelta.wholeRace as Array<Record<string, unknown>>;
+    wrongResults[0].deltaMs = (wrongResults[0].deltaMs as number) + 1;
+    wrongWholeRace[0].deltaMs = wrongResults[0].deltaMs;
+    const wrongFleetDeltaParsed = parsePerformanceV1(wrongFleetDelta);
+    expect(wrongFleetDeltaParsed.status).toBe("malformed");
+    expect(wrongFleetDeltaParsed.issues.join(" ")).toContain("fleet minimum elapsedMs");
   });
 
   it("uses the 200-character entry ID contract rather than provenance label limits", () => {
@@ -335,6 +344,13 @@ describe("parseStoredPerformance", () => {
     const reachParsed = parsePerformanceV1(reach);
     expect(reachParsed.status).toBe("malformed");
     expect(reachParsed.issues.join(" ")).toContain("reach/unknown legs");
+
+    const wrongLegDelta = cloneFixture();
+    const deltaLegs = wrongLegDelta.legs as Array<{ metrics: Array<Record<string, unknown>> }>;
+    deltaLegs[0].metrics[0].deltaMs = (deltaLegs[0].metrics[0].deltaMs as number) + 1;
+    const wrongLegDeltaParsed = parsePerformanceV1(wrongLegDelta);
+    expect(wrongLegDeltaParsed.status).toBe("malformed");
+    expect(wrongLegDeltaParsed.issues.join(" ")).toContain("fleet minimum elapsedMs");
   });
 
   it("requires a reason exactly when a distribution is unavailable", () => {

@@ -159,6 +159,27 @@ function validateSameEntrySet(
   return issue(context, path, "entry IDs must match performance.provenance.entryIds exactly");
 }
 
+function validateFleetDeltas(
+  values: unknown[] | null,
+  context: ValidationContext,
+  path: string,
+): boolean {
+  if (!values) return false;
+  const rows = values.map((value) => isRecord(value) ? value : null);
+  const elapsedValues = rows.flatMap((row) => typeof row?.elapsedMs === "number" ? [row.elapsedMs] : []);
+  if (elapsedValues.length === 0) return true;
+  const minimumElapsedMs = Math.min(...elapsedValues);
+  let valid = true;
+  rows.forEach((row, index) => {
+    if (typeof row?.elapsedMs !== "number" || typeof row.deltaMs !== "number") return;
+    if (Math.abs(row.deltaMs - (row.elapsedMs - minimumElapsedMs)) > 1e-6) {
+      valid = issue(context, `${path}[${index}].deltaMs`,
+        "must equal elapsedMs - fleet minimum elapsedMs") && valid;
+    }
+  });
+  return valid;
+}
+
 function validateProvenance(
   value: unknown,
   context: ValidationContext,
@@ -567,6 +588,7 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   const results = arrayAt(row.results, context, "performance.results", PERFORMANCE_MAX_ENTRY_COUNT);
   if (!results) valid = false;
   results?.forEach((result, index) => { valid = validateResult(result, context, `performance.results[${index}]`) && valid; });
+  valid = validateFleetDeltas(results, context, "performance.results") && valid;
   valid = validateStart(row.start, context, "performance.start") && valid;
   const startRecord = isRecord(row.start) ? row.start : null;
   results?.forEach((resultValue, index) => {
@@ -654,6 +676,7 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
         valid = issue(context, metricPath, "directional VMG must be null on reach/unknown legs") && valid;
       }
     });
+    valid = validateFleetDeltas(metrics, context, `${path}.metrics`) && valid;
     valid = validateProvenance(leg.provenance, context, `${path}.provenance`) && valid;
   });
   const best = arrayAt(row.bestIntervals, context, "performance.bestIntervals", PERFORMANCE_MAX_ENTRY_COUNT);
