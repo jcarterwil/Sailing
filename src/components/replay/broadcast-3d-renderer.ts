@@ -456,7 +456,6 @@ export function createBroadcastRenderer(
   let lastRenderMs: number | null = null;
   let lastSourceMs: number | null = null;
   let lastTelemetryMs: number | null = null;
-  let lastFrame: ReplayRenderFrame | null = null;
 
   const notifyFailure = (failure: BroadcastRendererFailure) => {
     if (failureSent || disposed) return;
@@ -621,8 +620,6 @@ export function createBroadcastRenderer(
       const sourceIntervalMs =
         lastSourceMs == null ? null : nowMs - lastSourceMs;
       lastSourceMs = nowMs;
-      lastFrame = frame;
-
       if (disposed || !visible) return false;
       if (
         !shouldRenderBroadcastFrame(
@@ -663,7 +660,7 @@ export function createBroadcastRenderer(
       const renderMs = Math.max(0.01, clock() - renderStartedMs);
       lastRenderMs = nowMs;
 
-      let profileChanged = null;
+      let profileChanged: Readonly<BroadcastQualityProfile> | null = null;
       if (frame.playing && frame.updateKind === "continuous") {
         profileChanged = adaptiveQuality.observe({
           renderMs,
@@ -719,7 +716,6 @@ export function createBroadcastRenderer(
       models.clear();
       webglRenderer.dispose();
       cameraPose = null;
-      lastFrame = null;
     },
   };
 }
