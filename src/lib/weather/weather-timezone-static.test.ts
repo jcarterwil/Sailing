@@ -20,7 +20,11 @@ describe("weather timeline and race timezone integration", () => {
   it("uses an additive nullable timezone column and generated row types", () => {
     expect(migration).toContain("add column timezone text");
     expect(migration).not.toMatch(/\bdrop\b|\bdelete\b|\bupdate\s+public\.races\b/i);
-    expect(databaseTypes.match(/timezone\??: string \| null/g)).toHaveLength(3);
+    const racesTable = databaseTypes.slice(
+      databaseTypes.indexOf("      races: {"),
+      databaseTypes.indexOf("      tracks: {"),
+    );
+    expect(racesTable.match(/timezone\??: string \| null/g)).toHaveLength(3);
   });
 
   it("validates organizer saves and defaults weather suggestions from geocoding", () => {

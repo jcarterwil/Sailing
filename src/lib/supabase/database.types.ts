@@ -447,6 +447,256 @@ export type Database = {
           },
         ]
       }
+      race_series: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          ends_on: string | null
+          id: string
+          name: string
+          organizer_id: string
+          revision: number
+          scoring_config: Json
+          scoring_version: string
+          share_slug: string | null
+          starts_on: string | null
+          timezone: string | null
+          updated_at: string
+          venue: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          name: string
+          organizer_id: string
+          revision?: number
+          scoring_config?: Json
+          scoring_version?: string
+          share_slug?: string | null
+          starts_on?: string | null
+          timezone?: string | null
+          updated_at?: string
+          venue?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          name?: string
+          organizer_id?: string
+          revision?: number
+          scoring_config?: Json
+          scoring_version?: string
+          share_slug?: string | null
+          starts_on?: string | null
+          timezone?: string | null
+          updated_at?: string
+          venue?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_series_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_series_boat_aliases: {
+        Row: {
+          canonical_boat_id: string
+          created_at: string
+          note: string | null
+          resolved_by: string
+          series_id: string
+          source_boat_id: string
+          updated_at: string
+        }
+        Insert: {
+          canonical_boat_id: string
+          created_at?: string
+          note?: string | null
+          resolved_by: string
+          series_id: string
+          source_boat_id: string
+          updated_at?: string
+        }
+        Update: {
+          canonical_boat_id?: string
+          created_at?: string
+          note?: string | null
+          resolved_by?: string
+          series_id?: string
+          source_boat_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_series_boat_aliases_canonical_fkey"
+            columns: ["series_id", "canonical_boat_id"]
+            isOneToOne: false
+            referencedRelation: "race_series_competitors"
+            referencedColumns: ["series_id", "boat_id"]
+          },
+          {
+            foreignKeyName: "race_series_boat_aliases_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_series_boat_aliases_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "race_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_series_boat_aliases_source_boat_id_fkey"
+            columns: ["source_boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_series_competitors: {
+        Row: {
+          boat_id: string
+          created_at: string
+          role: string
+          series_id: string
+          updated_at: string
+        }
+        Insert: {
+          boat_id: string
+          created_at?: string
+          role?: string
+          series_id: string
+          updated_at?: string
+        }
+        Update: {
+          boat_id?: string
+          created_at?: string
+          role?: string
+          series_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_series_competitors_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_series_competitors_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "race_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_series_races: {
+        Row: {
+          created_at: string
+          discard_eligible: boolean
+          included: boolean
+          race_id: string
+          sequence: number
+          series_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discard_eligible?: boolean
+          included?: boolean
+          race_id: string
+          sequence: number
+          series_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discard_eligible?: boolean
+          included?: boolean
+          race_id?: string
+          sequence?: number
+          series_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_series_races_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_series_races_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "race_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_series_score_snapshots: {
+        Row: {
+          computed_at: string
+          computed_by: string
+          id: string
+          result: Json
+          revision: number
+          scoring_version: string
+          series_id: string
+          source_fingerprint: string
+        }
+        Insert: {
+          computed_at?: string
+          computed_by: string
+          id?: string
+          result: Json
+          revision: number
+          scoring_version: string
+          series_id: string
+          source_fingerprint: string
+        }
+        Update: {
+          computed_at?: string
+          computed_by?: string
+          id?: string
+          result?: Json
+          revision?: number
+          scoring_version?: string
+          series_id?: string
+          source_fingerprint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_series_score_snapshots_computed_by_fkey"
+            columns: ["computed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_series_score_snapshots_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "race_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       race_videos: {
         Row: {
           created_at: string
@@ -684,6 +934,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }
       is_race_organizer: { Args: { rid: string }; Returns: boolean }
+      is_race_series_organizer: { Args: { sid: string }; Returns: boolean }
       join_race_with_boat: {
         Args: {
           existing_boat_id?: string | null
