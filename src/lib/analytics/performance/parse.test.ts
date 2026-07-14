@@ -237,6 +237,15 @@ describe("parseStoredPerformance", () => {
     expect(wrongFleetDeltaParsed.issues.join(" ")).toContain("fleet minimum elapsedMs");
   });
 
+  it("accepts explicitly labeled corrected-point finish approaches", () => {
+    const performance = cloneFixture();
+    const finish = ((performance.results as Array<Record<string, unknown>>)[0].finish as Record<string, unknown>);
+    finish.source = "passage-approach";
+    finish.crossing = false;
+    finish.distanceM = 4.2;
+    expect(parsePerformanceV1(performance).status).toBe("valid");
+  });
+
   it("uses the 200-character entry ID contract rather than provenance label limits", () => {
     const replaceEntryId = (entryId: string) => JSON.parse(
       JSON.stringify(VALID_PERFORMANCE_V1_FIXTURE).replaceAll('"alpha"', JSON.stringify(entryId)),

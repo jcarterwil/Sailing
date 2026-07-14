@@ -341,7 +341,7 @@ function validateResult(value: unknown, context: ValidationContext, path: string
     if (!finish) valid = false;
     else {
       valid = finiteAt(finish.timeMs, context, `${path}.finish.timeMs`) && valid;
-      valid = literalAt(finish.source, ["organizer-override", "finite-line-crossing", "timer-event"], context, `${path}.finish.source`) && valid;
+      valid = literalAt(finish.source, ["organizer-override", "finite-line-crossing", "passage-approach", "timer-event"], context, `${path}.finish.source`) && valid;
       valid = literalAt(finish.confidence, ["high", "medium", "low"], context, `${path}.finish.confidence`) && valid;
       valid = finiteAt(finish.distanceM, context, `${path}.finish.distanceM`, { nullable: true, min: 0 }) && valid;
       valid = booleanAt(finish.crossing, context, `${path}.finish.crossing`) && valid;

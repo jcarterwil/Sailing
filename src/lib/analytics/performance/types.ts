@@ -107,7 +107,7 @@ export type PerformanceResultStatus =
 
 export interface PerformanceFinishEvidenceV1 {
   timeMs: number;
-  source: "organizer-override" | "finite-line-crossing" | "timer-event";
+  source: "organizer-override" | "finite-line-crossing" | "passage-approach" | "timer-event";
   confidence: Exclude<PerformanceConfidence, "unavailable">;
   distanceM: number | null;
   crossing: boolean;
