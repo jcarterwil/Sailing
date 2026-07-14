@@ -31,7 +31,7 @@ export default async function AdminLayout({
   if (!isAdmin) redirect("/dashboard");
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8 sm:px-10 md:flex-row md:gap-10 lg:px-12">
+    <div className="mx-auto flex min-h-screen w-full max-w-[88rem] flex-col gap-6 px-6 py-8 sm:px-10 md:flex-row md:gap-8 lg:px-12">
       <aside className="md:w-52 md:shrink-0">
         <div className="mb-3 flex items-center justify-between md:mb-4">
           <span className="inline-flex items-center gap-2 font-heading font-semibold">
