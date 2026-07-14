@@ -1,4 +1,4 @@
-import { angleDiff, circularMean, norm180 } from "@/lib/analytics/angles";
+import { angleDiff, circularMean } from "@/lib/analytics/angles";
 import {
   BOTCHED_MAX_DURATION_S,
   BOTCHED_MIN_SPEED_RATIO,
@@ -33,6 +33,7 @@ import type {
   WindAnalysis,
 } from "@/lib/analytics/types";
 import { windDirectionAt } from "@/lib/analytics/wind";
+import { progressVmgKts, signedTwaDeg } from "@/lib/analytics/sailing";
 
 const KTS_TO_MS = 0.514444;
 
@@ -93,7 +94,7 @@ function stableState(
   const courseDeg = circularMean(courses);
   const twdDeg = windDirectionAt(wind, (fromMs + toMs) / 2);
   if (twdDeg === null || !finite(courseDeg)) return null;
-  return { courseDeg, sogKts: median(speeds), twaDeg: norm180(twdDeg - courseDeg) };
+  return { courseDeg, sogKts: median(speeds), twaDeg: signedTwaDeg(twdDeg, courseDeg) };
 }
 
 function maneuverType(beforeTwa: number, afterTwa: number): ManeuverType | null {
@@ -137,7 +138,7 @@ function turnCenter(
     const twdDeg = windDirectionAt(wind, timeMs);
     const course = track.cog[i];
     if (twdDeg === null || !finite(course)) continue;
-    const absoluteTwa = Math.abs(norm180(twdDeg - course));
+    const absoluteTwa = Math.abs(signedTwaDeg(twdDeg, course));
     if (
       (type === "tack" && absoluteTwa < bestValue) ||
       (type === "gybe" && absoluteTwa > bestValue)
@@ -217,9 +218,8 @@ function madeGood(
     const timeMs = (epochAt(track, i - 1) + epochAt(track, i)) / 2;
     const twdDeg = windDirectionAt(wind, timeMs);
     if (!finite(sog) || !finite(course) || twdDeg === null) continue;
-    const twaDeg = norm180(twdDeg - course);
-    const towardWindKts = sog * Math.cos((twaDeg * Math.PI) / 180);
-    const legVmgKts = type === "tack" ? towardWindKts : -towardWindKts;
+    const twaDeg = signedTwaDeg(twdDeg, course);
+    const legVmgKts = progressVmgKts(sog, twaDeg, type === "tack" ? "upwind" : "downwind");
     meters += legVmgKts * KTS_TO_MS * dtSec;
     durationSec += dtSec;
   }
