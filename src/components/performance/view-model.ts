@@ -116,6 +116,9 @@ export interface PerformanceOverviewModel {
   best: PerformanceBestCard[];
   metrics: PerformanceMetricRow[];
   distributions: PerformanceDistributionSeries[];
+  start: PerformanceAnalysisV1["start"];
+  course: PerformanceAnalysisV1["course"];
+  legs: PerformanceAnalysisV1["legs"];
   warnings: PerformanceAnalysisV1["warnings"];
   quality: {
     calculationVersion: string;
@@ -268,6 +271,9 @@ export function buildPerformanceOverviewModel(input: {
     best,
     metrics,
     distributions,
+    start: performance.start,
+    course: performance.course,
+    legs: performance.legs,
     warnings: performance.warnings,
     quality: {
       calculationVersion: performance.calculationVersion,

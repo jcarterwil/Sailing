@@ -7,6 +7,7 @@ import {
   resolvePerformancePageState,
 } from "@/components/performance/view-model";
 import { parseRaceMeta } from "@/lib/races/meta";
+import { loadPerformanceTrackMetas } from "@/lib/races/performance-tracks";
 import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
@@ -112,5 +113,22 @@ export default async function RacePerformancePage({
     performance: parsed.performance,
     computedAt: analysisResult.data.computed_at,
   });
-  return <PerformanceOverview model={model} />;
+  const drilldownTracks = await loadPerformanceTrackMetas(raceId);
+  return (
+    <PerformanceOverview
+      model={model}
+      drilldown={{
+        tracks: drilldownTracks.tracks,
+        issues: drilldownTracks.issues,
+        performance: parsed.performance,
+        analysis: {
+          wind: currentAnalysis.wind,
+          entries: currentAnalysis.perEntry.map((entry) => ({
+            entryId: entry.entryId,
+            maneuvers: entry.maneuvers,
+          })),
+        },
+      }}
+    />
+  );
 }

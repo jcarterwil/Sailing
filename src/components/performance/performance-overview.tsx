@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 
 import { DistributionChart } from "@/components/performance/distribution-chart";
+import type { DrilldownAnalysisInput } from "@/components/performance/drilldown-data";
+import type { PerformanceTrackMeta } from "@/components/performance/drilldown-worker-contract";
+import { PerformanceDrilldowns } from "@/components/performance/performance-drilldowns";
 import {
   formatDateTime,
   formatDelta,
@@ -37,6 +40,7 @@ import {
   WEATHER_CONTEXT_REPORT_LABEL,
   weatherCodeToText,
 } from "@/lib/weather/open-meteo";
+import type { PerformanceAnalysisV1 } from "@/lib/analytics/performance/types";
 
 const SELECT_CLASS =
   "h-9 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
@@ -87,7 +91,18 @@ function BoatName({ name, color }: { name: string; color: string }) {
   );
 }
 
-export function PerformanceOverview({ model }: { model: PerformanceOverviewModel }) {
+export function PerformanceOverview({
+  model,
+  drilldown,
+}: {
+  model: PerformanceOverviewModel;
+  drilldown?: {
+    tracks: PerformanceTrackMeta[];
+    analysis: DrilldownAnalysisInput;
+    performance: PerformanceAnalysisV1;
+    issues: string[];
+  };
+}) {
   const [boatFilter, setBoatFilter] = useState("all");
   const [sort, setSort] = useState<{ key: MetricSortKey; direction: SortDirection }>({
     key: "rank",
@@ -324,6 +339,17 @@ export function PerformanceOverview({ model }: { model: PerformanceOverviewModel
           </div>
         </section>
 
+        {drilldown && (
+          <PerformanceDrilldowns
+            model={model}
+            tracks={drilldown.tracks}
+            analysis={drilldown.analysis}
+            performance={drilldown.performance}
+            serverIssues={drilldown.issues}
+            visibleEntryIds={visibleEntryIds}
+          />
+        )}
+
         <section aria-labelledby="weather-heading" className="space-y-4">
           <div>
             <h2 id="weather-heading" className="text-xl font-semibold">Weather evidence</h2>
@@ -373,7 +399,7 @@ export function PerformanceOverview({ model }: { model: PerformanceOverviewModel
       </div>
 
       <div className="border-t py-6 text-center text-xs text-muted-foreground">
-        Deterministic persisted metrics · no raw tracks downloaded for this page
+        Deterministic persisted metrics · signed tracks are used only for bounded drilldown displays
       </div>
     </main>
   );
