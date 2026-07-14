@@ -99,6 +99,7 @@ function mapAnalysisStatus(
   status: SeriesWorkflowAnalysisStatus;
   performance: ReturnType<typeof parseStoredRaceAnalysis>["performance"];
 } {
+  if (entries.length === 0) return { status: "current", performance: null };
   if (entries.some((entry) => tracksByEntryId.get(entry.id)?.status !== "processed")) {
     return { status: "incomplete-entries", performance: null };
   }

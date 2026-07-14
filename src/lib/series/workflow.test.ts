@@ -300,6 +300,38 @@ describe("projectSeriesWorkflowV1", () => {
     });
   });
 
+  it("drops stale persisted officials but blocks an explicitly stale completed-race draft", () => {
+    const staleRow = {
+      entryId: "entry-removed",
+      sourceBoatId: "boat-removed",
+      status: "fin",
+      place: 3,
+      tied: false,
+      penaltyPoints: 0,
+      confirmed: true,
+    };
+    const rows = [...confirmedRows()[0].rows, staleRow];
+    const persisted = projectSeriesWorkflowV1(input({
+      races: [race({ storedOfficialResults: rows })],
+    }));
+    expect(persisted.status).toBe("ready");
+    expect(persisted.issues).not.toContainEqual(
+      expect.objectContaining({ code: "unexpected-official-row" }),
+    );
+    expect(persisted.applyRaces[0].officialResults).not.toContainEqual(
+      expect.objectContaining({ entryId: "entry-removed" }),
+    );
+
+    const explicit = projectSeriesWorkflowV1(input({
+      draftOfficialResults: [{ raceId: "race-1", rows }],
+    }));
+    expect(explicit.status).toBe("blocked");
+    expect(explicit.issues).toContainEqual(expect.objectContaining({
+      code: "unexpected-official-row",
+      entryId: "entry-removed",
+    }));
+  });
+
   it("never carries confirmation when the draft omits its source boat", () => {
     const rows = confirmedRows()[0].rows.map((row) => ({ ...row }));
     delete (rows[0] as Partial<typeof rows[number]>).sourceBoatId;

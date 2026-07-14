@@ -124,6 +124,8 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [setupDirty, setSetupDirty] = useState(false);
+  const [setupRefreshPending, setSetupRefreshPending] = useState(false);
+  const setupBlocked = setupDirty || setupRefreshPending;
 
   const raceById = useMemo(
     () => new Map(model.availableRaces.map((race) => [race.id, race])),
@@ -146,6 +148,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
 
   function markSetupChanged() {
     setSetupDirty(true);
+    setSetupRefreshPending(false);
     setPreview(null);
     setScoreError(null);
     setNotice(null);
@@ -225,6 +228,8 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
             })),
         });
         setRevision(result.revision);
+        setSetupDirty(false);
+        setSetupRefreshPending(true);
         setNotice("Series setup saved. Official-result drafts were rebuilt from current evidence.");
         router.refresh();
       } catch (error) {
@@ -252,8 +257,10 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   function runPreview() {
     setScoreError(null);
     setNotice(null);
-    if (setupDirty) {
-      setScoreError("Save setup changes before previewing official results.");
+    if (setupBlocked) {
+      setScoreError(setupDirty
+        ? "Save setup changes before previewing official results."
+        : "Wait for the saved setup to finish refreshing before previewing official results.");
       return;
     }
     startTransition(async () => {
@@ -276,8 +283,10 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   function applyPreview() {
     setScoreError(null);
     setNotice(null);
-    if (setupDirty) {
-      setScoreError("Save setup changes before applying a scoring snapshot.");
+    if (setupBlocked) {
+      setScoreError(setupDirty
+        ? "Save setup changes before applying a scoring snapshot."
+        : "Wait for the saved setup to finish refreshing before applying a scoring snapshot.");
       return;
     }
     startTransition(async () => {
@@ -338,11 +347,11 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>1. Series setup</CardTitle>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={toggleArchive} disabled={pending || setupDirty}>
+              <Button variant="outline" onClick={toggleArchive} disabled={pending || setupBlocked}>
                 {model.series.archivedAt ? <Undo2 className="size-4" /> : <Archive className="size-4" />}
                 {model.series.archivedAt ? "Restore" : "Archive"}
               </Button>
-              <Button onClick={saveSetup} disabled={pending || !setupDirty}>
+              <Button onClick={saveSetup} disabled={pending || setupRefreshPending || !setupDirty}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save setup
               </Button>
@@ -640,10 +649,18 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                 Race order, identity, and scoring-rule edits are not persisted yet. Official rows, Preview, and Apply stay disabled until Save setup reloads current evidence.
               </AlertDescription>
             </Alert>
+          ) : setupRefreshPending ? (
+            <Alert>
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              <AlertTitle>Refreshing saved setup</AlertTitle>
+              <AlertDescription>
+                Setup is saved. Current official-result drafts are loading before scoring controls are re-enabled.
+              </AlertDescription>
+            </Alert>
           ) : null}
           <fieldset
-            disabled={setupDirty || pending}
-            className={setupDirty ? "space-y-6 opacity-60" : "space-y-6"}
+            disabled={setupBlocked || pending}
+            className={setupBlocked ? "space-y-6 opacity-60" : "space-y-6"}
           >
           {model.races.length ? model.races.map((race) => {
             const rows = draftRows[race.raceId] ?? [];
@@ -788,13 +805,13 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>3. Preview and apply</CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={runPreview} disabled={pending || setupDirty || model.races.length === 0}>
+              <Button variant="outline" onClick={runPreview} disabled={pending || setupBlocked || model.races.length === 0}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : null}
                 Preview scoring
               </Button>
               <Button
                 onClick={applyPreview}
-                disabled={pending || setupDirty || preview?.projection.status !== "ready" || !preview.projection.result}
+                disabled={pending || setupBlocked || preview?.projection.status !== "ready" || !preview.projection.result}
               >
                 Apply snapshot
               </Button>

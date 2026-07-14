@@ -334,7 +334,8 @@ export function projectSeriesWorkflowV1(
 
   for (const race of [...input.races].sort((left, right) =>
     left.sequence - right.sequence || compareText(left.raceId, right.raceId))) {
-    const supplied = draftsByRace.has(race.raceId)
+    const usingExplicitDraft = draftsByRace.has(race.raceId);
+    const supplied = usingExplicitDraft
       ? draftsByRace.get(race.raceId)
       : race.storedOfficialResults;
     const editedByEntryId = parseEditableRows(supplied, race, issues);
@@ -355,7 +356,7 @@ export function projectSeriesWorkflowV1(
       ...allAbsentCompetitors.map((competitor) => absentCompetitorEntryId(competitor.boatId)),
     ]);
     for (const entryId of editedByEntryId.keys()) {
-      if (!currentEntryIds.has(entryId)) {
+      if (!currentEntryIds.has(entryId) && requireComplete && usingExplicitDraft) {
         issues.push({
           code: "unexpected-official-row",
           raceId: race.raceId,
