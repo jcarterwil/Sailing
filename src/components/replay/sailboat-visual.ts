@@ -54,6 +54,14 @@ export function boomRotationForSide(side: SailboatBoomSide): number {
   return 0;
 }
 
+export function formatSailIdentity(identity?: string): string | null {
+  const normalized = identity?.trim().replace(/\s+/g, " ") ?? "";
+  if (!normalized) return null;
+  return normalized.length <= 14
+    ? normalized
+    : `${normalized.slice(0, 13)}…`;
+}
+
 function createHullGeometry(
   THREE: typeof import("three"),
   quality: SailboatVisualQuality,
@@ -149,6 +157,52 @@ function createSailGeometry(
   geometry.setIndex([0, 1, 2]);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function createIdentityDecal(
+  THREE: typeof import("three"),
+  identity: string | undefined,
+) {
+  const label = formatSailIdentity(identity);
+  if (!label || typeof document === "undefined") return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 192;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "rgba(247, 242, 223, 0.82)";
+  context.fillRect(8, 8, canvas.width - 16, canvas.height - 16);
+  context.fillStyle = "#142b38";
+  context.font = "700 72px ui-sans-serif, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 40);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  texture.userData.sailIdentity = label;
+
+  const decals = new THREE.Group();
+  for (const side of [-1, 1] as const) {
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.9, 0.72),
+      new THREE.MeshBasicMaterial({
+        depthWrite: false,
+        map: texture,
+        side: THREE.FrontSide,
+        transparent: true,
+      }),
+    );
+    decal.position.set(side * 0.018, 4.25, 0.55);
+    decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    decal.renderOrder = 2;
+    decals.add(decal);
+  }
+  return decals;
 }
 
 function addCockpit(
@@ -286,6 +340,9 @@ export function createSailboatVisual(
   main.castShadow = true;
   main.userData.identity = options.identity ?? null;
   rig.add(main);
+
+  const identityDecal = createIdentityDecal(THREE, options.identity);
+  if (identityDecal) rig.add(identityDecal);
 
   const jib = new THREE.Mesh(
     createSailGeometry(
