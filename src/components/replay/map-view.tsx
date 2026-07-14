@@ -4,7 +4,19 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { shouldAddReplayMapLayers } from "@/components/replay/map-layers";
+import {
+  BOATS_3D_LAYER_ID,
+  boatIconOpacityExpression,
+  emptyBoat3dFrame,
+  resolveBoomSide,
+  type Boat3dFrame,
+  type Boat3dFrameRef,
+  type Boat3dPose,
+} from "@/components/replay/boats-3d-state";
+import {
+  applyBoatHullIconMode,
+  shouldAddReplayMapLayers,
+} from "@/components/replay/map-layers";
 import { usePlaybackStore, type CameraMode, type TrailMode } from "@/components/replay/playback-store";
 import {
   buildSpeedTrackData,
@@ -12,13 +24,19 @@ import {
   lineGradientExpression,
   SPEED_COLORS,
 } from "@/components/replay/speed-track";
-import { indexAt, sampleAt } from "@/components/replay/track-index";
+import { indexAt, sampleAt, type TrackSample } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
 import { MIN_SOG_FOR_COG_KTS } from "@/lib/analytics/constants";
 import { startForLine, startLineAt, type StartLine } from "@/lib/analytics/start-line";
 
 export type MapStyleId = "map" | "satellite";
+type TwdAt = ((timeMs: number) => number) | null;
+
+interface Boats3dResources {
+  THREE: typeof import("three");
+  createBoats3dLayer: typeof import("@/components/replay/boats-3d-layer").createBoats3dLayer;
+}
 
 const LIBERTY_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -118,17 +136,44 @@ function makeBoatArrow(): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
-function boatsGeoJson(
+function boatSnapshot(
   tracks: LoadedTrack[],
   timeMs: number,
   selectedEntryId: string | null,
+  twdAt: TwdAt,
 ) {
-  return {
+  const twdDeg = twdAt?.(timeMs) ?? Number.NaN;
+  const samples: Array<{
+    track: LoadedTrack;
+    sample: TrackSample;
+    pose: Boat3dPose;
+  }> = tracks.map((track) => {
+    const sample = sampleAt(track, timeMs);
+    return {
+      track,
+      sample,
+      pose: {
+        entryId: track.entryId,
+        lon: sample.lon,
+        lat: sample.lat,
+        headingDeg: sample.hdgDeg,
+        heelDeg: sample.heelDeg,
+        trimDeg: sample.trimDeg,
+        boomSide: resolveBoomSide(twdDeg, sample.cogDeg, sample.heelDeg),
+        inTrack: sample.inTrack,
+      },
+    };
+  });
+  const poses = samples.map(({ pose }) => pose);
+  const frame: Boat3dFrame = {
+    poses,
+    byEntryId: new Map(poses.map((pose) => [pose.entryId, pose])),
+  };
+  const geoJson = {
     type: "FeatureCollection" as const,
-    features: tracks.map((track) => {
-      const s = sampleAt(track, timeMs);
+    features: samples.map(({ track, sample }) => {
       const isSelected = selectedEntryId === track.entryId;
-      let opacity = s.inTrack ? 1 : 0.35;
+      let opacity = sample.inTrack ? 1 : 0.35;
       // Dim the rest of the fleet when a selection exists.
       if (selectedEntryId && !isSelected) opacity = Math.min(opacity, 0.55);
       return {
@@ -136,15 +181,54 @@ function boatsGeoJson(
         properties: {
           color: track.color,
           entryId: track.entryId,
-          heading: Number.isNaN(s.hdgDeg) ? 0 : s.hdgDeg,
+          heading: Number.isFinite(sample.hdgDeg) ? sample.hdgDeg : 0,
+          inTrack: sample.inTrack ? 1 : 0,
           opacity,
           name: track.boatName,
           selected: isSelected ? 1 : 0,
         },
-        geometry: { type: "Point" as const, coordinates: [s.lon, s.lat] },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [sample.lon, sample.lat],
+        },
       };
     }),
   };
+  return { frame, geoJson };
+}
+
+function addReadyBoats3dLayer(
+  map: maplibregl.Map,
+  resources: Boats3dResources | null,
+  tracks: LoadedTrack[],
+  frameRef: Boat3dFrameRef,
+): boolean {
+  if (map.getLayer(BOATS_3D_LAYER_ID)) return true;
+  if (!resources || !map.isStyleLoaded()) return false;
+  try {
+    const layer = resources.createBoats3dLayer(
+      resources.THREE,
+      maplibregl.MercatorCoordinate,
+      {
+        boats: tracks.map((track) => ({
+          entryId: track.entryId,
+          color: track.color,
+        })),
+        frameRef,
+      },
+    );
+    const beforeId = map.getLayer("boat-halo")
+      ? "boat-halo"
+      : map.getLayer("boats")
+        ? "boats"
+        : undefined;
+    map.addLayer(layer, beforeId);
+    return Boolean(map.getLayer(BOATS_3D_LAYER_ID));
+  } catch (error) {
+    console.error("Could not enable replay 3D hulls", error);
+    if (map.getLayer(BOATS_3D_LAYER_ID)) map.removeLayer(BOATS_3D_LAYER_ID);
+    return false;
+  }
 }
 
 function trailGeoJson(tracks: LoadedTrack[], timeMs: number, tailMs: number | null) {
@@ -171,10 +255,14 @@ export function MapView({
   tracks,
   styleId,
   startsMs = [],
+  show3d,
+  twdAt,
 }: {
   tracks: LoadedTrack[];
   styleId: MapStyleId;
   startsMs?: number[];
+  show3d: boolean;
+  twdAt: TwdAt;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -185,12 +273,20 @@ export function MapView({
   const lastCamTimeMsRef = useRef(0);
   const prevCameraModeRef = useRef<CameraMode>("north");
   const skipResetEaseRef = useRef(false);
+  const boatFrameRef = useRef<Boat3dFrame>(emptyBoat3dFrame());
+  const boats3dResourcesRef = useRef<Boats3dResources | null>(null);
+  const show3dRef = useRef(show3d);
+  const twdAtRef = useRef(twdAt);
   const trailMode = usePlaybackStore((state) => state.trailMode);
   const speedDomain = useMemo(() => createFleetSpeedDomain(tracks), [tracks]);
   const speedTracks = useMemo(
     () => tracks.map((track) => buildSpeedTrackData(track, speedDomain)),
     [speedDomain, tracks],
   );
+
+  useEffect(() => {
+    twdAtRef.current = twdAt;
+  }, [twdAt]);
 
   // Map lifecycle: one instance; sources/layers re-added on style change.
   useEffect(() => {
@@ -216,6 +312,7 @@ export function MapView({
       bounds: [west, south, east, north],
       fitBoundsOptions: { padding: 60 },
       attributionControl: { compact: true },
+      canvasContextAttributes: { antialias: true },
     });
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
@@ -229,7 +326,15 @@ export function MapView({
       }
       const timeMs = usePlaybackStore.getState().timeMs;
       const trailMode = usePlaybackStore.getState().trailMode;
+      const selectedEntryId = usePlaybackStore.getState().selectedEntryId;
       const startLine = resolveStartLine(tracks, startsMs, timeMs);
+      const boats = boatSnapshot(
+        tracks,
+        timeMs,
+        selectedEntryId,
+        twdAtRef.current,
+      );
+      boatFrameRef.current = boats.frame;
       map.addSource("trails", {
         type: "geojson",
         data: trailGeoJson(tracks, timeMs, trailMode === "tail" ? TAIL_SECONDS * 1000 : null),
@@ -333,8 +438,16 @@ export function MapView({
       });
       map.addSource("boats", {
         type: "geojson",
-        data: boatsGeoJson(tracks, timeMs, usePlaybackStore.getState().selectedEntryId),
+        data: boats.geoJson,
       });
+      const hullsReady =
+        show3dRef.current &&
+        addReadyBoats3dLayer(
+          map,
+          boats3dResourcesRef.current,
+          tracks,
+          boatFrameRef,
+        );
       // Halo ring drawn under the selected boat's arrow; recreated on style re-add.
       map.addLayer({
         id: "boat-halo",
@@ -366,7 +479,7 @@ export function MapView({
         },
         paint: {
           "icon-color": ["get", "color"],
-          "icon-opacity": ["get", "opacity"],
+          "icon-opacity": boatIconOpacityExpression(hullsReady),
           "text-color": "#ffffff",
           "text-halo-color": "#0f172a",
           "text-halo-width": 1.2,
@@ -442,6 +555,69 @@ export function MapView({
     map.setStyle(styleId === "satellite" ? SATELLITE_STYLE : LIBERTY_STYLE);
   }, [styleId]);
 
+  // Low-frequency 3D toggle. Loading the module here keeps Three out of the
+  // normal replay path and, critically, does not recreate the MapLibre map.
+  useEffect(() => {
+    show3dRef.current = show3d;
+    const map = mapRef.current;
+    if (!show3d) {
+      if (map) {
+        applyBoatHullIconMode(map, false);
+        if (map.getLayer(BOATS_3D_LAYER_ID)) {
+          map.removeLayer(BOATS_3D_LAYER_ID);
+        }
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const enable = async () => {
+      let resources = boats3dResourcesRef.current;
+      if (!resources) {
+        const [THREE, module] = await Promise.all([
+          import("three"),
+          import("@/components/replay/boats-3d-layer"),
+        ]);
+        resources = {
+          THREE,
+          createBoats3dLayer: module.createBoats3dLayer,
+        };
+        boats3dResourcesRef.current = resources;
+      }
+
+      const currentMap = mapRef.current;
+      if (
+        cancelled ||
+        !show3dRef.current ||
+        !currentMap ||
+        currentMap !== map ||
+        !readyRef.current ||
+        !currentMap.isStyleLoaded()
+      ) {
+        return;
+      }
+
+      const ready = addReadyBoats3dLayer(
+        currentMap,
+        resources,
+        tracks,
+        boatFrameRef,
+      );
+      applyBoatHullIconMode(currentMap, ready);
+    };
+
+    void enable().catch((error) => {
+      if (cancelled) return;
+      console.error("Could not load replay 3D hulls", error);
+      const currentMap = mapRef.current;
+      if (currentMap) applyBoatHullIconMode(currentMap, false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [show3d, tracks]);
+
   // Trail mode changes are infrequent: toggle static speed layers and refresh
   // the normal trail once, without rebuilding full tracks on playback frames.
   useEffect(() => {
@@ -488,8 +664,18 @@ export function MapView({
       }
       prevCameraModeRef.current = cameraMode;
 
-      const boats = map.getSource<maplibregl.GeoJSONSource>("boats");
-      boats?.setData(boatsGeoJson(tracks, timeMs, selectedEntryId));
+      const boats = boatSnapshot(
+        tracks,
+        timeMs,
+        selectedEntryId,
+        twdAtRef.current,
+      );
+      // Publish the frame before setData: MapLibre may schedule the custom
+      // render immediately, and both 2D/3D paths must use the same samples.
+      boatFrameRef.current = boats.frame;
+      map
+        .getSource<maplibregl.GeoJSONSource>("boats")
+        ?.setData(boats.geoJson);
 
       if (cameraMode !== "north" && selectedEntryId) {
         const track = tracks.find((t) => t.entryId === selectedEntryId);
