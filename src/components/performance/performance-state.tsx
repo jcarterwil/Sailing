@@ -53,6 +53,8 @@ export function PerformanceState({
   canManage,
   canReview,
   issues,
+  backHref,
+  backLabel,
 }: {
   state: Exclude<PerformancePageState, "current">;
   raceId: string;
@@ -60,14 +62,16 @@ export function PerformanceState({
   canManage: boolean;
   canReview: boolean;
   issues: readonly string[];
+  backHref?: string;
+  backLabel?: string;
 }) {
   const copy = STATE_COPY[state];
   const Icon = copy.icon;
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center gap-6 px-6 py-12">
-      <Link href={`/races/${raceId}`} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+      <Link href={backHref ?? `/races/${raceId}`} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden="true" />
-        {raceName}
+        {backLabel ?? raceName}
       </Link>
       <section className="rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="performance-state-title">
         <Icon className="size-8 text-amber-500" aria-hidden="true" />
@@ -90,12 +94,12 @@ export function PerformanceState({
                 </Button>
               )}
               <Button asChild variant="outline">
-                <Link href={`/races/${raceId}`}>{canReview ? "Manage tracks" : "Open race controls"}</Link>
+              <Link href={backHref ?? `/races/${raceId}`}>{canReview ? "Manage tracks" : "Open race controls"}</Link>
               </Button>
             </>
           ) : (
             <Button asChild variant="outline">
-              <Link href={`/races/${raceId}`}>Back to race</Link>
+              <Link href={backHref ?? `/races/${raceId}`}>Back to race</Link>
             </Button>
           )}
         </div>
