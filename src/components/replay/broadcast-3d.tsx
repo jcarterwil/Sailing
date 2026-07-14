@@ -51,10 +51,10 @@ export function Broadcast3d({
     null,
   );
 
-  onFailureRef.current = onFailure;
-  onTelemetryRef.current = onTelemetry;
-  cameraModeRef.current = cameraMode;
-  qualityRef.current = quality;
+  useEffect(() => {
+    onFailureRef.current = onFailure;
+    onTelemetryRef.current = onTelemetry;
+  }, [onFailure, onTelemetry]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -177,6 +177,7 @@ export function Broadcast3d({
   }, [source]);
 
   useEffect(() => {
+    cameraModeRef.current = cameraMode;
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.setCameraMode(cameraMode);
@@ -184,6 +185,7 @@ export function Broadcast3d({
   }, [cameraMode, source]);
 
   useEffect(() => {
+    qualityRef.current = quality;
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.setQualityPreference(quality);
