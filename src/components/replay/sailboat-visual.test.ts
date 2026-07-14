@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   boomRotationForSide,
+  formatSailIdentity,
   sailboatHullProfile,
 } from "@/components/replay/sailboat-visual";
 
@@ -30,6 +31,14 @@ describe("stylized sailboat visual", () => {
   it("adds stations for the high-quality silhouette", () => {
     expect(sailboatHullProfile("high").length).toBeGreaterThan(
       sailboatHullProfile("low").length,
+    );
+  });
+
+  it("normalizes visible sail identity and bounds decal text", () => {
+    expect(formatSailIdentity("  USA   123  ")).toBe("USA 123");
+    expect(formatSailIdentity("")).toBeNull();
+    expect(formatSailIdentity("A very long sailboat name")).toBe(
+      "A very long s…",
     );
   });
 
