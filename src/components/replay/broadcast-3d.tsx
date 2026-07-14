@@ -71,11 +71,27 @@ export function Broadcast3d({
       | ((cause: unknown) => BroadcastRendererFailure)
       | null = null;
 
+    const teardown = () => {
+      const activeRenderer = renderer;
+      renderer = null;
+      unsubscribeSource();
+      unsubscribeSource = () => {};
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      removeVisibilityListener();
+      removeVisibilityListener = () => {};
+      if (rendererRef.current === activeRenderer) {
+        rendererRef.current = null;
+      }
+      activeRenderer?.dispose();
+    };
+
     const reportFailure = (failure: BroadcastRendererFailure) => {
       if (cancelled || failureReported) return;
       failureReported = true;
       setFailureMessage(failure.message);
       setStatus("failed");
+      teardown();
       onFailureRef.current(failure);
     };
 
@@ -166,13 +182,7 @@ export function Broadcast3d({
 
     return () => {
       cancelled = true;
-      unsubscribeSource();
-      resizeObserver?.disconnect();
-      removeVisibilityListener();
-      if (rendererRef.current === renderer) {
-        rendererRef.current = null;
-      }
-      renderer?.dispose();
+      teardown();
     };
   }, [source]);
 
