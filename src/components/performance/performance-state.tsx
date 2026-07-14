@@ -16,7 +16,7 @@ const STATE_COPY: Record<Exclude<PerformancePageState, "current">, {
   },
   legacy: {
     title: "Performance analysis needs an upgrade",
-    detail: "The saved analysis predates Performance Overview V1 and must be reanalyzed.",
+    detail: "The saved analysis predates the current Performance calculation and must be reanalyzed.",
     icon: DatabaseZap,
   },
   stale: {

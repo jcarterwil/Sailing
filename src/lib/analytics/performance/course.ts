@@ -7,6 +7,7 @@ import {
   PERFORMANCE_COURSE_MAD_MULTIPLIER,
   PERFORMANCE_COURSE_MARK_SEARCH_RADIUS_M,
   PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO,
   PERFORMANCE_COURSE_MIN_OUTLIER_RADIUS_M,
   PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES,
   PERFORMANCE_MAX_ENTRY_COUNT,
@@ -395,6 +396,11 @@ function pointConfidence(cluster: ClusterResult, entryCount: number): Performanc
   return cluster.accepted.length >= Math.max(3, Math.ceil(entryCount / 2)) ? "high" : "medium";
 }
 
+function hasInferredFinishSupport(supportingEntries: number, entryCount: number): boolean {
+  return entryCount > 0 &&
+    supportingEntries / entryCount > PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO;
+}
+
 function approachConfidence(point: PerformanceCoursePointV1, distanceM: number): PerformanceConfidence {
   if (point.provenance.confidence === "unavailable") return "unavailable";
   if (distanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M / 2) return "low";
@@ -591,6 +597,7 @@ export function buildPerformanceCourse(
       const endpointCluster = robustCluster(endpointCandidates);
       if (
         endpointCluster.accepted.length >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
+        hasInferredFinishSupport(endpointCluster.accepted.length, tracks.length) &&
         !endpointCluster.dispersed &&
         endpointCluster.position
       ) {
@@ -605,14 +612,32 @@ export function buildPerformanceCourse(
           "Finish geometry was inferred from the corrected fleet finish boundary.",
         );
       } else {
+        const rejectedEndpointSupport = endpointCluster.accepted.length;
+        const endpointNeedsReview =
+          rejectedEndpointSupport >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
+          !hasInferredFinishSupport(rejectedEndpointSupport, tracks.length) &&
+          !endpointCluster.dispersed &&
+          endpointCluster.position !== null;
+        const strongestCluster = endpointCluster.accepted.length >= timerCluster.accepted.length
+          ? endpointCluster
+          : timerCluster;
+        finishSupport = strongestCluster.accepted.length;
+        finishSpreadM = strongestCluster.spreadM;
         finishProvenance = provenance(
           "unavailable",
           "unavailable",
           ["race.finish", "tracks.extras.timerEvents.race_end"],
           tracks.length > 0 ? Math.max(timerCluster.accepted.length, endpointCluster.accepted.length) / tracks.length * 100 : null,
-          "Fewer than two usable finish positions or excessive spatial spread.",
+          endpointNeedsReview
+            ? `Inferred finish boundary supported by ${rejectedEndpointSupport} of ${tracks.length} entries; organizer review is required.`
+            : "Fewer than two usable finish positions or excessive spatial spread.",
         );
-        warn("unavailable-finish-geometry", "Finish geometry is unavailable from corrected geometry, timer events, and the fleet boundary.");
+        warn(
+          "unavailable-finish-geometry",
+          endpointNeedsReview
+            ? `Inferred finish boundary has support from only ${rejectedEndpointSupport} of ${tracks.length} entries; confirm the finish geometry before final-leg analysis.`
+            : "Finish geometry is unavailable from corrected geometry, timer events, and the fleet boundary.",
+        );
       }
     }
   }
@@ -723,14 +748,14 @@ export function buildPerformanceCourse(
         const nonMonotonic = priorTimeMs !== null && unconstrained !== null && unconstrained.timeMs < priorTimeMs;
         if (nonMonotonic) {
           warningCodes.push("non-monotonic-passage");
-          warn("non-monotonic-passage", `Entry ${track.entryId} has a course-point candidate before its prior passage.`, track.entryId, pointIndex - 1);
+          warn("non-monotonic-passage", "This boat has a course-point candidate before its prior passage.", track.entryId, pointIndex - 1);
         } else {
           warningCodes.push("missing-entry-passage");
-          warn("missing-entry-passage", `Entry ${track.entryId} has no supported passage for course point ${pointIndex}.`, track.entryId, pointIndex - 1);
+          warn("missing-entry-passage", `This boat has no supported passage for course point ${pointIndex}.`, track.entryId, pointIndex - 1);
         }
         if (unconstrained?.gapSkipped) {
           warningCodes.push("source-gap");
-          warn("source-gap", `Entry ${track.entryId} passage search did not interpolate across a source gap.`, track.entryId, pointIndex - 1);
+          warn("source-gap", "This boat's passage search did not interpolate across a source gap.", track.entryId, pointIndex - 1);
         }
         passages.push({
           pointIndex,

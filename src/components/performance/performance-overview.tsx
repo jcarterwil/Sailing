@@ -27,6 +27,7 @@ import {
   formatDelta,
   formatDuration,
   formatNumber,
+  formatPerformanceWarningMessage,
   formatRaceDate,
   sortMetricRows,
   type MetricSortKey,
@@ -396,7 +397,7 @@ export function PerformanceOverview({
                   <ul className="space-y-3 text-sm">
                     {model.warnings.map((warning, index) => {
                       const entry = model.entries.find((candidate) => candidate.entryId === warning.entryId);
-                      return <li key={`${warning.code}:${warning.entryId}:${warning.legIndex}:${warning.message}:${index}`}><span className="font-medium">{warning.code}</span>{entry ? ` · ${entry.boatName}` : ""}{warning.legIndex !== null ? ` · leg ${warning.legIndex + 1}` : ""}<span className="block text-xs text-muted-foreground">{warning.message}</span></li>;
+                      return <li key={`${warning.code}:${warning.entryId}:${warning.legIndex}:${warning.message}:${index}`}><span className="font-medium">{warning.code}</span>{entry ? ` · ${entry.boatName}` : ""}{warning.legIndex !== null ? ` · leg ${warning.legIndex + 1}` : ""}<span className="block text-xs text-muted-foreground">{formatPerformanceWarningMessage(warning)}</span></li>;
                     })}
                   </ul>
                 )}

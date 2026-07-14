@@ -348,7 +348,7 @@ export function analyzeRaceResults(input: AnalyzeRaceResultsInput): PerformanceR
         code: code === "unavailable-finish-geometry"
           ? "unavailable-finish-geometry"
           : "unresolved-finish",
-        message: (resolution.note ?? `Entry ${entryId} requires finish review.`)
+        message: (resolution.note ?? "This boat requires finish review.")
           .slice(0, PERFORMANCE_MAX_WARNING_MESSAGE_CHARS),
         entryId,
         legIndex: null,

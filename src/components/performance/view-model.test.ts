@@ -1,5 +1,8 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { PerformancePrintReport } from "@/components/performance/performance-print-report";
 import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
 import { analyzePerformanceOpportunities } from "@/lib/analytics/performance/opportunities";
 import type { RaceAnalysis } from "@/lib/analytics/types";
@@ -9,6 +12,7 @@ import {
   formatDelta,
   formatDuration,
   formatNumber,
+  formatPerformanceWarningMessage,
   resolvePerformancePageState,
   sortMetricRows,
 } from "@/components/performance/view-model";
@@ -96,6 +100,16 @@ function analysis(): RaceAnalysis {
 }
 
 describe("performance overview view model", () => {
+  it("redacts structured entry IDs from legacy warning text", () => {
+    const entryId = "1e4fa134-39f5-4882-b749-3b7dfc92a905";
+    const formatted = formatPerformanceWarningMessage({
+      entryId,
+      message: `Entry ${entryId} has no supported finish passage.`,
+    });
+    expect(formatted).toBe("This boat has no supported finish passage.");
+    expect(formatted).not.toContain(entryId);
+  });
+
   it("resolves every intentional persisted-analysis page state", () => {
     const base = {
       trackStatuses: ["processed"],
@@ -146,6 +160,37 @@ describe("performance overview view model", () => {
     expect(model.best[0].coverageWarning).toContain("91%");
     expect(model.best[1].interval).toBeNull();
     expect(model.opportunities).toEqual(performance.opportunities?.entries);
+  });
+
+  it("labels a best interval calculated from a partial race scope", () => {
+    const stored = analysis();
+    const performance = stored.performance!;
+    performance.bestIntervals[0].intervals[0]!.partial = true;
+    const model = buildPerformanceOverviewModel({
+      race: {
+        id: "fixture",
+        name: "Fixture race",
+        venue: null,
+        startsAt: new Date(performance.start.gunTimeMs!).toISOString(),
+        createdAt: new Date(performance.start.gunTimeMs!).toISOString(),
+      },
+      conditions: null,
+      entries: performance.provenance.entryIds.map((entryId, index) => ({
+        entryId,
+        boatName: entryId,
+        color: ENTRY_COLORS[index],
+      })),
+      analysis: stored,
+      performance,
+      computedAt: "2026-07-14T16:00:00Z",
+    });
+    expect(model.best[0].coverageWarning).toContain("Partial race scope");
+    const report = renderToStaticMarkup(createElement(PerformancePrintReport, {
+      model,
+      publicHref: "/s/test/performance",
+    }));
+    expect(report).toContain("2:40 · 6.08 kt");
+    expect(report).toContain("Partial race scope: computed through the last supported passage.");
   });
 
   it("keeps missing values distinct from zero and sorts nulls last", () => {

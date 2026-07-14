@@ -67,4 +67,12 @@ describe("public Performance Overview and print boundaries", () => {
     expect(authenticatedPage).toContain(": null");
     expect(publicPage).toContain("publicHref: `/s/${slug}/performance`");
   });
+
+  it("renders structured warning entry IDs as boat labels rather than visible identifiers", () => {
+    expect(printReport).toContain("<BoatLabel entryId={warning.entryId} model={model} />");
+    expect(printReport).toContain("formatPerformanceWarningMessage(warning)");
+    expect(overview).toContain("formatPerformanceWarningMessage(warning)");
+    expect(printReport).not.toContain(": {warning.message}");
+    expect(overview).not.toContain(">{warning.message}</span>");
+  });
 });
