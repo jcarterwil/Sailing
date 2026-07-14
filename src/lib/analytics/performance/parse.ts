@@ -17,7 +17,16 @@ import {
   PERFORMANCE_MAX_WARNING_MESSAGE_CHARS,
   PERFORMANCE_MAX_WARNINGS,
   PERFORMANCE_KNOT_TO_MPS,
+  PERFORMANCE_MARK_RECOVERY_WINDOW_SECONDS,
   PERFORMANCE_MIN_DISTRIBUTION_SECONDS,
+  PERFORMANCE_OPPORTUNITY_MAX_ASSUMPTIONS,
+  PERFORMANCE_OPPORTUNITY_MAX_CAVEATS,
+  PERFORMANCE_OPPORTUNITY_MAX_EVIDENCE,
+  PERFORMANCE_OPPORTUNITY_MAX_OBSERVATIONS,
+  PERFORMANCE_OPPORTUNITY_MAX_PRIMARY,
+  PERFORMANCE_OPPORTUNITY_MAX_SUPPRESSED,
+  PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+  PERFORMANCE_OPPORTUNITY_MIN_SECONDS,
   PERFORMANCE_RESAMPLE_HZ,
   PERFORMANCE_START_WINDOW_MS,
 } from "@/lib/analytics/constants";
@@ -569,6 +578,218 @@ function validateDistribution(value: unknown, context: ValidationContext, path: 
   return valid;
 }
 
+const OPPORTUNITY_CATEGORIES = [
+  "start",
+  "straight_vmg",
+  "maneuver",
+  "distance",
+  "mark_recovery",
+  "symmetry",
+  "consistency",
+] as const;
+
+function validateOpportunity(
+  value: unknown,
+  context: ValidationContext,
+  path: string,
+  outerEntryId: unknown,
+  kind: "primary" | "observation",
+  expectedPriority: number,
+  legCount: number,
+): boolean {
+  const row = recordAt(value, context, path);
+  if (!row) return false;
+  let valid = stringAt(row.code, context, `${path}.code`, {
+    nonEmpty: true,
+    max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+  });
+  const scope = recordAt(row.scope, context, `${path}.scope`);
+  if (!scope) valid = false;
+  else {
+    valid = stringAt(scope.entryId, context, `${path}.scope.entryId`, {
+      nonEmpty: true,
+      max: PERFORMANCE_MAX_ENTRY_ID_CHARS,
+    }) && valid;
+    if (scope.entryId !== outerEntryId) {
+      valid = issue(context, `${path}.scope.entryId`, "must match the containing entry") && valid;
+    }
+    if (scope.legIndex !== undefined) {
+      valid = finiteAt(scope.legIndex, context, `${path}.scope.legIndex`, {
+        integer: true,
+        min: 0,
+        max: Math.max(0, legCount - 1),
+      }) && valid;
+    }
+  }
+  valid = literalAt(row.category, OPPORTUNITY_CATEGORIES, context, `${path}.category`) && valid;
+  valid = finiteAt(row.priority, context, `${path}.priority`, { integer: true, min: 1 }) && valid;
+  if (row.priority !== expectedPriority) {
+    valid = issue(context, `${path}.priority`, `expected bounded rank ${expectedPriority}`) && valid;
+  }
+  valid = stringAt(row.headline, context, `${path}.headline`, {
+    nonEmpty: true,
+    max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+  }) && valid;
+  valid = finiteAt(row.estimatedSeconds, context, `${path}.estimatedSeconds`, {
+    nullable: true,
+    min: 0,
+  }) && valid;
+  if (kind === "primary" &&
+      (typeof row.estimatedSeconds !== "number" || row.estimatedSeconds < PERFORMANCE_OPPORTUNITY_MIN_SECONDS)) {
+    valid = issue(context, `${path}.estimatedSeconds`, "primary estimate must meet materiality") && valid;
+  }
+  if (kind === "observation" && row.estimatedSeconds !== null) {
+    valid = issue(context, `${path}.estimatedSeconds`, "observation must not estimate seconds") && valid;
+  }
+  const benchmark = recordAt(row.benchmark, context, `${path}.benchmark`);
+  if (!benchmark) valid = false;
+  else {
+    valid = literalAt(benchmark.kind, ["fleet_best", "fleet_median", "own_baseline"], context, `${path}.benchmark.kind`) && valid;
+    valid = finiteAt(benchmark.value, context, `${path}.benchmark.value`) && valid;
+    valid = stringAt(benchmark.unit, context, `${path}.benchmark.unit`, {
+      nonEmpty: true,
+      max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+    }) && valid;
+  }
+  const evidence = arrayAt(row.evidence, context, `${path}.evidence`, PERFORMANCE_OPPORTUNITY_MAX_EVIDENCE);
+  if (!evidence || evidence.length === 0) {
+    valid = issue(context, `${path}.evidence`, "requires at least one numeric fact") && valid;
+  } else evidence.forEach((value, index) => {
+    const evidencePath = `${path}.evidence[${index}]`;
+    const fact = recordAt(value, context, evidencePath);
+    if (!fact) { valid = false; return; }
+    valid = stringAt(fact.label, context, `${evidencePath}.label`, {
+      nonEmpty: true,
+      max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+    }) && valid;
+    valid = finiteAt(fact.value, context, `${evidencePath}.value`) && valid;
+    valid = stringAt(fact.unit, context, `${evidencePath}.unit`, {
+      nonEmpty: true,
+      max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+    }) && valid;
+  });
+  valid = validateStringArray(
+    row.assumptions,
+    context,
+    `${path}.assumptions`,
+    PERFORMANCE_OPPORTUNITY_MAX_ASSUMPTIONS,
+    PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+  ) && valid;
+  valid = validateStringArray(
+    row.caveats,
+    context,
+    `${path}.caveats`,
+    PERFORMANCE_OPPORTUNITY_MAX_CAVEATS,
+    PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+  ) && valid;
+  return valid;
+}
+
+function validateOpportunities(
+  value: unknown,
+  context: ValidationContext,
+  legCount: number,
+): unknown[] | null {
+  const row = recordAt(value, context, "performance.opportunities");
+  if (!row) return null;
+  let valid = row.v === 1 || issue(context, "performance.opportunities.v", "expected version 1");
+  valid = (row.contract === "performance-opportunities-v1" ||
+    issue(context, "performance.opportunities.contract", "unexpected opportunity contract")) && valid;
+  const entries = arrayAt(
+    row.entries,
+    context,
+    "performance.opportunities.entries",
+    PERFORMANCE_MAX_ENTRY_COUNT,
+  );
+  if (!entries) valid = false;
+  entries?.forEach((entryValue, entryIndex) => {
+    const path = `performance.opportunities.entries[${entryIndex}]`;
+    const entry = recordAt(entryValue, context, path);
+    if (!entry) { valid = false; return; }
+    valid = stringAt(entry.entryId, context, `${path}.entryId`, {
+      nonEmpty: true,
+      max: PERFORMANCE_MAX_ENTRY_ID_CHARS,
+    }) && valid;
+    const primary = arrayAt(entry.primary, context, `${path}.primary`, PERFORMANCE_OPPORTUNITY_MAX_PRIMARY);
+    const observations = arrayAt(
+      entry.observations,
+      context,
+      `${path}.observations`,
+      PERFORMANCE_OPPORTUNITY_MAX_OBSERVATIONS,
+    );
+    const suppressed = arrayAt(
+      entry.suppressed,
+      context,
+      `${path}.suppressed`,
+      PERFORMANCE_OPPORTUNITY_MAX_SUPPRESSED,
+    );
+    if (!primary || !observations || !suppressed) valid = false;
+    const codes = new Set<string>();
+    primary?.forEach((opportunity, index) => {
+      valid = validateOpportunity(
+        opportunity,
+        context,
+        `${path}.primary[${index}]`,
+        entry.entryId,
+        "primary",
+        index + 1,
+        legCount,
+      ) && valid;
+      const code = isRecord(opportunity) ? opportunity.code : null;
+      if (typeof code === "string") {
+        if (codes.has(code)) valid = issue(context, `${path}.primary[${index}].code`, "duplicate code") && valid;
+        codes.add(code);
+      }
+    });
+    observations?.forEach((opportunity, index) => {
+      valid = validateOpportunity(
+        opportunity,
+        context,
+        `${path}.observations[${index}]`,
+        entry.entryId,
+        "observation",
+        index + 1,
+        legCount,
+      ) && valid;
+      const code = isRecord(opportunity) ? opportunity.code : null;
+      if (typeof code === "string") {
+        if (codes.has(code)) valid = issue(context, `${path}.observations[${index}].code`, "duplicate code") && valid;
+        codes.add(code);
+      }
+    });
+    suppressed?.forEach((suppressedValue, index) => {
+      const suppressedPath = `${path}.suppressed[${index}]`;
+      const suppression = recordAt(suppressedValue, context, suppressedPath);
+      if (!suppression) { valid = false; return; }
+      valid = literalAt(suppression.category, OPPORTUNITY_CATEGORIES, context, `${suppressedPath}.category`) && valid;
+      if (suppression.legIndex !== undefined) {
+        valid = finiteAt(suppression.legIndex, context, `${suppressedPath}.legIndex`, {
+          integer: true,
+          min: 0,
+          max: Math.max(0, legCount - 1),
+        }) && valid;
+      }
+      valid = stringAt(suppression.reason, context, `${suppressedPath}.reason`, {
+        nonEmpty: true,
+        max: PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
+      }) && valid;
+    });
+  });
+  const constants = recordAt(row.constants, context, "performance.opportunities.constants");
+  if (!constants) valid = false;
+  else {
+    valid = (constants.maxPrimaryPerEntry === PERFORMANCE_OPPORTUNITY_MAX_PRIMARY ||
+      issue(context, "performance.opportunities.constants.maxPrimaryPerEntry", "unexpected bound")) && valid;
+    valid = (constants.maxObservationsPerEntry === PERFORMANCE_OPPORTUNITY_MAX_OBSERVATIONS ||
+      issue(context, "performance.opportunities.constants.maxObservationsPerEntry", "unexpected bound")) && valid;
+    valid = (constants.minimumMaterialSeconds === PERFORMANCE_OPPORTUNITY_MIN_SECONDS ||
+      issue(context, "performance.opportunities.constants.minimumMaterialSeconds", "unexpected threshold")) && valid;
+    valid = (constants.markRecoveryWindowSeconds === PERFORMANCE_MARK_RECOVERY_WINDOW_SECONDS ||
+      issue(context, "performance.opportunities.constants.markRecoveryWindowSeconds", "unexpected window")) && valid;
+  }
+  return entries;
+}
+
 function validatePerformance(value: unknown, context: ValidationContext): value is PerformanceAnalysisV1 {
   const row = recordAt(value, context, "performance");
   if (!row) return false;
@@ -691,6 +912,9 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
       valid = issue(context, `performance.distributions[${index}].legIndex`, "does not reference an existing leg") && valid;
     }
   });
+  const opportunityEntries = row.opportunities === undefined
+    ? null
+    : validateOpportunities(row.opportunities, context, legs?.length ?? 0);
   if (context.totalBins > PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS) {
     valid = issue(context, "performance.distributions", `exceeds total bin cap ${PERFORMANCE_MAX_TOTAL_DISTRIBUTION_BINS}`) && valid;
   }
@@ -755,6 +979,14 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
       valid = issue(context, `performance.distributions[${index}].entryId`, "entry ID is not in the canonical fleet") && valid;
     }
   });
+  if (row.opportunities !== undefined) {
+    valid = validateSameEntrySet(
+      entryIdsAt(opportunityEntries, context, "performance.opportunities.entries"),
+      canonicalEntryIds,
+      context,
+      "performance.opportunities.entries",
+    ) && valid;
+  }
   warnings?.forEach((warningValue, index) => {
     const warning = isRecord(warningValue) ? warningValue : null;
     if (typeof warning?.entryId === "string" && !canonicalEntryIds.includes(warning.entryId)) {

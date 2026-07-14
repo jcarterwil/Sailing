@@ -291,6 +291,63 @@ export interface PerformanceCalculationProvenanceV1 {
   };
 }
 
+export type PerformanceOpportunityCategory =
+  | "start"
+  | "straight_vmg"
+  | "maneuver"
+  | "distance"
+  | "mark_recovery"
+  | "symmetry"
+  | "consistency";
+
+export interface PerformanceOpportunityEvidenceV1 {
+  label: string;
+  value: number;
+  unit: string;
+}
+
+export interface PerformanceOpportunityV1 {
+  code: string;
+  scope: { entryId: string; legIndex?: number };
+  category: PerformanceOpportunityCategory;
+  priority: number;
+  headline: string;
+  estimatedSeconds: number | null;
+  benchmark: {
+    kind: "fleet_best" | "fleet_median" | "own_baseline";
+    value: number;
+    unit: string;
+  };
+  evidence: PerformanceOpportunityEvidenceV1[];
+  assumptions: string[];
+  caveats: string[];
+}
+
+export interface PerformanceOpportunitySuppressionV1 {
+  category: PerformanceOpportunityCategory;
+  legIndex?: number;
+  reason: string;
+}
+
+export interface PerformanceEntryOpportunitiesV1 {
+  entryId: string;
+  primary: PerformanceOpportunityV1[];
+  observations: PerformanceOpportunityV1[];
+  suppressed: PerformanceOpportunitySuppressionV1[];
+}
+
+export interface PerformanceOpportunitiesV1 {
+  v: 1;
+  contract: "performance-opportunities-v1";
+  entries: PerformanceEntryOpportunitiesV1[];
+  constants: {
+    maxPrimaryPerEntry: 3;
+    maxObservationsPerEntry: 3;
+    minimumMaterialSeconds: 2;
+    markRecoveryWindowSeconds: 20;
+  };
+}
+
 /** Compact, deterministic, JSON-safe Performance Overview payload. */
 export interface PerformanceAnalysisV1 {
   v: 1;
@@ -304,6 +361,8 @@ export interface PerformanceAnalysisV1 {
   legs: PerformanceLegAnalysisV1[];
   bestIntervals: PerformanceEntryBestIntervalsV1[];
   distributions: PerformanceDistributionV1[];
+  /** Optional so persisted Performance Overview V1 rows from before #89 remain readable. */
+  opportunities?: PerformanceOpportunitiesV1;
   warnings: PerformanceWarningV1[];
   provenance: PerformanceCalculationProvenanceV1;
 }

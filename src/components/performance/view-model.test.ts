@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
+import { analyzePerformanceOpportunities } from "@/lib/analytics/performance/opportunities";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
   buildPerformanceOverviewModel,
@@ -31,6 +32,10 @@ function analysis(): RaceAnalysis {
       note: null,
     },
   };
+  performance.opportunities = analyzePerformanceOpportunities({
+    entryIds: performance.provenance.entryIds,
+    performance,
+  });
   return {
     v: 1,
     race: {
@@ -140,6 +145,7 @@ describe("performance overview view model", () => {
     expect(model.best[0]).toMatchObject({ entryId: "alpha", targetDistanceM: 500 });
     expect(model.best[0].coverageWarning).toContain("91%");
     expect(model.best[1].interval).toBeNull();
+    expect(model.opportunities).toEqual(performance.opportunities?.entries);
   });
 
   it("keeps missing values distinct from zero and sorts nulls last", () => {

@@ -242,7 +242,23 @@ Distributions consume canonical 1 Hz progress-VMG samples. Partitions are race/l
 
 The UI may visually interpolate the persisted bins but must not replace their values with an unspecified KDE.
 
-## 10. Timezone and presentation
+## 10. Deterministic opportunity sub-contract
+
+Newly analyzed V1 rows may include `opportunities` with contract `performance-opportunities-v1`. The field is optional so older valid V1 rows remain readable. Each canonical entry has at most three ranked primary cards, three non-seconds observations, and sixteen explicit suppression facts. Primary cards meet a two-second materiality threshold. Estimates are non-additive: consumers must never display or infer a total time lost.
+
+The detectors use only persisted Performance Overview facts plus bounded 20-second raw-track windows assembled before persistence:
+
+- start: legal line-arrival difference; DMG30 is evidence and is not added;
+- straight VMG: `legDistance × (1 / ownVMG − 1 / fleetBestVMG)`, after converting knots to metres per second;
+- maneuver: maneuver-window progress against the same boat's straight-line VMG baseline;
+- distance: positive excess distance converted at the best same-leg average SOG;
+- mark recovery: adequate, gap-free pre/post passage speed windows, explicitly labeled as recovery rather than cause;
+- symmetry: comparable port/starboard distribution medians, without seconds unless equivalent exposure exists;
+- consistency: own straight-line IQR, without assuming lower variance is faster.
+
+Every card carries numeric evidence, an explicit benchmark, assumptions, and caveats. Ties, negative/zero estimates, insufficient samples, source gaps, and candidates outside the bounded top three are suppressed with a persisted reason. Coach receives these same facts and may explain them but may not recalculate, sum, or causally relabel them.
+
+## 11. Timezone and presentation
 
 All analytics remain UTC. Local timestamps use `timezone.iana`, never the server/browser default. Metadata resolution order is:
 
@@ -254,7 +270,7 @@ Validation uses `Intl.DateTimeFormat` at the race-metadata boundary. Authenticat
 
 Rounding defaults: elapsed/delta/time-to-line to nearest displayed second; speeds/VMG to 0.01 kt; distance to nearest metre below 10 km and appropriate nautical-mile precision above; angles to 0.1°. These defaults never feed back into calculations.
 
-## 11. Parser states and compatibility
+## 12. Parser states and compatibility
 
 `parseStoredPerformance(storedAnalysis)` returns exactly one state:
 
@@ -265,7 +281,7 @@ Rounding defaults: elapsed/delta/time-to-line to nearest displayed second; speed
 
 Parsing never throws into page rendering. Consumers do not cast JSONB directly. A legacy analysis may continue to power Replay/Coach behavior but Performance Overview shows `upgrade-required` until organizer reanalysis.
 
-## 12. Synthetic fixture and tolerances
+## 13. Synthetic fixture and tolerances
 
 `src/lib/analytics/performance/__fixtures__/six-boat-five-leg.ts` generates six sanitized boats, mixed 1 Hz/2 Hz logs, a finite start line, U/D/U/D/U legs, distinct per-entry passage/finish timers, tacks/gybes, an OCS/recross, a >10 s source gap, and one boat with missing heel/trim. No `Examples/` or private race correspondence is copied.
 
@@ -280,7 +296,7 @@ Parsing never throws into page rendering. Consumers do not cast JSONB directly. 
 
 `valid-performance-v1.ts` is a complete bounded contract fixture for parser and downstream round-trip tests. Metric engine PRs replace representative contract values with computed goldens while preserving the locked shape/semantics.
 
-## 13. Explicit V1 exclusions
+## 14. Explicit V1 exclusions
 
 V1 does not include:
 

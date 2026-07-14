@@ -116,6 +116,7 @@ export interface PerformanceOverviewModel {
   best: PerformanceBestCard[];
   metrics: PerformanceMetricRow[];
   distributions: PerformanceDistributionSeries[];
+  opportunities: NonNullable<PerformanceAnalysisV1["opportunities"]>["entries"];
   start: PerformanceAnalysisV1["start"];
   course: PerformanceAnalysisV1["course"];
   legs: PerformanceAnalysisV1["legs"];
@@ -271,6 +272,7 @@ export function buildPerformanceOverviewModel(input: {
     best,
     metrics,
     distributions,
+    opportunities: performance.opportunities?.entries ?? [],
     start: performance.start,
     course: performance.course,
     legs: performance.legs,
