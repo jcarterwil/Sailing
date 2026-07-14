@@ -1,43 +1,39 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Group, Object3D } from "three";
+import type {
+  Group,
+  Material,
+  Object3D,
+  Texture,
+} from "three";
 
-import {
-  createHelmDeck,
-  createProceduralBoat,
-} from "@/components/replay/boats-3d-primitives";
+import { createHelmDeck } from "@/components/replay/boats-3d-primitives";
 import {
   advancePovAttitude,
   resetPovAttitude,
   type PovAttitude,
 } from "@/components/replay/pov-attitude";
-import { usePlaybackStore } from "@/components/replay/playback-store";
-import { sampleAt, type TrackSample } from "@/components/replay/track-index";
-import type { LoadedTrack } from "@/components/replay/track-loader";
+import type { ReplayRenderBoat } from "@/components/replay/replay-render-frame";
+import type { ReplayRenderFrameSource } from "@/components/replay/replay-render-source";
+import {
+  boomRotationForSide,
+  createSailboatVisual,
+  SAILBOAT_RIG_NAME,
+} from "@/components/replay/sailboat-visual";
 
 const DEG_TO_RAD = Math.PI / 180;
-const EARTH_METERS_PER_DEGREE = 111_320;
-const SEEK_SNAP_MS = 15_000;
 
-function finiteHeading(sample: TrackSample, previous: number): number {
-  if (Number.isFinite(sample.hdgDeg)) return sample.hdgDeg;
-  if (Number.isFinite(sample.cogDeg)) return sample.cogDeg;
-  return previous;
+interface RivalModel {
+  boat: Group;
+  rig: Group | null;
 }
 
-function localOffsetMeters(
-  origin: TrackSample,
-  target: TrackSample,
-): { east: number; north: number } {
-  const latitudeScale = Math.cos(origin.lat * DEG_TO_RAD);
-  return {
-    east: (target.lon - origin.lon) * EARTH_METERS_PER_DEGREE * latitudeScale,
-    north: (target.lat - origin.lat) * EARTH_METERS_PER_DEGREE,
-  };
-}
-
-export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
+export function HelmPov({
+  source,
+}: {
+  source: ReplayRenderFrameSource;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const metricRef = useRef<HTMLSpanElement>(null);
@@ -70,7 +66,9 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-        scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x314b55, 2.2));
+        scene.add(
+          new THREE.HemisphereLight(0xeaf7ff, 0x314b55, 2.2),
+        );
         const sun = new THREE.DirectionalLight(0xfff4da, 2.4);
         sun.position.set(-100, 180, 80);
         scene.add(sun);
@@ -95,18 +93,26 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
         const deck = createHelmDeck(THREE);
         cameraRig.add(deck);
 
-        const rivals = new Map<string, Group>();
-        for (const track of tracks) {
-          const boat = createProceduralBoat(THREE, track.color);
-          rivals.set(track.entryId, boat);
+        const rivals = new Map<string, RivalModel>();
+        for (const entry of source.frameRef.current.boats) {
+          const boat = createSailboatVisual(THREE, {
+            hullColor: entry.color,
+            identity: entry.boatName,
+            quality: "high",
+          });
+          const rig = boat.getObjectByName(SAILBOAT_RIG_NAME);
+          rivals.set(entry.entryId, {
+            boat,
+            rig: rig instanceof THREE.Group ? rig : null,
+          });
           scene.add(boat);
         }
 
         let attitude: PovAttitude | null = null;
         let lastWallMs = performance.now();
-        let lastReplayMs = Number.NaN;
         let averageFrameMs = 0;
         let lastMetricMs = 0;
+        let visible = document.visibilityState !== "hidden";
 
         const resize = () => {
           const width = Math.max(1, root.clientWidth);
@@ -116,94 +122,155 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
           camera.updateProjectionMatrix();
         };
 
-        const render = (state = usePlaybackStore.getState()) => {
+        const render = (
+          frame = source.frameRef.current,
+          force = false,
+        ) => {
+          if (!visible && !force) return;
           const startedAt = performance.now();
           const selected =
-            tracks.find((track) => track.entryId === state.selectedEntryId) ?? tracks[0];
+            frame.boats.find(
+              (boat) => boat.selected && boat.inTrack,
+            ) ??
+            frame.boats.find((boat) => boat.inTrack) ??
+            frame.boats[0];
           if (!selected) return;
 
-          const selectedSample = sampleAt(selected, state.timeMs);
           const now = performance.now();
           const target = {
-            headingDeg: finiteHeading(selectedSample, attitude?.heading.value ?? 0),
-            heelDeg: selectedSample.heelDeg,
-            trimDeg: selectedSample.trimDeg,
+            headingDeg: selected.pose.headingDeg,
+            heelDeg: selected.pose.heelDeg,
+            trimDeg: selected.pose.trimDeg,
           };
-          const largeSeek =
-            Number.isFinite(lastReplayMs) && Math.abs(state.timeMs - lastReplayMs) > SEEK_SNAP_MS;
 
-          // With no rAF loop, paused scrubs fire only sporadic renders with a
-          // tiny wall-clock dt, so the spring can't converge and the helm view
-          // goes stale. Snap attitude to the target whenever paused (as well as
-          // on the first frame and on large seeks).
-          if (!attitude || largeSeek || !state.playing) {
+          if (
+            !attitude ||
+            frame.updateKind !== "continuous" ||
+            !frame.playing
+          ) {
             attitude = resetPovAttitude(target);
           } else {
             attitude = advancePovAttitude(
               attitude,
               target,
-              Math.min(0.1, Math.max(0, (now - lastWallMs) / 1_000)),
+              Math.min(
+                0.1,
+                Math.max(0, (now - lastWallMs) / 1_000),
+              ),
             );
           }
           lastWallMs = now;
-          lastReplayMs = state.timeMs;
 
-          cameraRig.rotation.y = -attitude.heading.value * DEG_TO_RAD;
-          cameraRig.rotation.x = attitude.trim.value * DEG_TO_RAD;
-          cameraRig.rotation.z = -attitude.heel.value * DEG_TO_RAD;
+          cameraRig.rotation.y =
+            -attitude.heading.value * DEG_TO_RAD;
+          cameraRig.rotation.x =
+            attitude.trim.value * DEG_TO_RAD;
+          cameraRig.rotation.z =
+            -attitude.heel.value * DEG_TO_RAD;
 
-          for (const track of tracks) {
-            const boat = rivals.get(track.entryId);
-            if (!boat) continue;
+          for (const entry of frame.boats) {
+            const model = rivals.get(entry.entryId);
+            if (!model) continue;
+            model.boat.visible =
+              entry.entryId !== selected.entryId && entry.inTrack;
+            if (!model.boat.visible) continue;
 
-            const sample = sampleAt(track, state.timeMs);
-            // Hide the helm boat itself, and hide any rival outside its own track
-            // interval so no phantom sits at a clamped first/last fix.
-            boat.visible = track.entryId !== selected.entryId && sample.inTrack;
-            if (!boat.visible) continue;
-
-            const offset = localOffsetMeters(selectedSample, sample);
-            boat.position.set(offset.east, 0.35, -offset.north);
-            boat.rotation.y = -finiteHeading(sample, 0) * DEG_TO_RAD;
-            boat.rotation.x = (Number.isFinite(sample.trimDeg) ? sample.trimDeg : 0) * DEG_TO_RAD;
-            boat.rotation.z = -(Number.isFinite(sample.heelDeg) ? sample.heelDeg : 0) * DEG_TO_RAD;
+            const east =
+              entry.position.eastM - selected.position.eastM;
+            const north =
+              entry.position.northM - selected.position.northM;
+            model.boat.position.set(
+              east,
+              0.35 + entry.presentation.heaveM.value,
+              -north,
+            );
+            model.boat.rotation.y =
+              -entry.pose.headingDeg * DEG_TO_RAD;
+            model.boat.rotation.x =
+              entry.pose.trimDeg * DEG_TO_RAD;
+            model.boat.rotation.z =
+              -entry.pose.heelDeg * DEG_TO_RAD;
+            if (model.rig) {
+              model.rig.rotation.y = boomRotationForSide(
+                entry.pose.boomSide,
+              );
+            }
           }
 
           renderer.render(scene, camera);
 
           const frameMs = performance.now() - startedAt;
-          averageFrameMs = averageFrameMs === 0 ? frameMs : averageFrameMs * 0.9 + frameMs * 0.1;
+          averageFrameMs =
+            averageFrameMs === 0
+              ? frameMs
+              : averageFrameMs * 0.9 + frameMs * 0.1;
           if (now - lastMetricMs > 500) {
             root.dataset.frameMs = averageFrameMs.toFixed(1);
-            if (metricRef.current) metricRef.current.textContent = `${averageFrameMs.toFixed(1)} ms`;
+            if (metricRef.current) {
+              metricRef.current.textContent =
+                `${averageFrameMs.toFixed(1)} ms`;
+            }
             lastMetricMs = now;
           }
         };
 
+        const unsubscribe = source.subscribe((frame) => {
+          render(frame);
+        });
         resize();
-        render();
-        const unsubscribe = usePlaybackStore.subscribe(render);
+        render(source.frameRef.current, true);
+
         const resizeObserver = new ResizeObserver(() => {
           resize();
-          render();
+          render(source.frameRef.current, true);
         });
         resizeObserver.observe(root);
+
+        const onVisibilityChange = () => {
+          visible = document.visibilityState !== "hidden";
+          if (visible) render(source.frameRef.current, true);
+        };
+        document.addEventListener(
+          "visibilitychange",
+          onVisibilityChange,
+        );
 
         disposeScene = () => {
           unsubscribe();
           resizeObserver.disconnect();
+          document.removeEventListener(
+            "visibilitychange",
+            onVisibilityChange,
+          );
+          const textures = new Set<Texture>();
+          const materials = new Set<Material>();
           scene.traverse((object: Object3D) => {
             if (!(object instanceof THREE.Mesh)) return;
             object.geometry.dispose();
-            const materials = Array.isArray(object.material) ? object.material : [object.material];
-            for (const material of materials) material.dispose();
+            const objectMaterials = Array.isArray(object.material)
+              ? object.material
+              : [object.material];
+            for (const material of objectMaterials) {
+              materials.add(material);
+              for (const value of Object.values(material)) {
+                if (value instanceof THREE.Texture) {
+                  textures.add(value);
+                }
+              }
+            }
           });
+          for (const texture of textures) texture.dispose();
+          for (const material of materials) material.dispose();
           renderer.dispose();
         };
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "Could not start the POV renderer.");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not start the POV renderer.",
+          );
         }
       });
 
@@ -211,11 +278,19 @@ export function HelmPov({ tracks }: { tracks: LoadedTrack[] }) {
       cancelled = true;
       disposeScene();
     };
-  }, [tracks]);
+  }, [source]);
 
   return (
-    <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-sky-200" data-pov-spike="1">
-      <canvas ref={canvasRef} className="block size-full" aria-label="Experimental helm point of view" />
+    <div
+      ref={rootRef}
+      className="absolute inset-0 overflow-hidden bg-sky-200"
+      data-pov-spike="1"
+    >
+      <canvas
+        ref={canvasRef}
+        className="block size-full"
+        aria-label="Experimental helm point of view"
+      />
       <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
         Helm POV spike · <span ref={metricRef}>measuring…</span>
       </div>
