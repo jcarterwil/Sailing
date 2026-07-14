@@ -71,6 +71,8 @@ $$
 
 Excluded, abandoned, and not-yet-completed races have `totalPointsHundredths: null`, an explicit reason, and no effect on totals or discards.
 
+A valid race score also emits its entrant/starter counts and `validation: { status: "valid", issueCount: 0 }`. Invalid source data returns the top-level typed invalid outcome without partial race scores or standings.
+
 ## 4. Discards
 
 The default schedule has no discards. An organizer may supply monotonic thresholds beginning with `{ minCompletedRaces: 0, discards: 0 }`. At a given series state, the last threshold whose completed-race count has been reached is active.

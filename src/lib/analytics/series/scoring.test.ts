@@ -86,6 +86,17 @@ function contract(
   };
 }
 
+function seededShuffle<T>(values: readonly T[], seed: number): T[] {
+  const shuffled = [...values];
+  let state = seed | 0;
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) | 0;
+    const selected = (state >>> 0) % (index + 1);
+    [shuffled[index], shuffled[selected]] = [shuffled[selected], shuffled[index]];
+  }
+  return shuffled;
+}
+
 describe("series scoring fingerprint", () => {
   it("matches the SHA-256 standard vector and canonicalizes object keys", () => {
     expect(sha256Hex("abc")).toBe(
@@ -124,7 +135,12 @@ describe("scoreSeriesLowPointV1", () => {
     ]);
 
     const raceOne = result.races.find((candidate) => candidate.raceId === "race-1")!;
-    expect(raceOne).toMatchObject({ entrants: 7, starters: 6, completedForSeries: true });
+    expect(raceOne).toMatchObject({
+      entrants: 7,
+      starters: 6,
+      completedForSeries: true,
+      validation: { status: "valid", issueCount: 0 },
+    });
     expect(raceOne.rows.find((candidate) => candidate.boatId === "bravo")).toMatchObject({
       baseRule: { kind: "finish-place-average", occupiedPlaces: [2, 3] },
       basePointsHundredths: 250,
@@ -142,6 +158,15 @@ describe("scoreSeriesLowPointV1", () => {
       seriesEligible: false,
       totalPointsHundredths: 400,
     });
+    expect([...new Set(result.races.flatMap((candidate) => candidate.rows)
+      .filter((candidate) => candidate.status !== "fin")
+      .map((candidate) => candidate.status))].sort()).toEqual([
+      "dnf",
+      "dns",
+      "dsq",
+      "ocs",
+      "ret",
+    ]);
   });
 
   it("activates zero, one, and two discards only at configured thresholds", () => {
@@ -170,6 +195,23 @@ describe("scoreSeriesLowPointV1", () => {
     ]);
   });
 
+  it("never discards a completed race marked discard-ineligible", () => {
+    const input = cloneGolden();
+    input.races = input.races.slice(0, 7);
+    input.races[0].discardEligible = false;
+    const result = valid(input);
+    const foxtrot = result.standings.find((standing) => standing.boatId === "foxtrot")!;
+    expect(foxtrot.raceCells.find((cell) => cell.raceId === "race-1")).toMatchObject({
+      totalPointsHundredths: 800,
+      discardEligible: false,
+      discarded: false,
+    });
+    expect(foxtrot.raceCells.filter((cell) => cell.discarded).map((cell) => cell.raceId)).toEqual([
+      "race-3",
+      "race-4",
+    ]);
+  });
+
   it("does not count guests in status populations when the explicit option is false", () => {
     const input = cloneGolden();
     input.config.countGuestsInPopulation = false;
@@ -180,6 +222,23 @@ describe("scoreSeriesLowPointV1", () => {
     expect(raceOne.rows.find((candidate) => candidate.boatId === "echo")?.basePointsHundredths).toBe(600);
     expect(raceOne.rows.find((candidate) => candidate.boatId === "foxtrot")?.basePointsHundredths).toBe(700);
     expect(raceOne.rows.find((candidate) => candidate.boatId === "guest-one")?.seriesEligible).toBe(false);
+  });
+
+  it("uses configurable non-finish population bases and exact add-points values", () => {
+    const input = cloneGolden();
+    input.config.statusScores.ocs = { population: "entrants", addPoints: 2.25 };
+    input.races = input.races.slice(0, 4);
+    const result = valid(input);
+    expect(result.races[3].rows.find((candidate) => candidate.boatId === "foxtrot")).toMatchObject({
+      baseRule: {
+        kind: "status-population",
+        status: "ocs",
+        population: "entrants",
+        populationCount: 7,
+        addPointsHundredths: 225,
+      },
+      basePointsHundredths: 925,
+    });
   });
 
   it("marks abandoned and excluded races unscored and never applies their penalties", () => {
@@ -197,13 +256,26 @@ describe("scoreSeriesLowPointV1", () => {
     });
   });
 
-  it("is byte-identical, including its fingerprint, when unordered inputs are shuffled", () => {
+  it("is byte-identical, including its fingerprint, across seeded input permutations", () => {
     const forward = cloneGolden();
-    const shuffled = cloneGolden();
-    shuffled.competitors.reverse();
-    shuffled.races.reverse();
-    for (const candidate of shuffled.races) candidate.results.reverse();
-    expect(JSON.stringify(valid(shuffled))).toBe(JSON.stringify(valid(forward)));
+    const expected = JSON.stringify(valid(forward));
+    for (let seed = 1; seed <= 12; seed++) {
+      const shuffled = cloneGolden();
+      shuffled.competitors = seededShuffle(shuffled.competitors, seed);
+      shuffled.races = seededShuffle(shuffled.races, seed * 17);
+      for (const candidate of shuffled.races) {
+        candidate.results = seededShuffle(candidate.results, seed + candidate.sequence * 31);
+      }
+      expect(JSON.stringify(valid(shuffled))).toBe(expected);
+    }
+  });
+
+  it("round-trips the golden fixture and result through JSON byte-identically", () => {
+    const result = valid(cloneGolden());
+    const roundTrippedInput = JSON.parse(JSON.stringify(cloneGolden())) as unknown;
+    const roundTrippedResult = valid(roundTrippedInput);
+    expect(JSON.stringify(roundTrippedResult)).toBe(JSON.stringify(result));
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 
   it("changes the fingerprint and only the targeted score when an official correction changes", () => {

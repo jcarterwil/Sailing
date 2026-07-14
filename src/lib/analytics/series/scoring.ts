@@ -802,6 +802,7 @@ function scoreRace(race: SeriesRaceInputV1, config: LowPointConfigV1): SeriesRac
     completedForSeries: notScoredReason === null,
     entrants,
     starters,
+    validation: { status: "valid", issueCount: 0 },
     source: { ...race.source },
     rows,
   };

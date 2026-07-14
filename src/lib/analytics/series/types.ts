@@ -133,6 +133,10 @@ export interface SeriesRaceScoreV1 {
   completedForSeries: boolean;
   entrants: number;
   starters: number;
+  validation: {
+    status: "valid";
+    issueCount: 0;
+  };
   source: SeriesRaceSourceV1;
   rows: SeriesScoredResultRowV1[];
 }
