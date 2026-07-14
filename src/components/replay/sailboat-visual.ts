@@ -359,6 +359,7 @@ export function createSailboatVisual(
     new THREE.RingGeometry(1.65, 2.1, quality === "high" ? 40 : 24),
     new THREE.MeshBasicMaterial({
       color: 0xffd166,
+      depthTest: false,
       depthWrite: false,
       opacity: 0.72,
       side: THREE.DoubleSide,
@@ -367,7 +368,7 @@ export function createSailboatVisual(
   );
   halo.name = SAILBOAT_SELECTION_NAME;
   halo.rotation.x = -Math.PI / 2;
-  halo.position.y = -0.72;
+  halo.position.y = -0.1;
   halo.renderOrder = 4;
   halo.visible = false;
   group.add(halo);
