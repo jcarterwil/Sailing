@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, Sailboat, Ticket, UserPlus, Users } from "lucide-react";
+import { CalendarDays, Sailboat, Ticket, Trophy, UserPlus, Users } from "lucide-react";
 
 import { CreateRaceDialog } from "@/app/races/create-race-dialog";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
@@ -56,6 +56,12 @@ export default async function DashboardPage() {
           }
           actions={
             <>
+              <Button variant="outline" asChild>
+                <Link href="/series">
+                  <Trophy className="size-4" aria-hidden="true" />
+                  Series
+                </Link>
+              </Button>
               <Button variant="outline" asChild>
                 <Link href="/claim">
                   <Ticket className="size-4" aria-hidden="true" />
