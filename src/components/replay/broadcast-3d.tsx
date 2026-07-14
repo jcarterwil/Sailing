@@ -79,9 +79,6 @@ export function Broadcast3d({
       onFailureRef.current(failure);
     };
 
-    setStatus("loading");
-    setFailureMessage(null);
-
     void Promise.all([
       import("three"),
       import("@/components/replay/broadcast-3d-renderer"),
