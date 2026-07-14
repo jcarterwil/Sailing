@@ -12,6 +12,13 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { CourseReview } from "@/app/races/[raceId]/review/course-review";
+import { ResultsReview } from "@/app/races/[raceId]/review/results-review";
+import {
+  resetReviewDraft,
+  reviewDraftErrors,
+  reviewDraftIsDirty,
+} from "@/app/races/[raceId]/review/review-state";
 import { useReviewPreview } from "@/components/replay/use-review-preview";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
@@ -34,7 +41,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  EMPTY_CORRECTIONS,
   normalizeCorrections,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
@@ -80,7 +86,7 @@ export function ReviewPageClient({
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explaining, setExplaining] = useState(false);
   const [pending, startTransition] = useTransition();
-  const { preview, previewing } = useReviewPreview(
+  const { preview, coursePreview, previewing } = useReviewPreview(
     processed,
     corrections,
     initialAnalysis,
@@ -136,6 +142,35 @@ export function ReviewPageClient({
     (quality?.boats.every((boat) =>
       corrections.excludedWindSensorEntryIds.includes(boat.entryId),
     ) ?? false);
+  const dirty = reviewDraftIsDirty(corrections, initialCorrections);
+  const trackSpan = useMemo(() => {
+    if (!processed?.length) return null;
+    const starts = processed.map((track) => track.t0 + (track.t[0] ?? 0));
+    const ends = processed.map((track) => track.t0 + (track.t.at(-1) ?? 0));
+    const startMs = Math.min(...starts);
+    const endMs = Math.max(...ends);
+    return Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
+      ? { startMs, endMs }
+      : null;
+  }, [processed]);
+  const validationErrors = useMemo(
+    () => reviewDraftErrors(corrections, trackMetas.map((entry) => entry.entryId), trackSpan),
+    [corrections, trackMetas, trackSpan],
+  );
+  const previewPerformance = preview?.performance;
+  const unresolvedResultCount = previewPerformance?.results.filter((result) =>
+    result.status === "unresolved").length ?? 0;
+  const unresolvedPassageCount = previewPerformance?.course.passagesByEntry.reduce(
+    (sum, entry) => sum + entry.passages.filter((passage) => passage.timeMs === null).length,
+    0,
+  ) ?? 0;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   function updateCorrections(patch: Partial<RaceCorrections>) {
     setCorrections((current) => normalizeCorrections({ ...current, ...patch }));
@@ -149,6 +184,7 @@ export function ReviewPageClient({
   }
 
   function apply() {
+    if (validationErrors.length > 0) return;
     setApplyError(null);
     startTransition(async () => {
       try {
@@ -157,9 +193,12 @@ export function ReviewPageClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ corrections }),
         });
-        const body = (await res.json()) as { error?: string };
+        const body = (await res.json()) as { error?: string; details?: string[] };
         if (!res.ok) {
-          setApplyError(body.error ?? "Could not apply corrections.");
+          setApplyError([
+            body.error ?? "Could not apply corrections.",
+            ...(body.details ?? []),
+          ].join(" "));
           return;
         }
         router.refresh();
@@ -202,7 +241,11 @@ export function ReviewPageClient({
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 pb-28">
       <header className="flex flex-wrap items-center gap-3 border-b border-border/70 pb-4">
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/races/${raceId}`}>
+          <Link href={`/races/${raceId}`} onClick={(event) => {
+            if (dirty && !window.confirm("Discard unsaved race-review changes?")) {
+              event.preventDefault();
+            }
+          }}>
             <ArrowLeft className="size-4" aria-hidden="true" />
             Back
           </Link>
@@ -219,7 +262,7 @@ export function ReviewPageClient({
         )}
       </header>
 
-      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded) && (
+      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded || validationErrors.length > 0) && (
         <section className="space-y-3" aria-live="polite">
           {analysisStale && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
@@ -238,6 +281,14 @@ export function ReviewPageClient({
               <span>{applyError ?? explainError ?? loadError}</span>
             </div>
           )}
+          {validationErrors.length > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              <p className="font-medium">Fix these correction errors before applying:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {validationErrors.map((error) => <li key={error}>{error}</li>)}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
@@ -245,7 +296,8 @@ export function ReviewPageClient({
         <Tabs defaultValue="wind" className="min-w-0">
           <TabsList>
             <TabsTrigger value="wind">Wind</TabsTrigger>
-            <TabsTrigger value="start-legs">Start &amp; Legs</TabsTrigger>
+            <TabsTrigger value="start-course">Start &amp; Course</TabsTrigger>
+            <TabsTrigger value="results">Results</TabsTrigger>
           </TabsList>
 
           <TabsContent value="wind" className="space-y-6 pt-4">
@@ -416,7 +468,7 @@ export function ReviewPageClient({
             </section>
           </TabsContent>
 
-          <TabsContent value="start-legs" className="space-y-6 pt-4">
+          <TabsContent value="start-course" className="space-y-6 pt-4">
             <section className="space-y-3 rounded-lg border border-border p-4">
               <h2 className="text-sm font-medium">Race window</h2>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -498,8 +550,20 @@ export function ReviewPageClient({
               </div>
             </section>
 
+            <CourseReview
+              corrections={corrections}
+              detectedCourse={initialAnalysis?.performance?.course ?? null}
+              previewCourse={coursePreview?.course ?? preview?.performance?.course ?? null}
+              detectedStart={initialAnalysis?.race.start ?? null}
+              previewStart={preview?.race.start ?? null}
+              legs={legs}
+              tracks={processed ?? []}
+              twdDeg={preview?.wind.twdDeg ?? null}
+              onChange={setCorrections}
+            />
+
             <section className="space-y-3">
-              <h2 className="text-sm font-medium">Legs</h2>
+              <h2 className="text-sm font-medium">Leg type overrides</h2>
               {legs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No legs inferred yet.</p>
               ) : (
@@ -552,6 +616,17 @@ export function ReviewPageClient({
               )}
             </section>
           </TabsContent>
+
+          <TabsContent value="results" className="pt-4">
+            <ResultsReview
+              corrections={corrections}
+              entries={trackMetas}
+              detectedResults={initialAnalysis?.performance?.results ?? []}
+              previewResults={previewPerformance?.results ?? []}
+              timezone={raceMeta.timezone.iana}
+              onChange={setCorrections}
+            />
+          </TabsContent>
         </Tabs>
 
         <aside className="space-y-4 rounded-lg border border-border p-4 lg:sticky lg:top-4 lg:self-start">
@@ -577,6 +652,18 @@ export function ReviewPageClient({
               <dt className="text-muted-foreground">Legs</dt>
               <dd>{legs.length}</dd>
             </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">Course distance</dt>
+              <dd>{previewPerformance?.course.courseDistanceM != null ? `${previewPerformance.course.courseDistanceM.toFixed(0)} m` : "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">Unresolved passages</dt>
+              <dd>{unresolvedPassageCount}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">Unresolved results</dt>
+              <dd>{unresolvedResultCount}</dd>
+            </div>
           </dl>
         </aside>
       </div>
@@ -587,18 +674,12 @@ export function ReviewPageClient({
             type="button"
             variant="outline"
             disabled={pending}
-            onClick={() =>
-              setCorrections({
-                ...EMPTY_CORRECTIONS,
-                excludedWindSensorEntryIds: [],
-                legRelabels: [],
-              })
-            }
+            onClick={() => setCorrections(resetReviewDraft(initialCorrections))}
           >
             <RotateCcw className="size-4" aria-hidden="true" />
             Reset
           </Button>
-          <Button type="button" disabled={pending || !!loadError} onClick={apply}>
+          <Button type="button" disabled={pending || !!loadError || validationErrors.length > 0 || !dirty} onClick={apply}>
             {pending ? (
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
             ) : (
