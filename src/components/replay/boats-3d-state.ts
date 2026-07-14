@@ -91,13 +91,15 @@ export function boatIconOpacityExpression(
 ): ExpressionSpecification {
   if (!hullsReady) return ["get", "opacity"];
   return [
-    "case",
-    [
-      "all",
-      ["==", ["get", "inTrack"], 1],
-      [">=", ["zoom"], BOATS_3D_MIN_ZOOM],
-    ],
-    0,
+    "step",
+    ["zoom"],
     ["get", "opacity"],
+    BOATS_3D_MIN_ZOOM,
+    [
+      "case",
+      ["==", ["get", "inTrack"], 1],
+      0,
+      ["get", "opacity"],
+    ],
   ];
 }

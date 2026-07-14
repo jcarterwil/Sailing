@@ -1,6 +1,10 @@
+import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
 import { describe, expect, it } from "vitest";
 
-import { BOATS_3D_MIN_ZOOM } from "@/components/replay/boats-3d-state";
+import {
+  BOATS_3D_MIN_ZOOM,
+  boatIconOpacityExpression,
+} from "@/components/replay/boats-3d-state";
 import {
   applyBoatHullIconMode,
   needsReplayMapLayers,
@@ -59,17 +63,43 @@ describe("applyBoatHullIconMode", () => {
         "boats",
         "icon-opacity",
         [
-          "case",
-          [
-            "all",
-            ["==", ["get", "inTrack"], 1],
-            [">=", ["zoom"], BOATS_3D_MIN_ZOOM],
-          ],
-          0,
+          "step",
+          ["zoom"],
           ["get", "opacity"],
+          BOATS_3D_MIN_ZOOM,
+          [
+            "case",
+            ["==", ["get", "inTrack"], 1],
+            0,
+            ["get", "opacity"],
+          ],
         ],
       ],
     ]);
+  });
+
+  it("uses a MapLibre-valid top-level zoom expression", () => {
+    const errors = validateStyleMin({
+      version: 8,
+      sources: {
+        boats: {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        },
+      },
+      layers: [
+        {
+          id: "boats",
+          type: "symbol",
+          source: "boats",
+          paint: {
+            "icon-opacity": boatIconOpacityExpression(true),
+          },
+        },
+      ],
+    });
+
+    expect(errors.map((error) => error.message)).toEqual([]);
   });
 
   it("restores normal arrows and is harmless while setStyle has removed layers", () => {
