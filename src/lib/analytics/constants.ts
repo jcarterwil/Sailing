@@ -74,6 +74,14 @@ export const PERFORMANCE_MAX_PROVENANCE_LABEL_CHARS = 120;
 export const PERFORMANCE_MAX_PAYLOAD_BYTES = 1024 * 1024;
 export const PERFORMANCE_MAX_DISPLAY_POINTS_PER_BOAT = 2_000;
 export const PERFORMANCE_MAX_DISPLAY_POINTS_PER_CHART = 12_000;
+/** Course geometry and passage thresholds (#77). */
+export const PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES = 2;
+export const PERFORMANCE_COURSE_MIN_OUTLIER_RADIUS_M = 150;
+export const PERFORMANCE_COURSE_MAD_MULTIPLIER = 3;
+export const PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M = 250;
+export const PERFORMANCE_COURSE_MARK_SEARCH_RADIUS_M = 300;
+export const PERFORMANCE_PASSAGE_MAX_RADIUS_M = 75;
+export const PERFORMANCE_LINE_ENDPOINT_TOLERANCE_M = 5;
 
 // Live ladder / leaderboard (#21).
 export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped boats

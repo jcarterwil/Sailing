@@ -1,4 +1,4 @@
-import { DEG, norm360 } from "@/lib/analytics/angles";
+import { DEG, norm180, norm360 } from "@/lib/analytics/angles";
 
 const EARTH_RADIUS_M = 6371008.8;
 
@@ -28,8 +28,22 @@ export function toLocalXY(
   lon: number,
 ): { x: number; y: number } {
   return {
-    x: (lon - originLon) * Math.cos(originLat * DEG) * EARTH_RADIUS_M * DEG,
+    x: norm180(lon - originLon) * Math.cos(originLat * DEG) * EARTH_RADIUS_M * DEG,
     y: (lat - originLat) * EARTH_RADIUS_M * DEG,
+  };
+}
+
+/** Inverse of `toLocalXY`, with longitude wrapped across the antimeridian. */
+export function fromLocalXY(
+  originLat: number,
+  originLon: number,
+  x: number,
+  y: number,
+): { lat: number; lon: number } {
+  const longitudeScale = Math.cos(originLat * DEG) * EARTH_RADIUS_M * DEG;
+  return {
+    lat: originLat + y / (EARTH_RADIUS_M * DEG),
+    lon: Math.abs(longitudeScale) < 1e-12 ? norm180(originLon) : norm180(originLon + x / longitudeScale),
   };
 }
 
