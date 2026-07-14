@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
+import { ActAsOwnerButton } from "@/app/admin/users/act-as-button";
 import { UserAccessEditor } from "@/app/admin/users/user-access-editor";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -171,14 +172,22 @@ export default async function AdminUsersPage() {
                     <TableCell>{formatDate(authUser.created_at)}</TableCell>
                     <TableCell>{formatDate(authUser.last_sign_in_at)}</TableCell>
                     <TableCell className="text-right">
-                      <UserAccessEditor
-                        userId={authUser.id}
-                        userLabel={profile?.display_name ?? authUser.email ?? "Unknown user"}
-                        currentUserId={user.id}
-                        initialIsAdmin={profile?.is_admin ?? false}
-                        initialBoatAccess={boatAccess}
-                        boats={accessBoats}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        {!profile?.is_admin && authUser.id !== user.id ? (
+                          <ActAsOwnerButton
+                            userId={authUser.id}
+                            label={profile?.display_name ?? authUser.email ?? "user"}
+                          />
+                        ) : null}
+                        <UserAccessEditor
+                          userId={authUser.id}
+                          userLabel={profile?.display_name ?? authUser.email ?? "Unknown user"}
+                          currentUserId={user.id}
+                          initialIsAdmin={profile?.is_admin ?? false}
+                          initialBoatAccess={boatAccess}
+                          boats={accessBoats}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
