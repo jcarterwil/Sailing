@@ -2,7 +2,7 @@ import { aggregateEntry, aggregateFleet } from "@/lib/analytics/aggregates";
 import {
   correctionsAreActive,
   normalizeCorrections,
-  type RaceCorrections,
+  type StoredRaceCorrections,
 } from "@/lib/analytics/corrections";
 import {
   columnLength,
@@ -24,7 +24,7 @@ import { assessWindQuality } from "@/lib/analytics/wind-quality";
 
 /** Optional analysis knobs. */
 export interface AnalyzeOptions {
-  corrections?: RaceCorrections | null;
+  corrections?: StoredRaceCorrections | null;
 }
 
 function canonicalTrack(track: ProcessedTrack, canonicalTracks: Map<ProcessedTrack, string>): string {

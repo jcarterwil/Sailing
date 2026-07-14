@@ -5,10 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { analyzeRace } from "@/lib/analytics/analyze";
 import {
   clampCorrectionsToTrackSpan,
+  type EntryResultCorrection,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
 import { columnLength, epochAt, finite } from "@/lib/analytics/internal";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
+import {
+  buildCorrectedPerformanceCourse,
+  type PerformanceCourseBuildResult,
+} from "@/lib/analytics/performance/course";
 
 type ReviewPreviewRequest = {
   id: number;
@@ -19,6 +24,8 @@ type ReviewPreviewRequest = {
 type ReviewPreviewResponse = {
   id: number;
   analysis: RaceAnalysis;
+  coursePreview: PerformanceCourseBuildResult;
+  entryResults: EntryResultCorrection[];
 };
 
 const DEBOUNCE_MS = 200;
@@ -46,8 +53,15 @@ export function useReviewPreview(
   tracks: ProcessedTrack[] | null,
   corrections: RaceCorrections,
   baseline: RaceAnalysis | null,
-): { preview: RaceAnalysis | null; previewing: boolean } {
+): {
+  preview: RaceAnalysis | null;
+  coursePreview: PerformanceCourseBuildResult | null;
+  entryResults: EntryResultCorrection[];
+  previewing: boolean;
+} {
   const [preview, setPreview] = useState<RaceAnalysis | null>(baseline);
+  const [coursePreview, setCoursePreview] = useState<PerformanceCourseBuildResult | null>(null);
+  const [entryResults, setEntryResults] = useState<EntryResultCorrection[]>(corrections.entryResults);
   const [previewing, setPreviewing] = useState(false);
   const requestId = useRef(0);
   const workerRef = useRef<Worker | null>(null);
@@ -84,6 +98,8 @@ export function useReviewPreview(
           if (event.data.id !== id || requestId.current !== id) return;
           worker.removeEventListener("message", onMessage);
           setPreview(event.data.analysis);
+          setCoursePreview(event.data.coursePreview);
+          setEntryResults(event.data.entryResults);
           setPreviewing(false);
         };
         worker.addEventListener("message", onMessage);
@@ -93,7 +109,16 @@ export function useReviewPreview(
       }
       try {
         const next = analyzeRace(tracks, { corrections: clamped });
-        if (requestId.current === id) setPreview(next);
+        const nextCourse = buildCorrectedPerformanceCourse(
+          tracks,
+          next,
+          clamped,
+        );
+        if (requestId.current === id) {
+          setPreview(next);
+          setCoursePreview(nextCourse);
+          setEntryResults(clamped.entryResults);
+        }
       } catch {
         if (requestId.current === id) setPreview(baseline);
       } finally {
@@ -108,6 +133,8 @@ export function useReviewPreview(
 
   return {
     preview: hasTracks ? preview : baseline,
+    coursePreview: hasTracks ? coursePreview : null,
+    entryResults: hasTracks ? entryResults : corrections.entryResults,
     previewing: hasTracks ? previewing : false,
   };
 }

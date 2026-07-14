@@ -5,6 +5,10 @@ import {
   normalizeCorrections,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
+import {
+  buildCorrectedPerformanceCourse,
+  type PerformanceCourseBuildResult,
+} from "@/lib/analytics/performance/course";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
@@ -21,6 +25,7 @@ export class AnalyzeRaceError extends Error {
 
 export type AnalyzeRaceResult = {
   analysis: RaceAnalysis;
+  coursePreview: PerformanceCourseBuildResult;
   computedAt: string;
   trackCount: number;
   correctionsUpdatedAt: string | null;
@@ -136,6 +141,11 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   }
 
   const analysis = analyzeRace(tracks, { corrections: loadedCorrections.corrections });
+  const coursePreview = buildCorrectedPerformanceCourse(
+    tracks,
+    analysis,
+    loadedCorrections.corrections,
+  );
   const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
     await Promise.all([
       admin
@@ -179,6 +189,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
 
   return {
     analysis,
+    coursePreview,
     computedAt,
     trackCount: tracks.length,
     correctionsUpdatedAt,

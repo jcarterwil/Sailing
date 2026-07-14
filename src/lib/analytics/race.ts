@@ -6,7 +6,12 @@ import {
   LEG_UPWIND_MAX_ABS_TWA_DEG,
   TIMER_CONSENSUS_MS,
 } from "@/lib/analytics/constants";
-import type { LegRelabelCorrection, RaceCorrections } from "@/lib/analytics/corrections";
+import type {
+  CourseLineCorrection,
+  CourseMarkCorrection,
+  LegRelabelCorrection,
+  RaceCorrections,
+} from "@/lib/analytics/corrections";
 import { bearingDeg, haversineM } from "@/lib/analytics/geo";
 import {
   columnLength,
@@ -386,6 +391,47 @@ export function applyLegRelabels(
   });
 }
 
+function correctedRaceLine(line: CourseLineCorrection | null): RaceLine | null {
+  if (!line) return null;
+  return {
+    pin: line.pin,
+    boat: line.boat,
+    bearingDeg: round(bearingDeg(line.pin.lat, line.pin.lon, line.boat.lat, line.boat.lon), 2),
+    lengthM: round(haversineM(line.pin.lat, line.pin.lon, line.boat.lat, line.boat.lon), 1),
+    source: "organizer-override",
+    entryIds: [],
+  };
+}
+
+/** Apply time-anchored organizer mark positions without relying on mutable leg indices. */
+export function applyCourseMarkCorrections(
+  legs: readonly RaceLeg[],
+  marks: readonly CourseMarkCorrection[],
+): RaceLeg[] {
+  const corrected = legs.map((leg) => ({ ...leg }));
+  if (marks.length === 0 || corrected.length < 2) return corrected;
+  const transitionLegs = corrected.slice(0, -1);
+  for (const mark of marks) {
+    const containing = transitionLegs.findIndex((leg) =>
+      mark.atMs >= leg.startTimeMs && mark.atMs <= leg.endTimeMs);
+    const index = containing >= 0
+      ? containing
+      : transitionLegs.reduce((best, leg, candidate) =>
+          Math.abs(leg.endTimeMs - mark.atMs) < Math.abs(transitionLegs[best].endTimeMs - mark.atMs)
+            ? candidate
+            : best,
+        0);
+    const current = corrected[index];
+    corrected[index] = {
+      ...current,
+      mark: mark.position,
+      markOverridden: true,
+      detectedMark: current.mark,
+    };
+  }
+  return corrected;
+}
+
 export function buildRaceStructure(
   tracks: readonly ProcessedTrack[],
   window: RaceWindow,
@@ -395,17 +441,21 @@ export function buildRaceStructure(
 ): RaceStructure {
   const startTimeMs = window.start.timeMs;
   const finishTimeMs = window.finish.timeMs;
-  const legs = applyLegRelabels(
-    inferRaceLegs(tracks, startTimeMs, finishTimeMs, wind, warnings),
-    corrections?.legRelabels ?? [],
+  const legs = applyCourseMarkCorrections(
+    applyLegRelabels(
+      inferRaceLegs(tracks, startTimeMs, finishTimeMs, wind, warnings),
+      corrections?.legRelabels ?? [],
+    ),
+    corrections?.course.marks ?? [],
   );
+  const correctedStartLine = correctedRaceLine(corrections?.course.startLine ?? null);
   return {
     start: window.start,
     finish: window.finish,
     durationMs: startTimeMs !== null && finishTimeMs !== null && finishTimeMs > startTimeMs
       ? finishTimeMs - startTimeMs
       : null,
-    startLine: detectStartLine(tracks, startTimeMs),
+    startLine: correctedStartLine ?? detectStartLine(tracks, startTimeMs),
     legs,
   };
 }

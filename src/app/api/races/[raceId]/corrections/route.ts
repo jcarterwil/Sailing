@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import {
   clampCorrectionsToTrackSpan,
-  normalizeCorrections,
+  validateCorrectionsForSave,
 } from "@/lib/analytics/corrections";
 import { columnLength, epochAt, finite } from "@/lib/analytics/internal";
 import type { ProcessedTrack } from "@/lib/analytics/types";
@@ -80,8 +80,6 @@ export async function POST(
     body && typeof body === "object" && !Array.isArray(body) && "corrections" in body
       ? (body as { corrections: unknown }).corrections
       : body;
-  let corrections = normalizeCorrections(rawCorrections);
-
   const admin = createAdminClient();
   const { data: entries, error: entriesError } = await admin
     .from("race_entries")
@@ -113,13 +111,25 @@ export async function POST(
     tracks.push(JSON.parse(json) as ProcessedTrack);
   }
   const span = trackSpan(tracks);
-  if (span) corrections = clampCorrectionsToTrackSpan(corrections, span);
+  const validation = validateCorrectionsForSave(rawCorrections, {
+    entryIds: (entries ?? []).map((entry) => entry.id),
+    span,
+  });
+  if (validation.errors.length > 0) {
+    return NextResponse.json(
+      { error: "Invalid race corrections.", details: validation.errors },
+      { status: 400 },
+    );
+  }
+  const corrections = span
+    ? clampCorrectionsToTrackSpan(validation.corrections, span)
+    : validation.corrections;
 
   const updatedAt = new Date().toISOString();
   const { error: upsertError } = await admin.from("race_corrections").upsert(
     {
       race_id: raceId,
-      version: 1,
+      version: 2,
       corrections: corrections as unknown as Json,
       updated_by: user.id,
       updated_at: updatedAt,
@@ -176,6 +186,8 @@ export async function POST(
       windSource: result.analysis.wind.source,
       windQuality: result.analysis.windQuality ?? null,
       appliedCorrections: result.analysis.appliedCorrections ?? corrections,
+      coursePreview: result.coursePreview,
+      entryResults: corrections.entryResults,
     });
   } catch (err) {
     if (err instanceof AnalyzeRaceError) {
