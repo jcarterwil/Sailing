@@ -34,6 +34,9 @@ describe("race series organizer workflow migration", () => {
     );
     expect(migration).toContain("source_track.updated_at > analysis.computed_at");
     expect(migration).toContain("corrections.updated_at > analysis.computed_at");
+    expect(migration).not.toMatch(
+      /not exists \(\s*select 1\s*from public\.race_entries source_entry\s*where source_entry\.race_id = requested\.race_id\s*\)/,
+    );
   });
 
   it("keeps both transactional write functions service-role only", () => {
