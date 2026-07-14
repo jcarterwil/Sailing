@@ -55,7 +55,10 @@ function resolveStartLine(
   );
 }
 
-const EMPTY_START_LINE: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_START_LINE: maplibregl.GeoJSONSourceSpecification["data"] = {
+  type: "FeatureCollection",
+  features: [],
+};
 
 function startLineGeoJson(line: StartLine) {
   return {
