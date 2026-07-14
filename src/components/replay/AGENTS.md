@@ -1,25 +1,42 @@
 # Replay UI — agent guide
 
-The client-only race replay: a MapLibre map, a zustand playback clock, and a canvas timeline, rendering 6 boats × ~25k points at 60fps. The performance model is the whole design — respect it.
+The client-only race replay has two renderer views: a MapLibre Tactical view and a lazy standalone Three.js Broadcast 3D view. Both consume the same renderer-neutral frame stream, the zustand playback clock remains authoritative, and the canvas timeline handles dense tracks. The performance and data-provenance models are part of the design — respect both.
 
 ## The 60fps rule (most important)
 
-- **Per-frame consumers update imperatively, never through React renders.** The map (`map-view.tsx`) and timeline cursor (`timeline.tsx`) subscribe with `usePlaybackStore.subscribe(...)` and mutate the DOM/canvas/`source.setData()` directly. Putting `timeMs` into React state and re-rendering at 60fps would tank performance.
-- **React-rendered widgets subscribe narrowly and throttle** to ~10Hz (see the clock in `playback-controls.tsx`, Instruments, and the live `leaderboard.tsx`). Use `usePlaybackStore((s) => s.field)` selectors, not the whole store.
-- The single rAF clock lives in `race-replay.tsx` and calls `store.tick(dt)`. Don't add competing animation loops.
-- The query-gated helm POV spike (`?pov=1`) also renders from the playback-store subscription. Three.js must stay lazy-loaded, and the POV must never own an rAF loop.
-- The map's optional 3D hull layer follows the same rule: load Three only after the visible **3D hulls** control is enabled, read the shared sampled-frame ref inside MapLibre's custom render pass, and never call `triggerRepaint`, `setAnimationLoop`, or add another rAF. MapLibre owns the shared canvas/context; Three must not resize, clear, or force-loss that context.
-- **Wind for ladder / wind indicator:** resolve through `createReplayWindResolver` in `wind-resolution.ts`; `resolveTwdAt` remains the direction-only adapter used by replay consumers. Do not invent a second wind path.
-- **Start line / race clock:** `LoadedTrack.extras` carries VKX timerEvents/linePings (null for CSV). Derive `startsMs` in `race-replay.tsx` via `fleetStarts`; pass into MapView / PlaybackControls / Timeline. Resolve the line at scrub time with `startForLine` + `startLineAt` (upcoming gun pre-start, else active). Never fabricate a line from one end.
+- **Per-frame consumers update imperatively, never through React renders.** Replay renderers subscribe to the one `ReplayRenderFrameSource`; the timeline cursor subscribes to the playback store and mutates its canvas directly. Putting `timeMs` into React state and re-rendering at 60fps would tank performance.
+- **There is one sampled renderer frame per playback update.** `race-replay.tsx` creates one `ReplayRenderFrameSource` from the loaded tracks, fixed fleet origin, wind resolver, starts, and analyzed race structure. Tactical MapLibre, Broadcast 3D, and the query-gated Helm POV consume that source. Do not call `sampleAt` independently inside a renderer or give a renderer another store subscription.
+- **React-rendered widgets subscribe narrowly and throttle** to about 10Hz (see the clock in `playback-controls.tsx`, Instruments, and `leaderboard.tsx`). Use `usePlaybackStore((state) => state.field)` selectors, not the whole store.
+- The single rAF clock lives in `race-replay.tsx` and calls `store.tick(dt)`. Do not add competing animation loops. Three.js renderers draw only when the shared frame source publishes, plus forced redraws for initialization, resize, settings changes, and visibility return.
+- The query-gated Helm POV spike (`?pov=1`) consumes the frame source. Three.js must stay lazy-loaded, and the POV must never own an rAF loop.
+- The Tactical map's optional close-zoom 3D hull layer loads Three only after **Stylized hulls** is enabled. It reads the shared frame ref inside MapLibre's custom render pass and never calls `triggerRepaint`, `setAnimationLoop`, or adds another rAF. MapLibre owns the shared canvas/context; Three must not resize, clear, or force-loss that context.
+- **Wind for ladder / wind indicator:** resolve through `createReplayWindResolver` in `wind-resolution.ts`; `resolveTwdAt` remains the direction-only adapter used by non-renderer replay consumers. Do not invent a second wind path.
+- **Start line / race clock:** `LoadedTrack.extras` carries VKX timerEvents/linePings (null for CSV). Derive `startsMs` in `race-replay.tsx` via `fleetStarts`; feed the starts into the frame source, PlaybackControls, and Timeline. The frame builder resolves the line at scrub time with `startForLine` + `startLineAt` (upcoming gun pre-start, else active), then falls back to the analyzed start line. Never fabricate a line from one end.
+
+## Renderer views and data honesty
+
+- `ReplayRenderFrame` is the renderer contract. It contains finite render poses, local-meter and geographic positions, selected/in-track state, resolved wind, and course geometry. Its fixed origin must not follow the selected boat.
+- Recorded sensor fields remain nullable under `boat.recorded`. Any fallback used to create a finite pose is described under `boat.provenance`. Synthetic heave and wake strength live only under `boat.presentation` and carry the `presentation-only-synthetic` tag. Never feed presentation values back into analytics, timing, position, or labels that imply measured data.
+- Broadcast 3D is a standalone lazy boundary. `race-replay.tsx` dynamically imports it, and the component dynamically imports Three plus its renderer only after mounting. Keep Three out of the normal Tactical bundle.
+- Broadcast camera quality is adaptive, but the playback source and overlay UI stay authoritative. If WebGL initialization or rendering fails, call the failure boundary and return the user to Tactical view; never leave a blank replay.
+- The generic sailboat visual is deliberately class-neutral and reused by Tactical hulls, Broadcast, and Helm POV. Do not add copyrighted or manufacturer-specific geometry without an explicitly licensed asset and attribution plan.
+- Display choices are persisted through `replay-display-preferences.ts`, not the playback clock store. At widths below `sm`, keep play/clock/speed/range compact and put all secondary view, trail, map, chart, hull, and camera controls in the single bottom **View settings** sheet with 44px touch targets.
+
+## NOAA chart overlay
+
+- The optional NOAA nautical chart is a contextual raster overlay in Tactical view. It belongs below replay sources/layers and must be re-added after every MapLibre `setStyle` lifecycle reset.
+- Use the centralized IDs and helpers in `nautical-chart.ts`; apply visibility and opacity imperatively so toggles do not recreate the map.
+- Always show the exact notice **“For replay and analysis only — not for navigation”** while the overlay is enabled. This product is not a certified navigation display.
+- V1 uses NOAA's official Chart Display WMS `GetMap` endpoint. The official GoogleMapsCompatible WMTS matrix has a zoom-level offset that MapLibre's ordinary raster URL token substitution cannot express safely; the WMS bounding-box request is the supported fallback. Do not switch back to retired RNC tile services or undocumented mirrors.
 
 ## Rules
 
-- **No chart library.** Speed strips and the polar plot are hand-drawn on `<canvas>` — SVG-based libs (recharts) die at this point count. Static plot layer + a separate overlay canvas for the moving cursor.
-- **Raw `maplibre-gl`, not react-map-gl.** One component owns the map lifecycle in a `useEffect`. On `setStyle` the sources/layers are wiped — re-add them in the `styledata` handler (see `map-view.tsx`). Tiles are keyless (OpenFreeMap + Esri); no Mapbox token.
-- **The replay is loaded with `ssr: false`** through `replay-shell.tsx` because maplibre is browser-only. Keep the dynamic-import boundary there; the RSC page (`src/app/races/[raceId]/replay/page.tsx`) only mints signed track URLs (and ready-video URLs when present) and passes them in.
-- **Tracks load from Storage, not the server.** `track-loader.ts` fetches the gzipped `ProcessedTrack` JSON via a signed URL and decompresses with the native `DecompressionStream("gzip")` into typed arrays. `track-index.ts` does binary-search + interpolation — reuse it, don't re-scan arrays.
+- **No chart library.** Speed strips and the polar plot are hand-drawn on `<canvas>` — SVG-based libs die at this point count. Static plot layer + a separate overlay canvas for the moving cursor.
+- **Raw `maplibre-gl`, not react-map-gl.** One component owns the Tactical map lifecycle in a `useEffect`. On `setStyle` the sources/layers are wiped — re-add them in the `styledata` handler (see `map-view.tsx`). Base tiles are keyless (OpenFreeMap + Esri); no Mapbox token.
+- **The replay is loaded with `ssr: false`** through `replay-shell.tsx` because MapLibre is browser-only. Keep the dynamic-import boundary there; the RSC page (`src/app/races/[raceId]/replay/page.tsx`) only mints signed track URLs (and ready-video URLs when present) and passes them in.
+- **Tracks load from Storage, not the server.** `track-loader.ts` fetches the gzipped `ProcessedTrack` JSON via a signed URL and decompresses with the native `DecompressionStream("gzip")` into typed arrays. `track-index.ts` does binary-search + interpolation — reuse it in the frame builder; do not re-scan arrays.
 - **Video overlay (issue #9):** sync from `usePlaybackStore` via `planVideoSync` in `src/lib/videos/replay-sync.ts`. One selected `<video muted playsInline>` at a time; no second rAF loop; bounded drift correction instead of per-frame seeks. Public share (`readOnly`) does not load videos.
 
 ## Store
 
-`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"north"` | `"follow"` | `"chase"`). Deselecting a boat or calling `setBounds` (new race load) resets `cameraMode` to `"north"`. Keep it minimal; derived values are computed by consumers from the track arrays + `track-index.ts`, not stored.
+`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"north"` | `"follow"` | `"chase"`). Deselecting a boat or calling `setBounds` (new race load) resets `cameraMode` to `"north"`. Keep it minimal; derived renderer values belong in `ReplayRenderFrame`, while other derived values are computed by consumers from the track arrays.
