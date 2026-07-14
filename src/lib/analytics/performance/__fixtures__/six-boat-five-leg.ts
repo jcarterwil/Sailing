@@ -94,10 +94,12 @@ function buildKeyframes(plan: BoatPlan, boatIndex: number): TimedPoint[] {
     frames.push({ tMs: FIXTURE_GUN_MS, x: laneX, y: -2 - boatIndex });
   }
   const crossingMs = FIXTURE_GUN_MS + plan.crossingOffsetSec * 1_000;
-  frames.push({ tMs: crossingMs, x: laneX, y: 2 });
+  // The named crossing instant is exactly on the finite line; the following
+  // segment establishes the course-side passage at either logging rate.
+  frames.push({ tMs: crossingMs, x: laneX, y: 0 });
 
   let priorMs = crossingMs;
-  let priorPoint: LocalPoint = { x: laneX, y: 2 };
+  let priorPoint: LocalPoint = { x: laneX, y: 0 };
   plan.passagesSec.forEach((passageSec, legIndex) => {
     const endMs = FIXTURE_GUN_MS + passageSec * 1_000;
     const endPoint = passagePoint(COURSE_POINTS[legIndex + 1], boatIndex);
