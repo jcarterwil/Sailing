@@ -358,7 +358,8 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-8">
+        <CardContent>
+          <fieldset disabled={pending || setupRefreshPending} className="space-y-8">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2 lg:col-span-2">
               <Label htmlFor="series-editor-name">Name</Label>
@@ -630,6 +631,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           </div>
 
           {setupError ? <p className="text-sm text-destructive">{setupError}</p> : null}
+          </fieldset>
         </CardContent>
       </Card>
 

@@ -20,6 +20,7 @@ describe("series workflow saved-setup boundary", () => {
   });
 
   it("disables official decisions, Preview, and Apply while setup is unsaved", () => {
+    expect(editor).toContain('disabled={pending || setupRefreshPending} className="space-y-8"');
     expect(editor).toContain("<fieldset");
     expect(editor).toContain("disabled={setupBlocked || pending}");
     expect(editor).toContain("pending || setupBlocked || model.races.length === 0");
