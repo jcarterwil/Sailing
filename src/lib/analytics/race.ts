@@ -1,4 +1,4 @@
-import { circularMean, norm180 } from "@/lib/analytics/angles";
+import { circularMean } from "@/lib/analytics/angles";
 import {
   LEG_BIN_MS,
   LEG_DOWNWIND_MIN_ABS_TWA_DEG,
@@ -34,6 +34,7 @@ import type {
   RaceTimerEvent,
   WindAnalysis,
 } from "@/lib/analytics/types";
+import { signedTwaDeg } from "@/lib/analytics/sailing";
 import { windDirectionAt } from "@/lib/analytics/wind";
 
 interface RaceWindow {
@@ -310,7 +311,7 @@ export function inferRaceLegs(
         const sog = track.sog[index];
         if (!finite(course) || !finite(sog) || sog < 1) continue;
         courses.push(course);
-        votes[classifyTwa(norm180(twdDeg - course))]++;
+        votes[classifyTwa(signedTwaDeg(twdDeg, course))]++;
       }
     }
     const type = (Object.entries(votes) as [RaceLegType, number][])

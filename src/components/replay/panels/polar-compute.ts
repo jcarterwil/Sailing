@@ -1,4 +1,8 @@
-import { norm180 } from "@/lib/analytics/angles";
+import {
+  inManeuverWindow,
+  isMakingWay,
+  signedTwaDeg,
+} from "@/lib/analytics/sailing";
 import { windDirectionAt } from "@/lib/analytics/wind";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import type { Maneuver, WindAnalysis } from "@/lib/analytics/types";
@@ -9,8 +13,7 @@ import type { Maneuver, WindAnalysis } from "@/lib/analytics/types";
 export const POLAR_BIN_DEG = 10;
 export const POLAR_BIN_COUNT = 18; // 0..180 in 10-degree bins
 const MIN_SAMPLES_PER_BIN = 2;
-// Below this SOG, COG/TWA are noise and the hull isn't making way.
-const POLAR_MIN_SOG_KTS = 1;
+export { inManeuverWindow } from "@/lib/analytics/sailing";
 
 export interface PolarBin {
   // Bin center in degrees (5, 15, ..., 175).
@@ -48,21 +51,6 @@ interface SailingSample {
   trim: number;
 }
 
-// Maneuvers are emitted sorted by tMs with non-overlapping windows, so once a
-// window starts after timeMs we can stop scanning.
-export function inManeuverWindow(
-  timeMs: number,
-  maneuvers: readonly Maneuver[],
-): boolean {
-  for (const maneuver of maneuvers) {
-    if (timeMs >= maneuver.window.startMs && timeMs <= maneuver.window.endMs) {
-      return true;
-    }
-    if (maneuver.window.startMs > timeMs) break;
-  }
-  return false;
-}
-
 function percentile90(values: readonly number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -98,12 +86,12 @@ function collectSamples(
     if (tMs > end) break;
     const sog = track.sog[i];
     const cog = track.cog[i];
-    if (!Number.isFinite(sog) || !Number.isFinite(cog) || sog < POLAR_MIN_SOG_KTS) {
+    if (!isMakingWay(sog, cog)) {
       continue;
     }
     const twdDeg = windDirectionAt(wind, tMs);
     if (twdDeg === null || !Number.isFinite(twdDeg)) continue;
-    const twa = norm180(twdDeg - cog);
+    const twa = signedTwaDeg(twdDeg, cog);
     if (!Number.isFinite(twa)) continue;
     if (excludeTurns && inManeuverWindow(tMs, maneuvers)) continue;
     out.push({ sog, twa, heel: track.heel[i], trim: track.trim[i] });

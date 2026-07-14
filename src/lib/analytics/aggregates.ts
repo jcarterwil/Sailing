@@ -1,4 +1,3 @@
-import { norm180 } from "@/lib/analytics/angles";
 import { haversineM } from "@/lib/analytics/geo";
 import { columnLength, epochAt, finite, mean, nullable, round } from "@/lib/analytics/internal";
 import type {
@@ -10,6 +9,7 @@ import type {
   WindAnalysis,
 } from "@/lib/analytics/types";
 import { windDirectionAt } from "@/lib/analytics/wind";
+import { signedTwaDeg } from "@/lib/analytics/sailing";
 
 export function aggregateEntry(
   track: ProcessedTrack,
@@ -47,7 +47,7 @@ export function aggregateEntry(
       speeds.push(track.sog[i]);
       const twdDeg = windDirectionAt(wind, timeMs);
       if (twdDeg !== null && finite(track.cog[i])) {
-        const twaDeg = norm180(twdDeg - track.cog[i]);
+        const twaDeg = signedTwaDeg(twdDeg, track.cog[i]);
         vmgs.push(Math.abs(track.sog[i] * Math.cos((twaDeg * Math.PI) / 180)));
       }
     }
