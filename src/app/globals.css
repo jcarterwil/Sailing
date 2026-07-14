@@ -144,6 +144,9 @@
 }
 
 @layer components {
+  .performance-print-report {
+    display: none;
+  }
   .report-document {
     @apply mx-auto max-w-4xl text-[15px] leading-7 text-foreground;
   }
@@ -206,6 +209,7 @@
     background-image: none !important;
   }
   .print-hidden,
+  .performance-screen,
   nav {
     display: none !important;
   }
@@ -246,5 +250,181 @@
   .report-document tr {
     break-after: avoid;
     page-break-after: avoid;
+  }
+  .performance-print-report {
+    display: block !important;
+    counter-reset: performance-page;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    line-height: 1.3;
+    color: #111 !important;
+  }
+  .performance-print-page {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: calc(100vh - 1.3in);
+    break-after: page;
+    page-break-after: always;
+    counter-increment: performance-page;
+  }
+  .performance-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .performance-print-header,
+  .performance-print-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25in;
+    color: #333 !important;
+    font-size: 7.5pt;
+  }
+  .performance-print-header {
+    border-bottom: 1px solid #999;
+    padding-bottom: 0.08in;
+  }
+  .performance-print-footer {
+    border-top: 1px solid #999;
+    padding-top: 0.08in;
+  }
+  .performance-print-page-number::after {
+    content: "Page " counter(performance-page);
+  }
+  .performance-print-page-body {
+    min-height: 0;
+    padding: 0.16in 0;
+  }
+  .performance-print-page h1 {
+    margin: 0 0 0.04in;
+    color: #111 !important;
+    font-size: 20pt;
+    line-height: 1.1;
+  }
+  .performance-print-page h2 {
+    margin: 0.13in 0 0.06in;
+    color: #111 !important;
+    font-size: 11pt;
+    line-height: 1.2;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .performance-print-page p {
+    margin: 0.06in 0;
+  }
+  .performance-print-subtitle,
+  .performance-print-note {
+    color: #444 !important;
+  }
+  .performance-print-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.18in;
+    margin: 0.12in 0;
+  }
+  .performance-print-facts dl {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.04in 0.12in;
+    margin: 0;
+    border: 1px solid #aaa;
+    padding: 0.08in;
+  }
+  .performance-print-facts dt {
+    color: #555 !important;
+  }
+  .performance-print-facts dd {
+    margin: 0;
+    text-align: right;
+    font-weight: 600;
+  }
+  .performance-print-table-wrap {
+    overflow: hidden;
+    border: 1px solid #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .performance-print-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+    font-size: 7.7pt;
+  }
+  .performance-print-table-wrap th {
+    background: #e8e8e8 !important;
+    text-align: left;
+    font-weight: 700;
+  }
+  .performance-print-table-wrap th,
+  .performance-print-table-wrap td {
+    border-bottom: 1px solid #bbb;
+    padding: 0.045in 0.055in;
+    vertical-align: top;
+  }
+  .performance-print-table-wrap tr,
+  .performance-print-best-grid > div,
+  .performance-print-opportunities li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .performance-print-boat {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.04in;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .performance-print-boat > span {
+    width: 0.08in;
+    height: 0.08in;
+    border: 1px solid #111;
+    border-radius: 50%;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .performance-print-best-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.1in;
+    margin: 0.1in 0;
+  }
+  .performance-print-best-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.03in;
+    border: 1px solid #999;
+    padding: 0.08in;
+  }
+  .performance-print-best-grid small,
+  .performance-print-opportunities small {
+    color: #444 !important;
+  }
+  .performance-print-opportunities {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.06in 0.12in;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .performance-print-opportunities li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.02in 0.08in;
+    border-top: 1px solid #bbb;
+    padding-top: 0.04in;
+  }
+  .performance-print-opportunities li > span:nth-child(2),
+  .performance-print-opportunities li > small {
+    grid-column: 1 / -1;
+  }
+  .performance-print-warnings {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .performance-print-warnings ul {
+    margin: 0;
+    padding-left: 0.18in;
   }
 }

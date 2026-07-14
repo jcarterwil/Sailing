@@ -1,65 +1,54 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { PerformanceOverview } from "@/components/performance/performance-overview";
 import { PerformanceState } from "@/components/performance/performance-state";
+import type { PerformanceTrackMeta } from "@/components/performance/drilldown-worker-contract";
 import {
   buildPerformanceOverviewModel,
   resolvePerformancePageState,
 } from "@/components/performance/view-model";
 import { parseRaceMeta } from "@/lib/races/meta";
-import { loadPerformanceTrackMetas } from "@/lib/races/performance-tracks";
+import {
+  performanceForPublicShare,
+  windForPublicShare,
+} from "@/lib/races/public-performance";
+import { resolveSharedRace } from "@/lib/races/share";
 import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
 } from "@/lib/races/stored-analysis";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function RacePerformancePage({
+export default async function SharedPerformancePage({
   params,
 }: {
-  params: Promise<{ raceId: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { raceId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { slug } = await params;
+  const { admin, race } = await resolveSharedRace(slug);
+  if (!race) notFound();
 
-  // An RLS-visible race row proves organizer/member access.
-  const raceResult = await supabase
-    .from("races")
-    .select("id, name, venue, starts_at, created_at, conditions, tags, timezone, share_slug")
-    .eq("id", raceId)
-    .maybeSingle();
-  if (raceResult.error) throw new Error(`Could not load race: ${raceResult.error.message}`);
-  if (!raceResult.data) notFound();
-  const race = raceResult.data;
-
-  const [entriesResult, analysisResult, correctionsResult, organizerResult] = await Promise.all([
-    supabase
+  const [entriesResult, analysisResult, correctionsResult] = await Promise.all([
+    admin
       .from("race_entries")
-      .select("id, color, boats(name), tracks(status, updated_at, error_message)")
-      .eq("race_id", raceId)
+      .select("id, color, boats(name), tracks(status, updated_at, processed_path)")
+      .eq("race_id", race.id)
       .order("created_at", { ascending: true }),
-    supabase
+    admin
       .from("race_analyses")
       .select("analysis, computed_at")
-      .eq("race_id", raceId)
+      .eq("race_id", race.id)
       .maybeSingle(),
-    supabase
+    admin
       .from("race_corrections")
       .select("updated_at")
-      .eq("race_id", raceId)
+      .eq("race_id", race.id)
       .maybeSingle(),
-    supabase.rpc("is_race_organizer", { rid: raceId }),
   ]);
-  if (entriesResult.error) throw new Error(`Could not load entries: ${entriesResult.error.message}`);
-  if (analysisResult.error) throw new Error(`Could not load analysis: ${analysisResult.error.message}`);
-  if (correctionsResult.error) throw new Error(`Could not load corrections: ${correctionsResult.error.message}`);
-  if (organizerResult.error) throw new Error(`Could not check race permissions: ${organizerResult.error.message}`);
+  if (entriesResult.error) throw new Error("Could not load shared performance entries.");
+  if (analysisResult.error) throw new Error("Could not load shared performance analysis.");
+  if (correctionsResult.error) throw new Error("Could not validate shared analysis freshness.");
 
   const entries = entriesResult.data ?? [];
   const processed = entries.filter((entry) => entry.tracks?.status === "processed");
@@ -81,20 +70,25 @@ export default async function RacePerformancePage({
     storedStatus: parsed?.status ?? null,
     entrySetMatches: currentAnalysis !== null && processed.length === entries.length,
   });
+  const sharedReplayHref = `/s/${slug}`;
   if (state !== "current" || !currentAnalysis || !parsed?.performance || !analysisResult.data) {
     return (
       <PerformanceState
         state={state === "current" ? "malformed" : state}
         raceId={race.id}
         raceName={race.name}
-        canManage={organizerResult.data ?? false}
-        canReview={processed.length > 0}
+        canManage={false}
+        canReview={false}
         issues={parsed?.issues ?? []}
+        backHref={sharedReplayHref}
+        backLabel="Back to shared replay"
       />
     );
   }
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
+  const publicPerformance = performanceForPublicShare(parsed.performance);
+  const publicWind = windForPublicShare(currentAnalysis.wind);
   const model = buildPerformanceOverviewModel({
     race: {
       id: race.id,
@@ -109,25 +103,37 @@ export default async function RacePerformancePage({
       boatName: entry.boats?.name ?? "Unknown",
       color: entry.color,
     })),
-    analysis: currentAnalysis,
-    performance: parsed.performance,
+    analysis: { ...currentAnalysis, wind: publicWind, performance: publicPerformance },
+    performance: publicPerformance,
     computedAt: analysisResult.data.computed_at,
   });
-  const drilldownTracks = await loadPerformanceTrackMetas(raceId);
+  const tracks: PerformanceTrackMeta[] = processed.flatMap((entry) =>
+    entry.tracks?.processed_path
+      ? [{
+          entryId: entry.id,
+          boatName: entry.boats?.name ?? "Unknown",
+          color: entry.color,
+          url: `/api/share/${encodeURIComponent(slug)}/performance/tracks/${encodeURIComponent(entry.id)}`,
+        }]
+      : []);
+  const trackIssues = tracks.length === entries.length
+    ? []
+    : ["One or more public drilldown tracks are unavailable."];
+
   return (
     <PerformanceOverview
       model={model}
       navigation={{
-        backHref: `/races/${race.id}`,
-        backLabel: "Back to race",
-        publicHref: race.share_slug ? `/s/${race.share_slug}/performance` : null,
+        backHref: sharedReplayHref,
+        backLabel: "Back to shared replay",
+        publicHref: `/s/${slug}/performance`,
       }}
       drilldown={{
-        tracks: drilldownTracks.tracks,
-        issues: drilldownTracks.issues,
-        performance: parsed.performance,
+        tracks,
+        issues: trackIssues,
+        performance: publicPerformance,
         analysis: {
-          wind: currentAnalysis.wind,
+          wind: publicWind,
           entries: currentAnalysis.perEntry.map((entry) => ({
             entryId: entry.entryId,
             maneuvers: entry.maneuvers,

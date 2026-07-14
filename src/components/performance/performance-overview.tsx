@@ -11,6 +11,7 @@ import {
   CloudSun,
   Gauge,
   Info,
+  Printer,
   Trophy,
   Waves,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import type { DrilldownAnalysisInput } from "@/components/performance/drilldown-
 import type { PerformanceTrackMeta } from "@/components/performance/drilldown-worker-contract";
 import { PerformanceDrilldowns } from "@/components/performance/performance-drilldowns";
 import { PerformanceOpportunities } from "@/components/performance/performance-opportunities";
+import { PerformancePrintReport } from "@/components/performance/performance-print-report";
 import {
   formatDateTime,
   formatDelta,
@@ -33,6 +35,7 @@ import {
 } from "@/components/performance/view-model";
 import { WeatherTimeline } from "@/components/performance/weather-timeline";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -95,6 +98,7 @@ function BoatName({ name, color }: { name: string; color: string }) {
 export function PerformanceOverview({
   model,
   drilldown,
+  navigation,
 }: {
   model: PerformanceOverviewModel;
   drilldown?: {
@@ -102,6 +106,11 @@ export function PerformanceOverview({
     analysis: DrilldownAnalysisInput;
     performance: PerformanceAnalysisV1;
     issues: string[];
+  };
+  navigation?: {
+    backHref: string;
+    backLabel: string;
+    publicHref: string | null;
   };
 }) {
   const [boatFilter, setBoatFilter] = useState("all");
@@ -140,6 +149,9 @@ export function PerformanceOverview({
     });
   }, [model.distributions, visibleEntryIds]);
   const evidence = model.weather.evidence;
+  const backHref = navigation?.backHref ?? `/races/${model.race.id}`;
+  const backLabel = navigation?.backLabel ?? "Back to race";
+  const publicHref = navigation?.publicHref ?? null;
 
   function updateSort(key: MetricSortKey) {
     setSort((current) => current.key === key
@@ -148,11 +160,12 @@ export function PerformanceOverview({
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl overflow-x-hidden px-4 py-6 sm:px-8 lg:px-10">
+    <>
+    <main className="performance-screen mx-auto min-h-screen w-full max-w-7xl overflow-x-hidden px-4 py-6 sm:px-8 lg:px-10">
       <header className="border-b border-border/70 pb-6">
-        <Link href={`/races/${model.race.id}`} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={backHref} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Back to race
+          {backLabel}
         </Link>
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -166,15 +179,21 @@ export function PerformanceOverview({
               {model.race.venue ? ` · ${model.race.venue}` : ""}
             </p>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="performance-boat-filter">Boat filter</Label>
-            <select id="performance-boat-filter" className={SELECT_CLASS} value={boatFilter} onChange={(event) => setBoatFilter(event.target.value)}>
-              <option value="all">Fleet · all boats</option>
-              {model.entries.map((entry) => <option key={entry.entryId} value={entry.entryId}>{entry.boatName}</option>)}
-            </select>
-            {boatFilter !== "all" && model.winnerEntryId !== boatFilter && (
-              <p className="text-[11px] text-muted-foreground">Fleet winner remains visible as the reference.</p>
-            )}
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="performance-boat-filter">Boat filter</Label>
+              <select id="performance-boat-filter" className={SELECT_CLASS} value={boatFilter} onChange={(event) => setBoatFilter(event.target.value)}>
+                <option value="all">Fleet · all boats</option>
+                {model.entries.map((entry) => <option key={entry.entryId} value={entry.entryId}>{entry.boatName}</option>)}
+              </select>
+              {boatFilter !== "all" && model.winnerEntryId !== boatFilter && (
+                <p className="text-[11px] text-muted-foreground">Fleet winner remains visible as the reference.</p>
+              )}
+            </div>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer aria-hidden="true" />
+              Print / PDF
+            </Button>
           </div>
         </div>
       </header>
@@ -406,8 +425,10 @@ export function PerformanceOverview({
       </div>
 
       <div className="border-t py-6 text-center text-xs text-muted-foreground">
-        Deterministic persisted metrics · signed tracks are used only for bounded drilldown displays
+        Deterministic persisted metrics · authorized tracks are used only for bounded drilldown displays
       </div>
     </main>
+    <PerformancePrintReport model={model} publicHref={publicHref} />
+    </>
   );
 }

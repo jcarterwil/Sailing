@@ -32,7 +32,7 @@ describe("authenticated Performance Overview integration", () => {
     expect(overview).toContain("PerformanceOpportunities");
     expect(overview).toContain("VMG distributions");
     expect(overview).toContain("Weather context is reported separately");
-    expect(overview).toContain("signed tracks are used only for bounded drilldown displays");
+    expect(overview).toContain("authorized tracks are used only for bounded drilldown displays");
     expect(opportunities).toContain("must not be summed into total time lost");
     expect(opportunities).toContain("Benchmark ·");
     expect(opportunities).toContain("Assumption:");

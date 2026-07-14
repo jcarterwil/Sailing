@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText } from "lucide-react";
+import { BarChart3, FileText } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
@@ -114,13 +114,22 @@ export default async function SharedReplayPage({
       <header className="flex items-center gap-3 border-b border-border/70 px-4 py-2">
         <span className="text-sm font-medium">{race.name}</span>
         <span className="text-xs text-muted-foreground">{trackMetas.length} boats</span>
-        <Link
-          href={`/s/${slug}/report`}
-          className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <FileText className="size-4" aria-hidden="true" />
-          Coach report
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          <Link
+            href={`/s/${slug}/performance`}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <BarChart3 className="size-4" aria-hidden="true" />
+            Performance
+          </Link>
+          <Link
+            href={`/s/${slug}/report`}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <FileText className="size-4" aria-hidden="true" />
+            Coach report
+          </Link>
+        </div>
       </header>
       <div className="min-h-0 flex-1">
         <ReplayShell

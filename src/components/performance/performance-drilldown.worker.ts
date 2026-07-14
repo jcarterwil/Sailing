@@ -40,17 +40,17 @@ async function boundedText(
 
 async function loadTrack(meta: PerformanceTrackMeta): Promise<ProcessedTrack> {
   const response = await fetch(meta.url);
-  if (!response.ok) throw new Error(`Signed track request failed for ${meta.boatName}.`);
+  if (!response.ok) throw new Error(`Drilldown track request failed for ${meta.boatName}.`);
   const declaredBytes = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > PERFORMANCE_DRILLDOWN_MAX_COMPRESSED_BYTES) {
-    throw new Error(`Signed track is too large for ${meta.boatName}.`);
+    throw new Error(`Drilldown track is too large for ${meta.boatName}.`);
   }
   const compressed = await response.arrayBuffer();
   if (compressed.byteLength > PERFORMANCE_DRILLDOWN_MAX_COMPRESSED_BYTES) {
-    throw new Error(`Signed track is too large for ${meta.boatName}.`);
+    throw new Error(`Drilldown track is too large for ${meta.boatName}.`);
   }
   const body = new Response(compressed).body;
-  if (!body) throw new Error(`Signed track body is unavailable for ${meta.boatName}.`);
+  if (!body) throw new Error(`Drilldown track body is unavailable for ${meta.boatName}.`);
   const decompressed = body.pipeThrough(new DecompressionStream("gzip"));
   const text = await boundedText(decompressed, PERFORMANCE_DRILLDOWN_MAX_JSON_CHARS);
   return parseProcessedTrackPayload(JSON.parse(text) as unknown, meta.entryId);

@@ -258,7 +258,17 @@ The detectors use only persisted Performance Overview facts plus bounded 20-seco
 
 Every card carries numeric evidence, an explicit benchmark, assumptions, and caveats. Ties, negative/zero estimates, insufficient samples, source gaps, and candidates outside the bounded top three are suppressed with a persisted reason. Coach receives these same facts and may explain them but may not recalculate, sum, or causally relabel them.
 
-## 11. Timezone and presentation
+## 11. Public sharing and browser print
+
+`/s/[slug]/performance` resolves through the existing revocable race share slug and uses the same stored-analysis parser, entry-set freshness check, view model, units, null semantics, and `PerformanceOverview` component as the authenticated route. Revocation returns not found for both the page and `/api/share/[slug]/performance/tracks/[entryId]`.
+
+Public drilldowns receive only same-origin proxy URLs. Each track request revalidates the live share and race-entry pair before downloading the gzip server-side. Responses are `private, no-store`, bounded to the same 50 MB compressed limit, and never expose a Storage path, signed Storage URL, secret, or correction record. The public analysis projection preserves metric values while removing organizer notes, correction version/input labels, place-override audit fields, and wind exclusion/override flags.
+
+The screen view and a print-only sibling tree consume the same `PerformanceOverviewModel`. Browser print/PDF uses CSS only: three intentional fixed pages (summary/results/weather, race-wide metrics/bests/opportunities, and start) plus one page per persisted leg. The five-leg fixture therefore has eight structural pages. CSS counters label rendered pages without claiming a total; the last report page has no trailing break. Tables, cards, headings, legends, and footers avoid splitting where practical, and boat names remain alongside color marks for grayscale output.
+
+Every print page repeats race/section identity, calculation version, and analysis timestamp. Sharing on prints a compact public performance link; sharing off prints `Private report` and no private URL/token. Invoking print performs no analysis, weather request, track mutation, or PDF generation.
+
+## 12. Timezone and presentation
 
 All analytics remain UTC. Local timestamps use `timezone.iana`, never the server/browser default. Metadata resolution order is:
 
@@ -270,7 +280,7 @@ Validation uses `Intl.DateTimeFormat` at the race-metadata boundary. Authenticat
 
 Rounding defaults: elapsed/delta/time-to-line to nearest displayed second; speeds/VMG to 0.01 kt; distance to nearest metre below 10 km and appropriate nautical-mile precision above; angles to 0.1°. These defaults never feed back into calculations.
 
-## 12. Parser states and compatibility
+## 13. Parser states and compatibility
 
 `parseStoredPerformance(storedAnalysis)` returns exactly one state:
 
@@ -281,7 +291,7 @@ Rounding defaults: elapsed/delta/time-to-line to nearest displayed second; speed
 
 Parsing never throws into page rendering. Consumers do not cast JSONB directly. A legacy analysis may continue to power Replay/Coach behavior but Performance Overview shows `upgrade-required` until organizer reanalysis.
 
-## 13. Synthetic fixture and tolerances
+## 14. Synthetic fixture and tolerances
 
 `src/lib/analytics/performance/__fixtures__/six-boat-five-leg.ts` generates six sanitized boats, mixed 1 Hz/2 Hz logs, a finite start line, U/D/U/D/U legs, distinct per-entry passage/finish timers, tacks/gybes, an OCS/recross, a >10 s source gap, and one boat with missing heel/trim. No `Examples/` or private race correspondence is copied.
 
@@ -296,7 +306,7 @@ Parsing never throws into page rendering. Consumers do not cast JSONB directly. 
 
 `valid-performance-v1.ts` is a complete bounded contract fixture for parser and downstream round-trip tests. Metric engine PRs replace representative contract values with computed goldens while preserving the locked shape/semantics.
 
-## 14. Explicit V1 exclusions
+## 15. Explicit V1 exclusions
 
 V1 does not include:
 
