@@ -591,7 +591,7 @@ export function PlaybackControls({
     });
   }, [startsMs, tracks, tzOffsetMinutes]);
 
-  const viewSettings = (
+  const renderViewSettings = () => (
     <ViewSettingsFields
       preferences={displayPreferences}
       onPreferencesChange={onDisplayPreferencesChange}
@@ -668,7 +668,7 @@ export function PlaybackControls({
       </Select>
 
       <div className="hidden min-w-0 sm:block">
-        {viewSettings}
+        {renderViewSettings()}
       </div>
 
       {rangeSelection ? (
@@ -710,7 +710,7 @@ export function PlaybackControls({
             </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-4">
-            {viewSettings}
+            {renderViewSettings()}
           </div>
         </SheetContent>
       </Sheet>
