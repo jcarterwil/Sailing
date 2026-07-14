@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { analyzeRace } from "@/lib/analytics/analyze";
 import {
   clampCorrectionsToTrackSpan,
   type EntryResultCorrection,
@@ -10,23 +9,12 @@ import {
 } from "@/lib/analytics/corrections";
 import { columnLength, epochAt, finite } from "@/lib/analytics/internal";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
+import type { PerformanceCourseBuildResult } from "@/lib/analytics/performance/course";
 import {
-  buildCorrectedPerformanceCourse,
-  type PerformanceCourseBuildResult,
-} from "@/lib/analytics/performance/course";
-
-type ReviewPreviewRequest = {
-  id: number;
-  tracks: ProcessedTrack[];
-  corrections: RaceCorrections;
-};
-
-type ReviewPreviewResponse = {
-  id: number;
-  analysis: RaceAnalysis;
-  coursePreview: PerformanceCourseBuildResult;
-  entryResults: EntryResultCorrection[];
-};
+  buildReviewPreview,
+  type ReviewPreviewRequest,
+  type ReviewPreviewResponse,
+} from "@/components/replay/review-preview";
 
 const DEBOUNCE_MS = 200;
 
@@ -108,16 +96,11 @@ export function useReviewPreview(
         return;
       }
       try {
-        const next = analyzeRace(tracks, { corrections: clamped });
-        const nextCourse = buildCorrectedPerformanceCourse(
-          tracks,
-          next,
-          clamped,
-        );
+        const next = buildReviewPreview({ id, tracks, corrections: clamped });
         if (requestId.current === id) {
-          setPreview(next);
-          setCoursePreview(nextCourse);
-          setEntryResults(clamped.entryResults);
+          setPreview(next.analysis);
+          setCoursePreview(next.coursePreview);
+          setEntryResults(next.entryResults);
         }
       } catch {
         if (requestId.current === id) setPreview(baseline);

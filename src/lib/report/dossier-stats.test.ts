@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { VALID_PERFORMANCE_V1_FIXTURE } from "@/lib/analytics/performance/__fixtures__/valid-performance-v1";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
   analysisMatchesCurrentFleet,
@@ -106,6 +107,26 @@ describe("buildDossierStats", () => {
     const before = JSON.stringify(analysis);
     buildDossierStats(analysis);
     expect(JSON.stringify(analysis)).toBe(before);
+  });
+
+  it("adds bounded performance conclusions without time series or histogram data", () => {
+    const current = structuredClone(analysis);
+    current.performance = structuredClone(VALID_PERFORMANCE_V1_FIXTURE);
+    const payload = buildDossierStats(current);
+    expect(payload.performance).toMatchObject({
+      v: 1,
+      courseDistanceM: 3247,
+      legTypes: ["upwind", "downwind", "upwind", "downwind", "upwind"],
+      warningCount: 1,
+    });
+    expect(payload.performance?.entries).toHaveLength(6);
+    expect(payload.performance?.legs).toHaveLength(5);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('"samples"');
+    expect(serialized).not.toContain('"bins"');
+    expect(serialized).not.toContain('"distributions"');
+    expect(serialized).not.toContain('"bestIntervals"');
+    expect(serialized.length).toBeLessThan(100_000);
   });
 });
 

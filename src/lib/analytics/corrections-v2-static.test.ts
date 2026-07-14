@@ -11,6 +11,7 @@ const route = source("src/app/api/races/[raceId]/corrections/route.ts");
 const analyzer = source("src/lib/races/analyze-race.ts");
 const worker = source("src/components/replay/review-preview.worker.ts");
 const clientPreview = source("src/components/replay/use-review-preview.ts");
+const previewBuilder = source("src/components/replay/review-preview.ts");
 const migration = source("supabase/migrations/20260714140000_race_corrections_v2.sql");
 
 describe("RaceCorrections V2 integration", () => {
@@ -25,11 +26,13 @@ describe("RaceCorrections V2 integration", () => {
     expect(route).toContain("status: 400");
   });
 
-  it("uses the same corrected course adapter in server and worker previews", () => {
-    expect(analyzer).toContain("buildCorrectedPerformanceCourse(");
-    expect(worker).toContain("buildCorrectedPerformanceCourse(");
-    expect(clientPreview).toContain("buildCorrectedPerformanceCourse(");
-    expect(worker).toContain("entryResults: corrections.entryResults");
+  it("reuses the assembled corrected snapshot in server and worker previews", () => {
+    expect(analyzer).toContain("coursePreviewFromPerformance(analysis.performance!");
+    expect(worker).toContain("buildReviewPreview(event.data)");
+    expect(clientPreview).toContain("buildReviewPreview({ id, tracks, corrections: clamped })");
+    expect(previewBuilder).toContain("analyzeRace(request.tracks");
+    expect(previewBuilder).toContain("coursePreviewFromPerformance(analysis.performance!");
+    expect(previewBuilder).toContain("entryResults: request.corrections.entryResults");
     expect(route).toContain("coursePreview: result.coursePreview");
   });
 
