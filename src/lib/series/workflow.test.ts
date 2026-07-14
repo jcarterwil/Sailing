@@ -240,6 +240,22 @@ describe("projectSeriesWorkflowV1", () => {
       identity: "competitor",
       status: "dns",
     }));
+
+    const excluded = projectSeriesWorkflowV1(input({
+      competitors,
+      races: [race({
+        included: false,
+        officialResultsRevision: 1,
+        storedOfficialResults: ready.applyRaces[0].officialResults,
+      })],
+    }));
+    expect(excluded.status).toBe("ready");
+    expect(excluded.issues).not.toContainEqual(
+      expect.objectContaining({ code: "unexpected-official-row" }),
+    );
+    expect(excluded.applyRaces[0].officialResults).toContainEqual(
+      expect.objectContaining({ entryId: "dns:boat-charlie", status: "dns" }),
+    );
   });
 
   it("never carries confirmation when the draft omits its source boat", () => {

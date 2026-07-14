@@ -343,16 +343,16 @@ export function projectSeriesWorkflowV1(
       const resolution = resolvedIdentity(entry.sourceBoatId, competitors, aliases);
       return resolution.identity === "competitor" ? [resolution.boatId] : [];
     }));
-    const absentCompetitors = requireComplete
-      ? input.competitors
-          .filter((competitor) =>
-            competitor.role === "competitor" &&
-            !representedCompetitorIds.has(competitor.boatId))
-          .sort((left, right) => compareText(left.boatId, right.boatId))
-      : [];
+    const allAbsentCompetitors = input.competitors
+      .filter((competitor) =>
+        competitor.role === "competitor" &&
+        !representedCompetitorIds.has(competitor.boatId))
+      .sort((left, right) => compareText(left.boatId, right.boatId));
+    const absentCompetitors = allAbsentCompetitors.filter((competitor) =>
+      requireComplete || editedByEntryId.has(absentCompetitorEntryId(competitor.boatId)));
     const currentEntryIds = new Set([
       ...race.entries.map((entry) => entry.entryId),
-      ...absentCompetitors.map((competitor) => absentCompetitorEntryId(competitor.boatId)),
+      ...allAbsentCompetitors.map((competitor) => absentCompetitorEntryId(competitor.boatId)),
     ]);
     for (const entryId of editedByEntryId.keys()) {
       if (!currentEntryIds.has(entryId)) {
@@ -458,7 +458,7 @@ export function projectSeriesWorkflowV1(
         confirmed: edited?.confirmed === true && validDnsDecision &&
           edited.sourceBoatId === competitor.boatId,
       };
-      if (!row.confirmed) {
+      if (requireComplete && !row.confirmed) {
         issues.push({
           code: "official-result-unconfirmed",
           raceId: race.raceId,
