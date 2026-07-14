@@ -102,6 +102,17 @@ export const PERFORMANCE_PASSAGE_MAX_RADIUS_M = 75;
 export const PERFORMANCE_LINE_ENDPOINT_TOLERANCE_M = 5;
 export const PERFORMANCE_START_OCS_DISTANCE_M = 2;
 
+/** Multi-race Low Point V1 contract bounds (#138). */
+export const SERIES_POINTS_SCALE = 100;
+export const SERIES_MAX_COMPETITORS = 200;
+export const SERIES_MAX_RACES = 100;
+export const SERIES_MAX_RESULTS_PER_RACE = 300;
+export const SERIES_MAX_DISCARD_THRESHOLDS = 20;
+export const SERIES_MAX_ISSUES = 100;
+export const SERIES_MAX_ID_CHARS = 200;
+export const SERIES_MAX_SOURCE_VERSION_CHARS = 120;
+export const SERIES_MAX_PENALTY_POINTS = 10_000;
+
 // Live ladder / leaderboard (#21).
 export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped boats
 export const LADDER_TREND_WINDOW_MS = 45_000; // lookback for gaining/losing glyph
