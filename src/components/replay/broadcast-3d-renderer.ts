@@ -359,6 +359,24 @@ function applyCamera(
   camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
 }
 
+function applyModelShadowPolicy(
+  THREE: typeof import("three"),
+  group: Group,
+  enabled: boolean,
+): void {
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const savedEligibility =
+      object.userData.broadcastShadowEligible;
+    if (typeof savedEligibility !== "boolean") {
+      object.userData.broadcastShadowEligible = object.castShadow;
+    }
+    object.castShadow =
+      enabled &&
+      object.userData.broadcastShadowEligible === true;
+  });
+}
+
 /**
  * Create the standalone renderer around an explicitly requested WebGL2
  * context. The caller owns publication timing; this object intentionally has
@@ -431,7 +449,9 @@ export function createBroadcastRenderer(
   sun.shadow.camera.near = 20;
   sun.shadow.camera.far = 2_500;
   sun.shadow.bias = -0.00025;
-  scene.add(sun);
+  const sunTarget = new THREE.Object3D();
+  sun.target = sunTarget;
+  scene.add(sunTarget, sun);
 
   const sunDisc = new THREE.Mesh(
     new THREE.SphereGeometry(75, 16, 12),
@@ -439,6 +459,35 @@ export function createBroadcastRenderer(
   );
   sunDisc.position.set(-900, 900, -2_300);
   scene.add(sunDisc);
+
+  const updateSunForFrame = (
+    frame: ReplayRenderFrame,
+    pose: BroadcastCameraPose,
+  ) => {
+    const centerX = pose.target.x;
+    const centerZ = pose.target.z;
+    let extentM = 90;
+    for (const boat of frame.boats) {
+      if (!boat.inTrack) continue;
+      const position = broadcastScenePosition(boat);
+      extentM = Math.max(
+        extentM,
+        Math.abs(position.x - centerX) + 24,
+        Math.abs(position.z - centerZ) + 24,
+      );
+    }
+    extentM = clamp(extentM, 90, 600);
+
+    sun.position.set(centerX - 700, 900, centerZ + 420);
+    sunTarget.position.set(centerX, 0, centerZ);
+    sunTarget.updateMatrixWorld();
+    sun.shadow.camera.left = -extentM;
+    sun.shadow.camera.right = extentM;
+    sun.shadow.camera.top = extentM;
+    sun.shadow.camera.bottom = -extentM;
+    sun.shadow.camera.updateProjectionMatrix();
+    sunDisc.position.set(centerX - 900, 900, centerZ - 2_300);
+  };
 
   let ocean = createOcean(THREE, adaptiveQuality.profile);
   scene.add(ocean.mesh);
@@ -514,10 +563,11 @@ export function createBroadcastRenderer(
       sun.shadow.mapSize.height = profile.shadowMapSize;
     }
     for (const model of models.values()) {
-      model.group.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) return;
-        object.castShadow = profile.dynamicShadows;
-      });
+      applyModelShadowPolicy(
+        THREE,
+        model.group,
+        profile.dynamicShadows,
+      );
     }
     rebuildOcean();
     resize(
@@ -534,8 +584,14 @@ export function createBroadcastRenderer(
     const group = createSailboatVisual(THREE, {
       hullColor: boat.color,
       identity: boat.boatName,
-      quality: adaptiveQuality.profile.tier,
     });
+    // The six-boat procedural fleet is deliberately bounded and stable. The
+    // adaptive tier targets the dominant costs: water, shadows, DPR, and FPS.
+    applyModelShadowPolicy(
+      THREE,
+      group,
+      adaptiveQuality.profile.dynamicShadows,
+    );
     const rigObject = group.getObjectByName(SAILBOAT_RIG_NAME);
     const selection = group.getObjectByName(SAILBOAT_SELECTION_NAME);
     const wakeVisual = createWake(THREE);
@@ -655,6 +711,7 @@ export function createBroadcastRenderer(
         frame.updateKind !== "continuous" || renderOptions.force === true,
       );
       applyCamera(camera, cameraPose);
+      updateSunForFrame(frame, cameraPose);
 
       webglRenderer.render(scene, camera);
       const renderMs = Math.max(0.01, clock() - renderStartedMs);
@@ -695,7 +752,10 @@ export function createBroadcastRenderer(
     },
     resize,
     setVisible(nextVisible) {
+      if (visible === nextVisible) return;
       visible = nextVisible;
+      // Do not treat time spent in a hidden tab as a sustained slow frame.
+      lastSourceMs = null;
     },
     setCameraMode(nextMode) {
       cameraMode = nextMode;
