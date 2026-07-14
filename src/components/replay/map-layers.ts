@@ -1,3 +1,5 @@
+import { boatIconOpacityExpression } from "@/components/replay/boats-3d-state";
+
 /**
  * Whether replay map sources/layers still need to be added for the current style.
  * Both `load` and `styledata` can fire on first paint; re-adding `"trails"` throws.
@@ -19,4 +21,20 @@ export function shouldAddReplayMapLayers(opts: {
   map: { getSource: (id: string) => unknown };
 }): boolean {
   return !opts.isAdding && needsReplayMapLayers(opts.map);
+}
+
+/** Keep labels/hit testing alive while switching only the arrow rendering. */
+export function applyBoatHullIconMode(
+  map: {
+    getLayer: (id: string) => unknown;
+    setPaintProperty: (layerId: string, name: string, value: unknown) => void;
+  },
+  hullsReady: boolean,
+): void {
+  if (!map.getLayer("boats")) return;
+  map.setPaintProperty(
+    "boats",
+    "icon-opacity",
+    boatIconOpacityExpression(hullsReady),
+  );
 }

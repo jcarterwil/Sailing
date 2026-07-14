@@ -8,6 +8,7 @@ The client-only race replay: a MapLibre map, a zustand playback clock, and a can
 - **React-rendered widgets subscribe narrowly and throttle** to ~10Hz (see the clock in `playback-controls.tsx`, Instruments, and the live `leaderboard.tsx`). Use `usePlaybackStore((s) => s.field)` selectors, not the whole store.
 - The single rAF clock lives in `race-replay.tsx` and calls `store.tick(dt)`. Don't add competing animation loops.
 - The query-gated helm POV spike (`?pov=1`) also renders from the playback-store subscription. Three.js must stay lazy-loaded, and the POV must never own an rAF loop.
+- The map's optional 3D hull layer follows the same rule: load Three only after the visible **3D hulls** control is enabled, read the shared sampled-frame ref inside MapLibre's custom render pass, and never call `triggerRepaint`, `setAnimationLoop`, or add another rAF. MapLibre owns the shared canvas/context; Three must not resize, clear, or force-loss that context.
 - **Wind for ladder / wind indicator:** resolve through `createReplayWindResolver` in `wind-resolution.ts`; `resolveTwdAt` remains the direction-only adapter used by replay consumers. Do not invent a second wind path.
 - **Start line / race clock:** `LoadedTrack.extras` carries VKX timerEvents/linePings (null for CSV). Derive `startsMs` in `race-replay.tsx` via `fleetStarts`; pass into MapView / PlaybackControls / Timeline. Resolve the line at scrub time with `startForLine` + `startLineAt` (upcoming gun pre-start, else active). Never fabricate a line from one end.
 

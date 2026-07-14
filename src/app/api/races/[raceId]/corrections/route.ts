@@ -116,9 +116,16 @@ export async function POST(
     span,
   });
   if (validation.errors.length > 0) {
+    const staleEntry = validation.errors.some((error) =>
+      /unknown race entry|not in this race/i.test(error));
     return NextResponse.json(
-      { error: "Invalid race corrections.", details: validation.errors },
-      { status: 400 },
+      {
+        error: staleEntry
+          ? "Race entries changed while corrections were being edited. Reload and review the current fleet."
+          : "Invalid race corrections.",
+        details: validation.errors,
+      },
+      { status: staleEntry ? 409 : 400 },
     );
   }
   const corrections = span
