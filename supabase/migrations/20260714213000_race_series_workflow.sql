@@ -1,6 +1,15 @@
 -- Organizer workflow state and atomic, service-mediated setup/snapshot writes.
 -- Official series decisions remain separate from analytical race evidence.
 
+-- Unchanged apply is idempotent only against the latest snapshot. A series can
+-- legitimately return to an older fingerprint after an intervening score, so
+-- fingerprints remain indexed but are no longer unique across history.
+alter table public.race_series_score_snapshots
+  drop constraint race_series_score_snapshots_fingerprint_unique;
+
+create index race_series_score_snapshots_fingerprint_idx
+  on public.race_series_score_snapshots (series_id, source_fingerprint);
+
 alter table public.race_series_races
   add column state text not null default 'scheduled',
   add column official_results jsonb not null default '[]'::jsonb,

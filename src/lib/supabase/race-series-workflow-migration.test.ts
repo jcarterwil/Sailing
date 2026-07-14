@@ -89,6 +89,10 @@ describe("race series organizer workflow migration", () => {
   });
 
   it("makes unchanged apply idempotent and changed apply append history", () => {
+    expect(migration).toContain(
+      "drop constraint race_series_score_snapshots_fingerprint_unique",
+    );
+    expect(migration).toContain("race_series_score_snapshots_fingerprint_idx");
     expect(migration).toContain("where snapshot.series_id = series_id_input");
     expect(migration).toMatch(
       /where snapshot\.series_id = series_id_input\s+order by snapshot\.revision desc\s+limit 1/,
