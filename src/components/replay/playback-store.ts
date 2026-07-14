@@ -26,9 +26,9 @@ interface PlaybackState {
   tick: (dtMs: number) => void;
 }
 
-// Per-frame consumers (map, timeline cursor) must use
-// usePlaybackStore.subscribe(...) and update imperatively; React-rendered
-// widgets should select narrowly and throttle.
+// The timeline cursor and the shared ReplayRenderFrameSource bridge subscribe
+// imperatively; renderer views consume that source instead of creating their
+// own store subscription. React-rendered widgets select narrowly and throttle.
 export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   t0: 0,
   t1: 1,
