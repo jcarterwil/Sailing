@@ -132,7 +132,7 @@ export default async function AdminUsersPage() {
               <TableBody>
                 {rows.map(({ authUser, profile, ownedBoats, crewAccess, boatAccess, status }) => (
                   <TableRow key={authUser.id}>
-                    <TableCell className="min-w-56">
+                    <TableCell className="min-w-44">
                       <div className="flex items-center gap-2 font-medium">
                         {profile?.display_name ?? authUser.email ?? "Unknown user"}
                         {profile?.is_admin && (
@@ -154,7 +154,7 @@ export default async function AdminUsersPage() {
                     <TableCell>
                       {ownedBoats.length > 0 ? ownedBoats.join(", ") : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="min-w-52">
+                    <TableCell className="min-w-44">
                       {crewAccess.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {crewAccess.map((access) => (
@@ -171,7 +171,7 @@ export default async function AdminUsersPage() {
                     </TableCell>
                     <TableCell>{formatDate(authUser.created_at)}</TableCell>
                     <TableCell>{formatDate(authUser.last_sign_in_at)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         {!profile?.is_admin && authUser.id !== user.id ? (
                           <ActAsOwnerButton
