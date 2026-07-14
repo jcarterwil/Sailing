@@ -4,36 +4,18 @@ import { FileText } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
-import type { RaceAnalysis } from "@/lib/analytics/types";
-import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import {
   buildRaceAnalyzeContext,
   parseEntryMeta,
   parseRaceMeta,
 } from "@/lib/races/meta";
 import { resolveSharedRace } from "@/lib/races/share";
+import {
+  analysisForEntryIds,
+  parseStoredRaceAnalysis,
+} from "@/lib/races/stored-analysis";
 
 export const dynamic = "force-dynamic";
-
-function parseStoredAnalysis(value: unknown): RaceAnalysis | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as { v?: unknown };
-  if (candidate.v !== 1) return null;
-  return value as RaceAnalysis;
-}
-
-function analysisForProcessedEntries(
-  analysis: RaceAnalysis | null,
-  processedEntryIds: string[],
-): RaceAnalysis | null {
-  if (!analysis) return null;
-  const analyzedIds = new Set(analysis.perEntry.map((e) => e.entryId));
-  if (analyzedIds.size !== processedEntryIds.length) return null;
-  for (const id of processedEntryIds) {
-    if (!analyzedIds.has(id)) return null;
-  }
-  return analysis;
-}
 
 export default async function SharedReplayPage({
   params,
@@ -70,7 +52,6 @@ export default async function SharedReplayPage({
     throw new Error(`Could not load race entries: ${entriesError.message}`);
   }
 
-  const analysis = parseStoredAnalysis(analysisRow?.analysis);
   const processed = (entries ?? []).filter(
     (e) => e.tracks?.status === "processed" && e.tracks.processed_path,
   );
@@ -117,16 +98,16 @@ export default async function SharedReplayPage({
     );
   }
 
-  const replayAnalysis = analysisIsFresh(
-    analysisRow?.computed_at,
-    processed.map((entry) => entry.tracks!.updated_at),
-    correctionsRow?.updated_at,
-  )
-    ? analysisForProcessedEntries(
-        analysis,
-        trackMetas.map((track) => track.entryId),
-      )
-    : null;
+  const parsedAnalysis = parseStoredRaceAnalysis({
+    value: analysisRow?.analysis,
+    computedAt: analysisRow?.computed_at,
+    processedTrackUpdatedAts: processed.map((entry) => entry.tracks!.updated_at),
+    correctionsUpdatedAt: correctionsRow?.updated_at,
+  });
+  const replayAnalysis = analysisForEntryIds(
+    parsedAnalysis.analysis,
+    trackMetas.map((track) => track.entryId),
+  );
 
   return (
     <main className="flex h-dvh flex-col">

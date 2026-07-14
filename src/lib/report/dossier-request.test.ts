@@ -20,7 +20,6 @@ const minimalStats: DossierStats = {
     source: "estimated",
     twdDeg: 280,
     twsKts: null,
-    samples: [],
     provenance: {
       source: "estimated",
       method: "fleet-heading-modes",
@@ -45,6 +44,7 @@ const minimalStats: DossierStats = {
   },
   entries: [],
   warnings: [],
+  performance: null,
 };
 
 const baseConfig: DossierAiConfig = {

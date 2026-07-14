@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-import type { RaceAnalysis } from "@/lib/analytics/types";
-import { analysisIsFresh } from "@/lib/races/analysis-freshness";
+import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import {
   analysisMatchesCurrentFleet,
   buildDossierStats,
@@ -144,22 +143,24 @@ export async function POST(
     return json({ error: "Analyze the race before generating a report." }, 400);
   }
 
-  const analysis = analysisResult.data.analysis as unknown as RaceAnalysis;
   const currentEntries = entriesResult.data ?? [];
+  const parsedAnalysis = parseStoredRaceAnalysis({
+    value: analysisResult.data.analysis,
+    computedAt: analysisResult.data.computed_at,
+    processedTrackUpdatedAts: currentEntries
+      .filter((entry) => entry.tracks?.status === "processed")
+      .map((entry) => entry.tracks!.updated_at),
+    correctionsUpdatedAt: correctionsResult.data?.updated_at,
+  });
+  const analysis = parsedAnalysis.analysis;
   if (
+    !analysis ||
     !analysisMatchesCurrentFleet(
       analysis,
       currentEntries.map((entry) => ({
         id: entry.id,
         processed: entry.tracks?.status === "processed",
       })),
-    ) ||
-    !analysisIsFresh(
-      analysisResult.data.computed_at,
-      currentEntries
-        .filter((entry) => entry.tracks?.status === "processed")
-        .map((entry) => entry.tracks!.updated_at),
-      correctionsResult.data?.updated_at,
     )
   ) {
     return json(

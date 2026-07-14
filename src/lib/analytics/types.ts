@@ -1,4 +1,5 @@
 import type { StoredRaceCorrections } from "@/lib/analytics/corrections";
+import type { PerformanceAnalysisV1 } from "@/lib/analytics/performance/types";
 
 export interface TrackPoint {
   t: number; // epoch ms UTC
@@ -290,6 +291,8 @@ export interface RaceAnalysis {
   perEntry: EntryAnalysis[];
   fleet: FleetAggregates;
   warnings: AnalysisWarning[];
+  /** Versioned compact Performance Overview snapshot; absent on legacy rows. */
+  performance?: PerformanceAnalysisV1;
   /** Present when wind-quality heuristics were run (Phase 2+). */
   windQuality?: WindQualityReport;
   /** Snapshot of corrections that produced this analysis, when any were applied. */

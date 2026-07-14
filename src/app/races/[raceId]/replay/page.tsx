@@ -5,13 +5,15 @@ import { ArrowLeft } from "lucide-react";
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
 import type { VideoMeta } from "@/components/replay/video-meta";
-import type { RaceAnalysis } from "@/lib/analytics/types";
-import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import {
   buildRaceAnalyzeContext,
   parseEntryMeta,
   parseRaceMeta,
 } from "@/lib/races/meta";
+import {
+  analysisForEntryIds,
+  parseStoredRaceAnalysis,
+} from "@/lib/races/stored-analysis";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { VideoTimingProvenance } from "@/lib/videos/timing";
@@ -23,27 +25,6 @@ import {
 import { isValidVideoTiming } from "@/lib/videos/replay-sync";
 
 export const dynamic = "force-dynamic";
-
-function parseStoredAnalysis(value: unknown): RaceAnalysis | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as { v?: unknown };
-  if (candidate.v !== 1) return null;
-  return value as RaceAnalysis;
-}
-
-/** Drop analysis that doesn't match the currently processed entry set. */
-function analysisForProcessedEntries(
-  analysis: RaceAnalysis | null,
-  processedEntryIds: string[],
-): RaceAnalysis | null {
-  if (!analysis) return null;
-  const analyzedIds = new Set(analysis.perEntry.map((e) => e.entryId));
-  if (analyzedIds.size !== processedEntryIds.length) return null;
-  for (const id of processedEntryIds) {
-    if (!analyzedIds.has(id)) return null;
-  }
-  return analysis;
-}
 
 function parseTimingProvenance(value: unknown): VideoTimingProvenance | null {
   return value === "telemetry" || value === "manual" ? value : null;
@@ -105,7 +86,6 @@ export default async function ReplayPage({
         .order("created_at", { ascending: true }),
     ]);
 
-  const analysis = parseStoredAnalysis(analysisRow?.analysis);
   const processed = (entries ?? []).filter(
     (e) => e.tracks?.status === "processed" && e.tracks.processed_path,
   );
@@ -207,16 +187,16 @@ export default async function ReplayPage({
     );
   }
 
-  const replayAnalysis = analysisIsFresh(
-    analysisRow?.computed_at,
-    processed.map((entry) => entry.tracks!.updated_at),
-    correctionsRow?.updated_at,
-  )
-    ? analysisForProcessedEntries(
-        analysis,
-        trackMetas.map((track) => track.entryId),
-      )
-    : null;
+  const parsedAnalysis = parseStoredRaceAnalysis({
+    value: analysisRow?.analysis,
+    computedAt: analysisRow?.computed_at,
+    processedTrackUpdatedAts: processed.map((entry) => entry.tracks!.updated_at),
+    correctionsUpdatedAt: correctionsRow?.updated_at,
+  });
+  const replayAnalysis = analysisForEntryIds(
+    parsedAnalysis.analysis,
+    trackMetas.map((track) => track.entryId),
+  );
 
   return (
     <main className="flex h-dvh flex-col">

@@ -3,6 +3,11 @@ import type {
   Maneuver,
   RaceAnalysis,
 } from "@/lib/analytics/types";
+import type {
+  PerformanceProvenanceV1,
+  PerformanceResultStatus,
+  PerformanceStartStatus,
+} from "@/lib/analytics/performance/types";
 
 type NullableNumber = number | null;
 
@@ -44,10 +49,50 @@ export interface DossierEntryStats {
 export interface DossierStats {
   schemaVersion: 1;
   race: RaceAnalysis["race"];
-  wind: RaceAnalysis["wind"];
+  wind: Omit<RaceAnalysis["wind"], "samples">;
   fleet: RaceAnalysis["fleet"];
   entries: DossierEntryStats[];
   warnings: AnalysisWarning[];
+  performance: DossierPerformanceSummary | null;
+}
+
+export interface DossierPerformanceEntrySummary {
+  entryId: string;
+  resultStatus: PerformanceResultStatus;
+  finishTimeMs: NullableNumber;
+  elapsedMs: NullableNumber;
+  rank: NullableNumber;
+  deltaMs: NullableNumber;
+  startStatus: PerformanceStartStatus;
+  startRank: NullableNumber;
+  timeToLineMs: NullableNumber;
+  dmg30M: NullableNumber;
+  vmg30Kts: NullableNumber;
+  resultProvenance: PerformanceProvenanceV1;
+  startProvenance: PerformanceProvenanceV1;
+}
+
+export interface DossierPerformanceLegSummary {
+  index: number;
+  type: RaceAnalysis["race"]["legs"][number]["type"];
+  fastestEntryId: string | null;
+  fastestElapsedMs: NullableNumber;
+  rankedEntryCount: number;
+  provenance: PerformanceProvenanceV1;
+}
+
+export interface DossierPerformanceSummary {
+  v: 1;
+  metricContract: "performance-overview-v1";
+  calculationVersion: string;
+  courseDistanceM: NullableNumber;
+  legTypes: Array<RaceAnalysis["race"]["legs"][number]["type"]>;
+  courseReviewRequired: boolean;
+  courseProvenance: PerformanceProvenanceV1;
+  entries: DossierPerformanceEntrySummary[];
+  legs: DossierPerformanceLegSummary[];
+  warningCount: number;
+  provenance: NonNullable<RaceAnalysis["performance"]>["provenance"];
 }
 
 export interface CurrentFleetEntry {
@@ -109,10 +154,17 @@ function toDossierManeuver(maneuver: Maneuver): DossierManeuver {
  * not invent boat names that are absent from the analysis contract.
  */
 export function buildDossierStats(analysis: RaceAnalysis): DossierStats {
+  const performance = analysis.performance;
+  const startByEntryId = new Map(performance?.start.entries.map((entry) => [entry.entryId, entry]));
   return {
     schemaVersion: 1,
     race: analysis.race,
-    wind: analysis.wind,
+    wind: {
+      source: analysis.wind.source,
+      twdDeg: analysis.wind.twdDeg,
+      twsKts: analysis.wind.twsKts,
+      provenance: analysis.wind.provenance,
+    },
     fleet: analysis.fleet,
     entries: analysis.perEntry.map(({ entryId, aggregates, maneuvers }) => ({
       entryId,
@@ -132,5 +184,47 @@ export function buildDossierStats(analysis: RaceAnalysis): DossierStats {
       maneuvers: maneuvers.map(toDossierManeuver),
     })),
     warnings: analysis.warnings,
+    performance: performance ? {
+      v: 1,
+      metricContract: performance.metricContract,
+      calculationVersion: performance.calculationVersion,
+      courseDistanceM: roundedNullable(performance.course.courseDistanceM, 1),
+      legTypes: performance.course.legs.map((leg) => leg.type),
+      courseReviewRequired: performance.course.reviewRequired,
+      courseProvenance: performance.course.provenance,
+      entries: performance.results.map((result) => {
+        const start = startByEntryId.get(result.entryId)!;
+        return {
+          entryId: result.entryId,
+          resultStatus: result.status,
+          finishTimeMs: result.finish?.timeMs ?? null,
+          elapsedMs: result.elapsedMs,
+          rank: result.rank,
+          deltaMs: result.deltaMs,
+          startStatus: start.status,
+          startRank: start.rank,
+          timeToLineMs: start.timeToLineMs,
+          dmg30M: roundedNullable(start.dmg30M, 1),
+          vmg30Kts: roundedNullable(start.vmg30Kts),
+          resultProvenance: result.provenance,
+          startProvenance: start.provenance,
+        };
+      }),
+      legs: performance.legs.map((leg) => {
+        const ranked = leg.metrics.filter((metric) => metric.rank !== null);
+        const fastest = [...ranked].sort((left, right) =>
+          left.rank! - right.rank! || left.entryId.localeCompare(right.entryId))[0];
+        return {
+          index: leg.index,
+          type: leg.type,
+          fastestEntryId: fastest?.entryId ?? null,
+          fastestElapsedMs: fastest?.elapsedMs ?? null,
+          rankedEntryCount: ranked.length,
+          provenance: leg.provenance,
+        };
+      }),
+      warningCount: performance.warnings.length,
+      provenance: performance.provenance,
+    } : null,
   };
 }

@@ -12,6 +12,7 @@ import {
   hasMismatchedColumns,
 } from "@/lib/analytics/internal";
 import { detectManeuvers } from "@/lib/analytics/maneuvers";
+import { buildPerformanceAnalysis } from "@/lib/analytics/performance/assemble";
 import { buildRaceStructure, detectRaceWindow } from "@/lib/analytics/race";
 import type {
   AnalysisWarning,
@@ -202,5 +203,6 @@ export function analyzeRace(
   };
   if (windQuality) result.windQuality = windQuality;
   if (activeCorrections) result.appliedCorrections = activeCorrections;
+  result.performance = buildPerformanceAnalysis(fleetTracks, result, corrections);
   return result;
 }

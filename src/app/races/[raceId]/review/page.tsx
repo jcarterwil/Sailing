@@ -1,24 +1,21 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ReviewPageClient } from "@/app/races/[raceId]/review/review-page-client";
-import type { RaceAnalysis } from "@/lib/analytics/types";
 import {
   EMPTY_CORRECTIONS,
   normalizeCorrections,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
-import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
+import {
+  analysisForEntryIds,
+  parseStoredRaceAnalysis,
+} from "@/lib/races/stored-analysis";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { TrackMeta } from "@/components/replay/track-loader";
 
 export const dynamic = "force-dynamic";
-
-function parseStoredAnalysis(value: unknown): RaceAnalysis | null {
-  if (!value || typeof value !== "object") return null;
-  return value as RaceAnalysis;
-}
 
 export default async function RaceReviewPage({
   params,
@@ -95,11 +92,15 @@ export default async function RaceReviewPage({
   }
   if (trackMetas.length === 0) notFound();
 
-  const analysis = parseStoredAnalysis(analysisRow?.analysis);
-  const fresh = analysisIsFresh(
-    analysisRow?.computed_at,
-    processed.map((entry) => entry.tracks!.updated_at),
-    correctionsRow?.updated_at,
+  const parsedAnalysis = parseStoredRaceAnalysis({
+    value: analysisRow?.analysis,
+    computedAt: analysisRow?.computed_at,
+    processedTrackUpdatedAts: processed.map((entry) => entry.tracks!.updated_at),
+    correctionsUpdatedAt: correctionsRow?.updated_at,
+  });
+  const analysis = analysisForEntryIds(
+    parsedAnalysis.analysis,
+    processed.map((entry) => entry.id),
   );
   const initialCorrections: RaceCorrections = correctionsRow
     ? normalizeCorrections(correctionsRow.corrections)
@@ -111,8 +112,8 @@ export default async function RaceReviewPage({
       raceName={race.name}
       raceMeta={parseRaceMeta(race.conditions, race.tags, race.timezone)}
       trackMetas={trackMetas}
-      initialAnalysis={fresh ? analysis : null}
-      analysisStale={!fresh && analysis != null}
+      initialAnalysis={analysis}
+      analysisStale={parsedAnalysis.status === "stale"}
       initialCorrections={initialCorrections}
       correctionsUpdatedAt={correctionsRow?.updated_at ?? null}
     />

@@ -5,10 +5,8 @@ import {
   normalizeCorrections,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
-import {
-  buildCorrectedPerformanceCourse,
-  type PerformanceCourseBuildResult,
-} from "@/lib/analytics/performance/course";
+import { coursePreviewFromPerformance } from "@/lib/analytics/performance/assemble";
+import type { PerformanceCourseBuildResult } from "@/lib/analytics/performance/course";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
@@ -141,11 +139,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   }
 
   const analysis = analyzeRace(tracks, { corrections: loadedCorrections.corrections });
-  const coursePreview = buildCorrectedPerformanceCourse(
-    tracks,
-    analysis,
-    loadedCorrections.corrections,
-  );
+  const coursePreview = coursePreviewFromPerformance(analysis.performance!);
   const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
     await Promise.all([
       admin
