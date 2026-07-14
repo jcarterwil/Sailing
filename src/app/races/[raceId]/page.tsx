@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
+import { listActiveBoats } from "@/lib/boats/active-boats";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
@@ -62,6 +63,7 @@ export default async function RaceManagePage({
     { data: correctionsRow },
     { data: videos, error: videosError },
     { data: profile },
+    activeBoats,
   ] = await Promise.all([
       supabase
         .from("race_entries")
@@ -93,6 +95,7 @@ export default async function RaceManagePage({
         .eq("race_id", raceId)
         .order("created_at", { ascending: false }),
       supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
+      listActiveBoats(supabase),
     ]);
   if (entriesError) {
     throw new Error(`Could not load race entries: ${entriesError.message}`);
@@ -146,6 +149,10 @@ export default async function RaceManagePage({
     };
   });
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
+  const enteredBoatIds = new Set(
+    (entries ?? []).flatMap((entry) => (entry.boats ? [entry.boats.id] : [])),
+  );
+  const availableFleetBoats = activeBoats.filter((boat) => !enteredBoatIds.has(boat.id));
   const entryNameById = new Map(
     panelEntries.map((entry) => [entry.entryId, entry.boatName]),
   );
@@ -308,7 +315,7 @@ export default async function RaceManagePage({
                 <CardTitle>Fleet tracks</CardTitle>
                 <CardDescription>
                   {isOrganizer
-                    ? "Drop every boat's VKX or CSV file — one boat is created per file."
+                    ? "Select files, then confirm each file's existing boat or explicitly create an unclaimed boat."
                     : "Upload your own boat's VKX or CSV track."}
                 </CardDescription>
               </div>
@@ -318,7 +325,12 @@ export default async function RaceManagePage({
             </div>
           </CardHeader>
           <CardContent>
-            <UploadPanel raceId={race.id} isOrganizer={isOrganizer} entries={panelEntries} />
+            <UploadPanel
+              raceId={race.id}
+              isOrganizer={isOrganizer}
+              entries={panelEntries}
+              boatOptions={isOrganizer ? availableFleetBoats : []}
+            />
           </CardContent>
         </Card>
 
