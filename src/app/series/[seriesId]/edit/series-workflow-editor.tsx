@@ -123,6 +123,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   const [setupError, setSetupError] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [setupDirty, setSetupDirty] = useState(false);
 
   const raceById = useMemo(
     () => new Map(model.availableRaces.map((race) => [race.id, race])),
@@ -143,15 +144,23 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
     .filter((entry): entry is [string, "competitor"] => entry[1] === "competitor")
     .map(([boatId]) => boatId);
 
-  function markChanged() {
+  function markSetupChanged() {
+    setSetupDirty(true);
     setPreview(null);
+    setScoreError(null);
+    setNotice(null);
+  }
+
+  function markOfficialChanged() {
+    setPreview(null);
+    setScoreError(null);
     setNotice(null);
   }
 
   function updateRace(index: number, patch: Partial<SetupRace>) {
     setLinkedRaces((current) => current.map((race, raceIndex) =>
       raceIndex === index ? { ...race, ...patch } : race));
-    markChanged();
+    markSetupChanged();
   }
 
   function moveRace(index: number, direction: -1 | 1) {
@@ -162,7 +171,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
-    markChanged();
+    markSetupChanged();
   }
 
   function setIdentity(boatId: string, identity: "unresolved" | "competitor" | "guest" | "alias") {
@@ -181,7 +190,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
       }
       return next;
     });
-    markChanged();
+    markSetupChanged();
   }
 
   function saveSetup() {
@@ -230,7 +239,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
       [raceId]: (current[raceId] ?? []).map((row) =>
         row.entryId === entryId ? { ...row, ...patch } : row),
     }));
-    markChanged();
+    markOfficialChanged();
   }
 
   function draftPayload() {
@@ -243,6 +252,10 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   function runPreview() {
     setScoreError(null);
     setNotice(null);
+    if (setupDirty) {
+      setScoreError("Save setup changes before previewing official results.");
+      return;
+    }
     startTransition(async () => {
       try {
         const response = await previewSeriesScoring({
@@ -263,6 +276,10 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
   function applyPreview() {
     setScoreError(null);
     setNotice(null);
+    if (setupDirty) {
+      setScoreError("Save setup changes before applying a scoring snapshot.");
+      return;
+    }
     startTransition(async () => {
       try {
         const result = await applySeriesScoring({
@@ -321,11 +338,11 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>1. Series setup</CardTitle>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={toggleArchive} disabled={pending}>
+              <Button variant="outline" onClick={toggleArchive} disabled={pending || setupDirty}>
                 {model.series.archivedAt ? <Undo2 className="size-4" /> : <Archive className="size-4" />}
                 {model.series.archivedAt ? "Restore" : "Archive"}
               </Button>
-              <Button onClick={saveSetup} disabled={pending}>
+              <Button onClick={saveSetup} disabled={pending || !setupDirty}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save setup
               </Button>
@@ -338,14 +355,14 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
               <Label htmlFor="series-editor-name">Name</Label>
               <Input id="series-editor-name" value={name} onChange={(event) => {
                 setName(event.target.value);
-                markChanged();
+                markSetupChanged();
               }} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="series-editor-venue">Venue</Label>
               <Input id="series-editor-venue" value={venue} onChange={(event) => {
                 setVenue(event.target.value);
-                markChanged();
+                markSetupChanged();
               }} />
             </div>
             <div className="space-y-2">
@@ -356,7 +373,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                 placeholder="America/Detroit"
                 onChange={(event) => {
                   setTimezone(event.target.value);
-                  markChanged();
+                  markSetupChanged();
                 }}
               />
             </div>
@@ -364,14 +381,14 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
               <Label htmlFor="series-editor-start">Starts on</Label>
               <Input id="series-editor-start" type="date" value={startsOn} onChange={(event) => {
                 setStartsOn(event.target.value);
-                markChanged();
+                markSetupChanged();
               }} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="series-editor-end">Ends on</Label>
               <Input id="series-editor-end" type="date" value={endsOn} onChange={(event) => {
                 setEndsOn(event.target.value);
-                markChanged();
+                markSetupChanged();
               }} />
             </div>
           </div>
@@ -390,7 +407,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                 checked={config.countGuestsInPopulation}
                 onCheckedChange={(checked) => {
                   setConfig((current) => ({ ...current, countGuestsInPopulation: checked }));
-                  markChanged();
+                  markSetupChanged();
                 }}
               />
             </div>
@@ -408,7 +425,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                           [status]: { ...current.statusScores[status], population },
                         },
                       }));
-                      markChanged();
+                      markSetupChanged();
                     }}
                   >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -435,7 +452,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                             [status]: { ...current.statusScores[status], addPoints },
                           },
                         }));
-                        markChanged();
+                        markSetupChanged();
                       }}
                     />
                   </div>
@@ -449,7 +466,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                 value={discardText}
                 onChange={(event) => {
                   setDiscardText(event.target.value);
-                  markChanged();
+                  markSetupChanged();
                 }}
                 placeholder="0:0, 5:1, 7:2"
               />
@@ -516,7 +533,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                         </Button>
                         <Button variant="outline" size="icon-sm" aria-label="Remove race" onClick={() => {
                           setLinkedRaces((current) => current.filter((item) => item.raceId !== linked.raceId));
-                          markChanged();
+                          markSetupChanged();
                         }}>
                           <Trash2 className="size-4" />
                         </Button>
@@ -539,7 +556,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                       discardEligible: true,
                       state: "scheduled",
                     }]);
-                    markChanged();
+                    markSetupChanged();
                   }}
                 >
                   <span className="min-w-0 truncate">{race.name}</span>
@@ -584,7 +601,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                             value={aliasTargets[boatId]}
                             onValueChange={(canonicalBoatId) => {
                               setAliasTargets((current) => ({ ...current, [boatId]: canonicalBoatId }));
-                              markChanged();
+                              markSetupChanged();
                             }}
                           >
                             <SelectTrigger className="w-full"><SelectValue placeholder="Canonical competitor" /></SelectTrigger>
@@ -613,8 +630,21 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
         </CardHeader>
         <CardContent className="space-y-6">
           <p className="text-sm text-muted-foreground">
-            Performance results seed these rows. The organizer must confirm status, place/tie, and penalty before a completed included race can score.
+            Performance results seed these rows from the last saved setup. The organizer must confirm status, place/tie, and penalty before a completed included race can score.
           </p>
+          {setupDirty ? (
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" aria-hidden="true" />
+              <AlertTitle>Save setup before confirming results</AlertTitle>
+              <AlertDescription>
+                Race order, identity, and scoring-rule edits are not persisted yet. Official rows, Preview, and Apply stay disabled until Save setup reloads current evidence.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <fieldset
+            disabled={setupDirty || pending}
+            className={setupDirty ? "space-y-6 opacity-60" : "space-y-6"}
+          >
           {model.races.length ? model.races.map((race) => {
             const rows = draftRows[race.raceId] ?? [];
             return (
@@ -636,7 +666,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
                         confirmed: row.identity !== "unresolved",
                       })),
                     }));
-                    markChanged();
+                    markOfficialChanged();
                   }}>
                     Confirm resolved rows
                   </Button>
@@ -749,6 +779,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
               Save at least one selected race before confirming official results.
             </p>
           )}
+          </fieldset>
         </CardContent>
       </Card>
 
@@ -757,13 +788,13 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>3. Preview and apply</CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={runPreview} disabled={pending || model.races.length === 0}>
+              <Button variant="outline" onClick={runPreview} disabled={pending || setupDirty || model.races.length === 0}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : null}
                 Preview scoring
               </Button>
               <Button
                 onClick={applyPreview}
-                disabled={pending || preview?.projection.status !== "ready" || !preview.projection.result}
+                disabled={pending || setupDirty || preview?.projection.status !== "ready" || !preview.projection.result}
               >
                 Apply snapshot
               </Button>
