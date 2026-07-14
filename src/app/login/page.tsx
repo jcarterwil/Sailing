@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Waves } from "lucide-react";
 
 import { LoginForm } from "@/app/login/login-form";
+import { getSafeNextPath } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -11,13 +12,19 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const rawNext = (await searchParams).next;
+  const next = getSafeNextPath(Array.isArray(rawNext) ? rawNext[0] ?? null : rawNext ?? null);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect("/dashboard");
+    redirect(next);
   }
 
   return (
@@ -32,7 +39,7 @@ export default async function LoginPage() {
           </span>
           Sailing
         </Link>
-        <LoginForm />
+        <LoginForm next={next} />
       </div>
     </main>
   );

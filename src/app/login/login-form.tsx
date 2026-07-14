@@ -16,13 +16,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { getAuthCompletionPath } from "@/lib/boats/owner-invitations";
 import { createClient } from "@/lib/supabase/client";
 
 type Notice = { tone: "success" | "error"; message: string } | null;
 
 const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED?.trim() === "true";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState<"email" | "google" | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -36,7 +37,7 @@ export function LoginForm() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin + "/auth/complete?next=/dashboard",
+        emailRedirectTo: window.location.origin + getAuthCompletionPath(next),
         shouldCreateUser: true,
       },
     });
@@ -57,7 +58,7 @@ export function LoginForm() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + "/auth/complete?next=/dashboard",
+        redirectTo: window.location.origin + getAuthCompletionPath(next),
       },
     });
 

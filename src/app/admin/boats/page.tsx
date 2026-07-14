@@ -48,7 +48,7 @@ export default async function AdminBoatsPage() {
     <>
       <PageHeader
         title="Boats"
-        description="Pre-register boats for racers before they sign up. Each boat gets a claim code and optional invite email."
+        description="Invite one canonical owner by link or email. Add everyone else under Crew access as an Editor or Viewer."
       />
 
       <section className="py-8">
@@ -59,7 +59,8 @@ export default async function AdminBoatsPage() {
                 <CardTitle>Fleet</CardTitle>
                 <CardDescription>
                   {rows.length} boat{rows.length === 1 ? "" : "s"} ·{" "}
-                  {rows.filter((r) => r.ownerId).length} claimed
+                  {rows.filter((r) => r.ownerId).length} owned ·{" "}
+                  {rows.filter((r) => r.claimCode).length} pending
                 </CardDescription>
               </div>
               <CreateBoatButton />
