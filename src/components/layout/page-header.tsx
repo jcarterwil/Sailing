@@ -31,7 +31,7 @@ export function PageHeader({
       {backHref ? (
         <Link
           href={backHref}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-2 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {backLabel}
@@ -50,7 +50,9 @@ export function PageHeader({
           {children}
         </div>
         {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          <div className="flex flex-wrap items-center gap-2 [&_[data-slot=button]]:min-h-11">
+            {actions}
+          </div>
         ) : null}
       </div>
     </header>

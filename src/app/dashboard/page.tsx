@@ -3,9 +3,8 @@ import { redirect } from "next/navigation";
 import { CalendarDays, Sailboat, Ticket, UserPlus, Users } from "lucide-react";
 
 import { CreateRaceDialog } from "@/app/races/create-race-dialog";
-import { AppNav } from "@/components/layout/app-nav";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageShell } from "@/components/layout/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,13 +42,11 @@ export default async function DashboardPage() {
   const isAdmin = profile?.is_admin ?? false;
 
   return (
-    <>
-      <AppNav
-        email={user.email ?? ""}
-        displayName={profile?.display_name}
-        isAdmin={isAdmin}
-      />
-      <PageShell>
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={isAdmin}
+    >
         <PageHeader
           title={isAdmin ? "Admin dashboard" : "Racer dashboard"}
           description={
@@ -178,7 +175,6 @@ export default async function DashboardPage() {
           </ul>
         </section>
       )}
-      </PageShell>
-    </>
+    </AuthenticatedShell>
   );
 }

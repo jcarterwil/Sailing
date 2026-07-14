@@ -1,8 +1,10 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Users } from "lucide-react";
 
 import { CrewManager, type CrewRow } from "@/app/boats/[boatId]/crew/crew-manager";
+import { getBoatHref } from "@/components/layout/app-nav-model";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -28,9 +30,10 @@ export default async function BoatCrewPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: canManage, error: accessError } = await supabase.rpc("can_manage_boat", {
-    bid: boatId,
-  });
+  const [{ data: profile }, { data: canManage, error: accessError }] = await Promise.all([
+    supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
+    supabase.rpc("can_manage_boat", { bid: boatId }),
+  ]);
   if (accessError) throw new Error(`Could not check boat access: ${accessError.message}`);
   if (!canManage) redirect("/dashboard");
 
@@ -78,27 +81,34 @@ export default async function BoatCrewPage({
   });
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-5xl px-6 py-8 sm:px-10 lg:px-12">
-      <header className="border-b border-border/70 pb-6">
-        <Link
-          href="/dashboard"
-          className="mb-4 inline-flex w-fit text-sm text-muted-foreground hover:text-foreground"
-        >
-          Back to dashboard
-        </Link>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+      width="prose"
+    >
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
             <Users className="size-6 text-primary" aria-hidden="true" />
             {boat.name} crew
-          </h1>
+          </span>
+        }
+        description={
+          <>
+            Owner: {boat.owner?.display_name ?? ownerAuth?.email ?? "Unclaimed"}. Viewers can open
+            this boat&apos;s races and replays. Editors can also upload tracks and edit this
+            boat&apos;s entry data.
+          </>
+        }
+        backHref={getBoatHref(boat.id)}
+        backLabel={`Back to ${boat.name}`}
+      >
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           {boat.sail_number && <Badge variant="outline">#{boat.sail_number}</Badge>}
           {boat.boat_class && <Badge variant="secondary">{boat.boat_class}</Badge>}
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Owner: {boat.owner?.display_name ?? ownerAuth?.email ?? "Unclaimed"}. Viewers can open this
-          boat&apos;s races and replays. Editors can also upload tracks and edit this boat&apos;s entry data.
-        </p>
-      </header>
+      </PageHeader>
 
       <section className="py-8">
         <Card className="bg-card/70">
@@ -113,6 +123,6 @@ export default async function BoatCrewPage({
           </CardContent>
         </Card>
       </section>
-    </main>
+    </AuthenticatedShell>
   );
 }

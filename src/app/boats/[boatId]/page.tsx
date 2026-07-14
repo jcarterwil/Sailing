@@ -3,9 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { CalendarDays, Users } from "lucide-react";
 
 import { BoatSettingsForm } from "@/app/boats/[boatId]/boat-settings-form";
-import { AppNav } from "@/components/layout/app-nav";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageShell } from "@/components/layout/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,13 +65,11 @@ export default async function BoatHubPage({
       .join(" · ") || "Boat";
 
   return (
-    <>
-      <AppNav
-        email={user.email ?? ""}
-        displayName={profile?.display_name}
-        isAdmin={profile?.is_admin ?? false}
-      />
-      <PageShell>
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+    >
         <PageHeader
           title={boat.name}
           description={subtitle}
@@ -156,7 +153,6 @@ export default async function BoatHubPage({
             </CardContent>
           </Card>
         </section>
-      </PageShell>
-    </>
+    </AuthenticatedShell>
   );
 }
