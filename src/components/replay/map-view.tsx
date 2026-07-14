@@ -359,7 +359,7 @@ export function MapView({
         data: trailGeoJson(
           tracks,
           frame.timeMs,
-          trailMode === "tail" ? TAIL_SECONDS * 1_000 : null,
+          currentTrailMode === "tail"\n            ? TAIL_SECONDS * 1_000\n            : null,
         ),
       });
       map.addLayer({
