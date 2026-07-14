@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Bot } from "lucide-react";
 
 import { AiSettingsForm } from "@/app/admin/ai/ai-settings-form";
 import { ReportAiSettingsForm } from "@/app/admin/ai/report-ai-settings-form";
+import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEFAULT_AI_MODEL, listAvailableAiModels } from "@/lib/ai/settings";
 import {
@@ -38,22 +37,11 @@ export default async function AdminAiPage() {
   ]);
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-3xl px-6 py-8 sm:px-10 lg:px-12">
-      <header className="border-b border-border/70 pb-6">
-        <Link
-          href="/dashboard"
-          className="mb-4 inline-flex w-fit text-sm text-muted-foreground hover:text-foreground"
-        >
-          Back to dashboard
-        </Link>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          <Bot className="size-6 text-primary" aria-hidden="true" />
-          AI settings
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Control the model used by server-side AI features without changing a deployment.
-        </p>
-      </header>
+    <div className="max-w-3xl">
+      <PageHeader
+        title="AI settings"
+        description="Control the model used by server-side AI features without changing a deployment."
+      />
 
       <section className="py-8">
         <Card className="bg-card/70">
@@ -96,6 +84,6 @@ export default async function AdminAiPage() {
           </CardContent>
         </Card>
       </section>
-    </main>
+    </div>
   );
 }
