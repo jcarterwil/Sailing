@@ -15,6 +15,7 @@ import {
   normalizeTags,
   type RaceConditions,
 } from "@/lib/races/meta";
+import { normalizeOwnerInvitationCode } from "@/lib/boats/owner-invitations";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -249,7 +250,12 @@ export async function claimBoat(boatId: string) {
 
   const { data: updated, error } = await admin
     .from("boats")
-    .update({ owner_id: user.id, updated_at: new Date().toISOString() })
+    .update({
+      owner_id: user.id,
+      claim_email: null,
+      claim_code: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", boatId)
     .is("owner_id", null)
     .select("id");
@@ -259,30 +265,26 @@ export async function claimBoat(boatId: string) {
 }
 
 export async function claimBoatByCode(code: string) {
-  const { user } = await requireUser();
-  const normalized = code.trim().toUpperCase();
+  const { supabase } = await requireUser();
+  const normalized = normalizeOwnerInvitationCode(code);
   if (!normalized) throw new Error("Enter a claim code.");
 
-  // Service role: the boats UPDATE policy blocks the claimant (not owner/admin),
-  // and the code lookup must match exactly including the unclaimed guard.
-  const admin = createAdminClient();
-  const { data: boat } = await admin
-    .from("boats")
-    .select("id, owner_id")
-    .eq("claim_code", normalized)
-    .is("owner_id", null)
-    .maybeSingle();
-  if (!boat) throw new Error("Invalid or already-claimed code.");
+  // The security-definer function locks the invitation row, changes owner_id,
+  // and clears both claim fields in one transaction. It supports an initial
+  // owner and a transfer without exposing the bearer token through table RLS.
+  const { data, error } = await supabase.rpc("accept_boat_owner_invitation", {
+    invitation_code: normalized,
+  });
+  const accepted = data?.[0];
+  if (error || !accepted) {
+    throw new Error("This owner invitation is invalid, expired, or already used.");
+  }
 
-  const { data: updated, error } = await admin
-    .from("boats")
-    .update({ owner_id: user.id, updated_at: new Date().toISOString() })
-    .eq("id", boat.id)
-    .is("owner_id", null)
-    .select("id");
-  if (error) throw new Error(`Could not claim boat: ${error.message}`);
-  if (!updated?.length) throw new Error("Code was just claimed by someone else.");
   revalidatePath("/dashboard");
+  revalidatePath("/boats");
+  revalidatePath(`/boats/${accepted.boat_id}`);
+  revalidatePath("/admin/boats");
+  return { boatId: accepted.boat_id, transferred: accepted.transferred };
 }
 
 export async function updateEntryMeta(

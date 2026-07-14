@@ -659,6 +659,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_boat_owner_invitation: {
+        Args: { invitation_code: string }
+        Returns: {
+          boat_id: string
+          transferred: boolean
+        }[]
+      }
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }

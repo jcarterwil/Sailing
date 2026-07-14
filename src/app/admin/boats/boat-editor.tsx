@@ -1,14 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { Copy, Mail, Plus, RefreshCw, Trash2, UserCheck } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  ArrowRightLeft,
+  Copy,
+  Link2,
+  Mail,
+  Plus,
+  RefreshCw,
+  Trash2,
+  UserCheck,
+} from "lucide-react";
 
 import {
   clearClaim,
   createBoat,
   inviteBoatOwner,
   regenerateClaimCode,
+  startOwnershipTransfer,
   updateBoat,
 } from "@/app/admin/actions";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { getOwnerInvitationUrl } from "@/lib/boats/owner-invitations";
 
 export interface BoatRow {
   id: string;
@@ -52,24 +63,73 @@ const EMPTY_FORM: BoatForm = {
   claimEmail: "",
 };
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+function useCopyFeedback() {
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  function showCopied() {
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+
+  return { copied, showCopied };
+}
+
+function CopyButton({
+  value,
+  label,
+  displayValue = value,
+  monospace = true,
+}: {
+  value: string;
+  label: string;
+  displayValue?: string;
+  monospace?: boolean;
+}) {
+  const { copied, showCopied } = useCopyFeedback();
   if (!value) return null;
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className="gap-1 font-mono"
+      className={`gap-1 ${monospace ? "font-mono" : ""}`}
       aria-label={label}
       onClick={async () => {
         await navigator.clipboard.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        showCopied();
       }}
     >
       <Copy className="size-3.5" aria-hidden="true" />
-      {copied ? "Copied" : value}
+      {copied ? "Copied" : displayValue}
+    </Button>
+  );
+}
+
+function CopyInvitationLinkButton({ code }: { code: string }) {
+  const { copied, showCopied } = useCopyFeedback();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="gap-1"
+      onClick={async () => {
+        await navigator.clipboard.writeText(getOwnerInvitationUrl(window.location.origin, code));
+        showCopied();
+      }}
+    >
+      <Link2 className="size-3.5" aria-hidden="true" />
+      {copied ? "Copied" : "Copy owner link"}
     </Button>
   );
 }
@@ -126,8 +186,8 @@ export function CreateBoatButton() {
         <DialogHeader>
           <DialogTitle>Add a boat</DialogTitle>
           <DialogDescription>
-            Pre-register a boat for a racer. They can claim it by signing up with the matching
-            email, or by entering the generated code at /claim.
+            Create a pending owner invitation. The recipient becomes owner only after opening the
+            link, signing in, and accepting.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -142,7 +202,7 @@ export function CreateBoatButton() {
             <div className="space-y-0.5">
               <Label htmlFor="send-invite">Send invite email</Label>
               <p className="text-xs text-muted-foreground">
-                Creates the racer&apos;s account now and emails a sign-in link.
+                Emails the same owner link that you can copy after creation.
               </p>
             </div>
             <Switch
@@ -167,9 +227,11 @@ export function CreateBoatButton() {
 function BoatFormFields({
   form,
   onChange,
+  includeClaimEmail = true,
 }: {
   form: BoatForm;
   onChange: (form: BoatForm) => void;
+  includeClaimEmail?: boolean;
 }) {
   return (
     <>
@@ -203,16 +265,21 @@ function BoatFormFields({
           />
         </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="claim-email">Claim email</Label>
-        <Input
-          id="claim-email"
-          type="email"
-          value={form.claimEmail}
-          onChange={(e) => onChange({ ...form, claimEmail: e.target.value })}
-          placeholder="racer@example.com"
-        />
-      </div>
+      {includeClaimEmail && (
+        <div className="space-y-2">
+          <Label htmlFor="claim-email">Owner email (optional)</Label>
+          <Input
+            id="claim-email"
+            type="email"
+            value={form.claimEmail}
+            onChange={(e) => onChange({ ...form, claimEmail: e.target.value })}
+            placeholder="racer@example.com"
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave blank to invite the owner by copied link only.
+          </p>
+        </div>
+      )}
     </>
   );
 }
@@ -293,12 +360,11 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
     startTransition(async () => {
       try {
         const res = await inviteBoatOwner(row.id);
-        if (res?.alreadyClaimed) setNotice("Boat already claimed.");
-        else if (res?.alreadyRegistered && res?.claimedNow)
-          setNotice("User already registered — boat claimed for them.");
-        else if (res?.alreadyRegistered)
-          setNotice("User already registered but could not be located. Share the claim code.");
-        else setNotice("Invite sent.");
+        setNotice(
+          res.recipient === "existing"
+            ? "Sign-in link sent. Ownership is still pending acceptance."
+            : "Account invitation sent. Ownership is still pending acceptance.",
+        );
       } catch (err) {
         if (err instanceof Error) setError(err.message);
       }
@@ -326,10 +392,10 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
           <DialogDescription>
             {row.claimCode ? (
               <>
-                Claim code: <code className="font-mono">{row.claimCode}</code>
+                Pending owner invitation: <code className="font-mono">{row.claimCode}</code>
               </>
             ) : (
-              "No claim code set."
+              "No pending owner invitation."
             )}
           </DialogDescription>
         </DialogHeader>
@@ -340,7 +406,7 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
             submit();
           }}
         >
-          <BoatFormFields form={form} onChange={setForm} />
+          <BoatFormFields form={form} onChange={setForm} includeClaimEmail={!row.ownerId} />
           {emailDirty && form.claimEmail.trim() && (
             <p className="text-xs text-muted-foreground">
               Save the new email before sending an invite.
@@ -348,21 +414,21 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap">
             <Button
               type="button"
               variant="outline"
               onClick={regenerate}
-              disabled={pending || !!row.ownerId}
+              disabled={pending || (!!row.ownerId && !row.claimCode)}
             >
               <RefreshCw className="size-3.5" aria-hidden="true" />
-              Regenerate code
+              Regenerate link
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={invite}
-              disabled={pending || !form.claimEmail.trim() || !!row.ownerId || emailDirty}
+              disabled={pending || !row.claimEmail || emailDirty}
               title={emailDirty ? "Save the new email first" : undefined}
             >
               <Mail className="size-3.5" aria-hidden="true" />
@@ -375,10 +441,112 @@ function EditBoatDialog({ row }: { row: BoatRow }) {
               disabled={pending || (!row.claimEmail && !row.claimCode)}
             >
               <Trash2 className="size-3.5" aria-hidden="true" />
-              Clear claim
+              Revoke invite
             </Button>
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TransferOwnerDialog({ row }: { row: BoatRow }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState(row.claimEmail ?? "");
+  const [sendInvite, setSendInvite] = useState(Boolean(row.claimEmail));
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function reset() {
+    setEmail(row.claimEmail ?? "");
+    setSendInvite(Boolean(row.claimEmail));
+    setError(null);
+  }
+
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await startOwnershipTransfer(row.id, { email, sendInvite });
+        if (result.emailError) {
+          setError(
+            `The owner link was created, but email failed: ${result.emailError} Copy the link from the boat row instead.`,
+          );
+          return;
+        }
+        setOpen(false);
+      } catch (err) {
+        if (err instanceof Error) setError(err.message);
+      }
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm">
+          <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+          {row.claimCode ? "Change transfer" : "Transfer owner"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Transfer ownership of {row.name}</DialogTitle>
+          <DialogDescription>
+            {row.ownerName ?? "The current owner"} keeps ownership until someone opens the new link
+            and explicitly accepts. Creating a new link revokes any previous one.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor={`transfer-email-${row.id}`}>New owner email (optional)</Label>
+            <Input
+              id={`transfer-email-${row.id}`}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => {
+                const nextEmail = event.target.value;
+                setEmail(nextEmail);
+                if (!nextEmail.trim()) setSendInvite(false);
+              }}
+              placeholder="new-owner@example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank to share the owner link yourself.
+            </p>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
+            <div className="space-y-0.5">
+              <Label htmlFor={`transfer-send-${row.id}`}>Send invite email</Label>
+              <p className="text-xs text-muted-foreground">The link also works for existing users.</p>
+            </div>
+            <Switch
+              id={`transfer-send-${row.id}`}
+              checked={sendInvite}
+              onCheckedChange={setSendInvite}
+              disabled={!email.trim()}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Creating…" : "Create transfer link"}
             </Button>
           </DialogFooter>
         </form>
@@ -408,17 +576,29 @@ export function BoatsList({ rows }: { rows: BoatRow[] }) {
           {row.ownerId ? (
             <Badge variant="secondary" className="gap-1">
               <UserCheck className="size-3" aria-hidden="true" />
-              {row.ownerName ?? "claimed"}
+              Owner: {row.ownerName ?? "claimed"}
             </Badge>
-          ) : row.claimEmail ? (
-            <span className="text-xs text-muted-foreground">{row.claimEmail}</span>
-          ) : (
+          ) : !row.claimCode ? (
             <Badge variant="outline">unclaimed</Badge>
+          ) : null}
+          {row.claimCode && (
+            <Badge variant="outline">
+              {row.ownerId ? "transfer pending" : "owner invite pending"}
+            </Badge>
           )}
-          {row.claimCode && !row.ownerId && <CopyButton value={row.claimCode} label="Copy claim code" />}
+          {row.claimEmail && (
+            <span className="text-xs text-muted-foreground">{row.claimEmail}</span>
+          )}
+          {row.claimCode && (
+            <>
+              <CopyInvitationLinkButton code={row.claimCode} />
+              <CopyButton value={row.claimCode} label="Copy owner invitation code" />
+            </>
+          )}
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/boats/${row.id}/crew`}>Crew</Link>
+            <Link href={`/boats/${row.id}/crew`}>Crew access</Link>
           </Button>
+          {row.ownerId && <TransferOwnerDialog row={row} />}
           <EditBoatDialog row={row} />
         </li>
       ))}
