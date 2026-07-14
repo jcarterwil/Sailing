@@ -123,6 +123,8 @@ Raw-track drilldown series are not persisted. An authorized worker may return at
 
 The corrected two-ended start-line midpoint is the authoritative course origin. A fleet centroid at gun is low-confidence course origin only and is never promoted to a start line. Mark and finish cluster rules, outlier rejection, minimum support, and warnings are implemented by #77.
 
+Course geometry uses one closest-approach candidate per entry. Component-wise local-XY medians are recomputed once after rejecting candidates beyond `max(150 m, 3 × MAD)`. At least two entries are required, clusters wider than 250 m are unavailable, mark-seed searches are capped at 300 m, and entry passages must approach within 75 m. These values are named exports in `constants.ts`.
+
 ### 4.2 Passage fields
 
 `passagesByEntry[]` is stable by `entryId`; each passage is stable by `pointIndex`.
