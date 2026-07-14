@@ -221,6 +221,8 @@ export interface PerformanceBestIntervalV1 {
   elapsedMs: number;
   averageSpeedKts: number;
   fleetBest: boolean;
+  /** Optional for backward compatibility with Performance V1 payloads persisted before partial scopes. */
+  partial?: boolean;
   provenance: PerformanceProvenanceV1;
 }
 

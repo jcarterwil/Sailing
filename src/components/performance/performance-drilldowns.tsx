@@ -13,6 +13,7 @@ import {
   formatDateTime,
   formatDuration,
   formatNumber,
+  formatPerformanceWarningMessage,
   type PerformanceOverviewModel,
 } from "@/components/performance/view-model";
 import { Badge } from "@/components/ui/badge";
@@ -210,7 +211,14 @@ export function PerformanceDrilldowns({
               <div><span className="block text-xs text-muted-foreground">Boundaries</span>{formatDateTime(startPoint?.atMs ?? null, model.race.timezone)} → {formatDateTime(endPoint?.atMs ?? null, model.race.timezone)}</div>
               <div><span className="block text-xs text-muted-foreground">Analyzed wind</span>{formatNumber(displayLeg?.twdDeg ?? model.analyzedWind.directionDeg, 0)}° · {model.analyzedWind.confidence}</div>
               <div><span className="block text-xs text-muted-foreground">Evidence</span>{courseLeg.provenance.source} · {courseLeg.provenance.confidence} · {unresolvedPassages} unresolved passages</div>
-              {legWarnings.length > 0 && <div className="sm:col-span-2 lg:col-span-4 text-xs text-amber-700 dark:text-amber-300">{legWarnings.map((warning) => warning.message).join(" ")}</div>}
+              {legWarnings.length > 0 && (
+                <div className="sm:col-span-2 lg:col-span-4 text-xs text-amber-700 dark:text-amber-300">
+                  {legWarnings.map((warning) => {
+                    const boatName = model.entries.find((entry) => entry.entryId === warning.entryId)?.boatName;
+                    return `${boatName ? `${boatName}: ` : ""}${formatPerformanceWarningMessage(warning)}`;
+                  }).join(" ")}
+                </div>
+              )}
             </div>
 
             {displayLeg && legSeries.length > 0 ? (

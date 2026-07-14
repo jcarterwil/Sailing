@@ -507,6 +507,9 @@ function validateBestIntervals(value: unknown, context: ValidationContext, path:
     valid = finiteAt(interval.elapsedMs, context, `${intervalPath}.elapsedMs`, { min: Number.EPSILON }) && valid;
     valid = finiteAt(interval.averageSpeedKts, context, `${intervalPath}.averageSpeedKts`, { min: 0 }) && valid;
     valid = booleanAt(interval.fleetBest, context, `${intervalPath}.fleetBest`) && valid;
+    if (interval.partial !== undefined) {
+      valid = booleanAt(interval.partial, context, `${intervalPath}.partial`) && valid;
+    }
     valid = validateProvenance(interval.provenance, context, `${intervalPath}.provenance`) && valid;
     if (typeof interval.startTimeMs === "number" && typeof interval.endTimeMs === "number" && typeof interval.elapsedMs === "number" &&
         (interval.endTimeMs <= interval.startTimeMs || Math.abs(interval.endTimeMs - interval.startTimeMs - interval.elapsedMs) > 1e-6)) {
