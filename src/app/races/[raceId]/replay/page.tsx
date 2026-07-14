@@ -180,7 +180,10 @@ export default async function ReplayPage({
         <p className="text-sm text-muted-foreground">
           No processed tracks yet. Upload VKX or CSV files from the race page first.
         </p>
-        <Link href={`/races/${race.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
+        <Link
+          href={`/races/${race.id}`}
+          className="inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
+        >
           Back to race
         </Link>
       </main>
@@ -203,10 +206,10 @@ export default async function ReplayPage({
       <header className="flex items-center gap-3 border-b border-border/70 px-4 py-2">
         <Link
           href={`/races/${race.id}`}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          className="flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          {race.name}
+          Back to {race.name}
         </Link>
         <span className="text-xs text-muted-foreground">{trackMetas.length} boats</span>
       </header>

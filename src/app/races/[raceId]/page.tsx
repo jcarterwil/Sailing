@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, BarChart3, FileText, Film, PlayCircle, SlidersHorizontal, Waves } from "lucide-react";
+import { BarChart3, FileText, Film, PlayCircle, SlidersHorizontal, Waves } from "lucide-react";
 
 import { RaceMetaPanel } from "@/app/races/[raceId]/race-meta-panel";
 import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
 import { SharePanel } from "@/app/races/[raceId]/share-panel";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
 import { VideoPanel } from "@/app/races/[raceId]/video-panel";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +61,7 @@ export default async function RaceManagePage({
     { data: analysisRow },
     { data: correctionsRow },
     { data: videos, error: videosError },
+    { data: profile },
   ] = await Promise.all([
       supabase
         .from("race_entries")
@@ -89,6 +92,7 @@ export default async function RaceManagePage({
         .select("*")
         .eq("race_id", raceId)
         .order("created_at", { ascending: false }),
+      supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     ]);
   if (entriesError) {
     throw new Error(`Could not load race entries: ${entriesError.message}`);
@@ -198,19 +202,20 @@ export default async function RaceManagePage({
   );
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-8 sm:px-10 lg:px-12">
-      <header className="border-b border-border/70 pb-6">
-        <Link href="/dashboard" className="mb-4 flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Dashboard
-        </Link>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+    >
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
               <Waves className="size-6 text-primary" aria-hidden="true" />
               {race.name}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+          </span>
+        }
+        description={
+          <>
               {race.venue ? `${race.venue} · ` : ""}
               {new Date(race.starts_at ?? race.created_at).toLocaleDateString()}
               {isOrganizer && (
@@ -221,18 +226,12 @@ export default async function RaceManagePage({
                   </code>
                 </>
               )}
-            </p>
-            {raceMeta.tags.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {raceMeta.tags.map((tag) => (
-                  <Badge key={tag} variant="outline">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+          </>
+        }
+        backHref="/dashboard"
+        backLabel="Dashboard"
+        actions={
+          <>
             {canManageRace && (
               <ReanalyzeButton
                 raceId={race.id}
@@ -267,9 +266,19 @@ export default async function RaceManagePage({
                 Open replay
               </Link>
             </Button>
+          </>
+        }
+      >
+        {raceMeta.tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {raceMeta.tags.map((tag) => (
+              <Badge key={tag} variant="outline">
+                {tag}
+              </Badge>
+            ))}
           </div>
-        </div>
-      </header>
+        )}
+      </PageHeader>
 
       <section className="space-y-6 py-8">
         <RaceMetaPanel
@@ -294,8 +303,8 @@ export default async function RaceManagePage({
 
         <Card className="bg-card/70">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
                 <CardTitle>Fleet tracks</CardTitle>
                 <CardDescription>
                   {isOrganizer
@@ -315,8 +324,8 @@ export default async function RaceManagePage({
 
         <Card className="bg-card/70">
           <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2">
                   <Film className="size-5 text-primary" aria-hidden="true" />
                   Action-camera videos
@@ -334,6 +343,6 @@ export default async function RaceManagePage({
           </CardContent>
         </Card>
       </section>
-    </main>
+    </AuthenticatedShell>
   );
 }
