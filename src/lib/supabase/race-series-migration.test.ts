@@ -48,6 +48,8 @@ describe("race series foundation migration", () => {
     expect(migration).toContain("check (source_boat_id <> canonical_boat_id)");
     expect(migration).toContain("references public.race_series_competitors (series_id, boat_id)");
     expect(migration).toContain("a registered series boat cannot also be an alias source");
+    expect(migration).toContain("an alias source cannot also be a registered series boat");
+    expect(migration).toContain("validate_race_series_competitor_identity");
     expect(migration).not.toContain("sail_number =");
     expect(migration).not.toContain("lower(name)");
   });

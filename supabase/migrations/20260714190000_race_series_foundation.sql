@@ -248,6 +248,28 @@ create table public.race_series_boat_aliases (
 create index race_series_boat_aliases_canonical_idx
   on public.race_series_boat_aliases (series_id, canonical_boat_id);
 
+create function public.validate_race_series_competitor_identity()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  if exists (
+    select 1
+    from public.race_series_boat_aliases a
+    where a.series_id = new.series_id
+      and a.source_boat_id = new.boat_id
+  ) then
+    raise exception 'An alias source cannot also be a registered series boat';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger validate_race_series_competitor_identity
+before insert or update of series_id, boat_id on public.race_series_competitors
+for each row execute procedure public.validate_race_series_competitor_identity();
+
 create function public.validate_race_series_boat_alias()
 returns trigger
 language plpgsql
