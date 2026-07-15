@@ -11,11 +11,12 @@ describe("authenticated Performance Overview integration", () => {
   const overview = source("src/components/performance/performance-overview.tsx");
   const opportunities = source("src/components/performance/performance-opportunities.tsx");
 
-  it("authorizes with an RLS-visible race and uses the centralized stored parser", () => {
-    expect(page).toContain("An RLS-visible race row proves organizer/member access");
+  it("authorizes via Session workspace chrome and uses the centralized stored parser", () => {
+    expect(page).toContain("loadSessionWorkspaceChrome");
+    expect(page).toContain("SessionWorkspaceNav");
     expect(page).toContain("parseStoredRaceAnalysis");
     expect(page).toContain("analysisForEntryIds");
-    expect(page).toContain('rpc("is_race_organizer"');
+    expect(page).toContain("chrome.isOrganizer");
   });
 
   it("never handles Storage paths or service-role signing inside the route page", () => {
@@ -26,7 +27,7 @@ describe("authenticated Performance Overview integration", () => {
   });
 
   it("links the race page and visibly distinguishes required report sections", () => {
-    expect(racePage).toContain(`/performance`);
+    expect(racePage).toContain("SessionWorkspaceNav");
     expect(overview).toContain("Single-race performance results");
     expect(overview).toContain("Best sustained performance");
     expect(overview).toContain("PerformanceOpportunities");

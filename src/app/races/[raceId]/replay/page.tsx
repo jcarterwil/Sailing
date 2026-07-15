@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
 import type { VideoMeta } from "@/components/replay/video-meta";
+import { SessionHeader } from "@/components/sessions/session-header";
+import { SessionWorkspaceNav } from "@/components/sessions/session-workspace-nav";
 import {
   buildRaceAnalyzeContext,
   parseEntryMeta,
@@ -14,6 +16,7 @@ import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
 } from "@/lib/races/stored-analysis";
+import { loadSessionWorkspaceChrome } from "@/lib/sessions/session-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { VideoTimingProvenance } from "@/lib/videos/timing";
@@ -44,6 +47,11 @@ export default async function ReplayPage({
     redirect("/login");
   }
 
+  const chrome = await loadSessionWorkspaceChrome(supabase, raceId, user.id);
+  if (!chrome) {
+    notFound();
+  }
+
   // RLS-visible read proves membership.
   const { data: race } = await supabase
     .from("races")
@@ -55,6 +63,11 @@ export default async function ReplayPage({
   }
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, display_name")
+    .eq("id", user.id)
+    .maybeSingle();
 
   const [{ data: entries }, { data: analysisRow }, { data: correctionsRow }, { data: videoRows }] =
     await Promise.all([
@@ -175,18 +188,46 @@ export default async function ReplayPage({
 
   if (trackMetas.length === 0) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="text-xl font-semibold">{race.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          No processed tracks yet. Upload VKX or CSV files from the race page first.
-        </p>
-        <Link
-          href={`/races/${race.id}`}
-          className="inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
-        >
-          Back to race
-        </Link>
-      </main>
+      <AuthenticatedShell
+        email={user.email ?? ""}
+        displayName={profile?.display_name}
+        isAdmin={profile?.is_admin ?? false}
+      >
+        <SessionHeader
+          name={chrome.name}
+          venue={chrome.venue}
+          startsAt={chrome.startsAt}
+          timezone={chrome.timezone}
+          startsAtSource={chrome.startsAtSource}
+          sessionType={chrome.sessionType}
+          joinCode={chrome.joinCode}
+          showJoinCode={chrome.showJoinCode}
+          boatContext={chrome.practiceBoatName}
+          tags={chrome.tags}
+          primaryAction={chrome.primaryAction}
+        />
+        <div className="space-y-6 py-6">
+          <SessionWorkspaceNav raceId={chrome.raceId} activeTab="replay" />
+          <section
+            className="rounded-xl border bg-card/70 p-6"
+            aria-labelledby="session-replay-heading"
+          >
+            <h2 id="session-replay-heading" className="text-xl font-semibold tracking-tight">
+              Replay unavailable
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              No processed tracks yet. Add sailing data on the Data tab, then return here once
+              processing finishes.
+            </p>
+            <Link
+              href={`/races/${race.id}?tab=data`}
+              className="mt-4 inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
+            >
+              Open Data
+            </Link>
+          </section>
+        </div>
+      </AuthenticatedShell>
     );
   }
 
@@ -203,15 +244,14 @@ export default async function ReplayPage({
 
   return (
     <main className="flex h-dvh flex-col">
-      <header className="flex items-center gap-3 border-b border-border/70 px-4 py-2">
-        <Link
-          href={`/races/${race.id}`}
-          className="flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Back to {race.name}
-        </Link>
-        <span className="text-xs text-muted-foreground">{trackMetas.length} boats</span>
+      <header className="shrink-0 space-y-2 border-b border-border/70 px-3 py-2 sm:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="truncate text-sm font-medium">{race.name}</p>
+          <span className="text-xs text-muted-foreground">
+            {trackMetas.length} boat{trackMetas.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <SessionWorkspaceNav raceId={race.id} activeTab="replay" />
       </header>
       <div className="min-h-0 flex-1">
         <ReplayShell

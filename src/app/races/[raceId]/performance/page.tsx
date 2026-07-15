@@ -1,17 +1,22 @@
+import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PerformanceOverview } from "@/components/performance/performance-overview";
 import { PerformanceState } from "@/components/performance/performance-state";
 import {
   buildPerformanceOverviewModel,
   resolvePerformancePageState,
 } from "@/components/performance/view-model";
+import { SessionHeader } from "@/components/sessions/session-header";
+import { SessionWorkspaceNav } from "@/components/sessions/session-workspace-nav";
 import { parseRaceMeta } from "@/lib/races/meta";
 import { loadPerformanceTrackMetas } from "@/lib/races/performance-tracks";
 import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
 } from "@/lib/races/stored-analysis";
+import { loadSessionWorkspaceChrome } from "@/lib/sessions/session-workspace";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -28,17 +33,64 @@ export default async function RacePerformancePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // An RLS-visible race row proves organizer/member access.
-  const raceResult = await supabase
-    .from("races")
-    .select("id, name, venue, starts_at, created_at, conditions, tags, timezone, share_slug")
-    .eq("id", raceId)
-    .maybeSingle();
+  const chrome = await loadSessionWorkspaceChrome(supabase, raceId, user.id);
+  if (!chrome) notFound();
+
+  const [{ data: profile }, raceResult] = await Promise.all([
+    supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("races")
+      .select("id, name, venue, starts_at, created_at, conditions, tags, timezone, share_slug")
+      .eq("id", raceId)
+      .maybeSingle(),
+  ]);
   if (raceResult.error) throw new Error(`Could not load race: ${raceResult.error.message}`);
   if (!raceResult.data) notFound();
   const race = raceResult.data;
 
-  const [entriesResult, analysisResult, correctionsResult, organizerResult] = await Promise.all([
+  if (chrome.isPractice) {
+    return (
+      <AuthenticatedShell
+        email={user.email ?? ""}
+        displayName={profile?.display_name}
+        isAdmin={profile?.is_admin ?? false}
+      >
+        <SessionHeader
+          name={chrome.name}
+          venue={chrome.venue}
+          startsAt={chrome.startsAt}
+          timezone={chrome.timezone}
+          startsAtSource={chrome.startsAtSource}
+          sessionType={chrome.sessionType}
+          joinCode={chrome.joinCode}
+          showJoinCode={chrome.showJoinCode}
+          boatContext={chrome.practiceBoatName}
+          tags={chrome.tags}
+          primaryAction={chrome.primaryAction}
+        />
+        <div className="space-y-6 py-6">
+          <SessionWorkspaceNav raceId={chrome.raceId} activeTab="performance" />
+          <section
+            className="rounded-xl border bg-card/70 p-6"
+            aria-labelledby="practice-performance-heading"
+          >
+            <h2
+              id="practice-performance-heading"
+              className="text-xl font-semibold tracking-tight"
+            >
+              Performance unavailable for Practice
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Practice Sessions do not show fleet ranks, starts, or course conclusions.
+              Use Replay for absolute track review instead of race-relative metrics.
+            </p>
+          </section>
+        </div>
+      </AuthenticatedShell>
+    );
+  }
+
+  const [entriesResult, analysisResult, correctionsResult] = await Promise.all([
     supabase
       .from("race_entries")
       .select("id, color, boats(name), tracks(status, updated_at, error_message)")
@@ -54,12 +106,12 @@ export default async function RacePerformancePage({
       .select("updated_at")
       .eq("race_id", raceId)
       .maybeSingle(),
-    supabase.rpc("is_race_organizer", { rid: raceId }),
   ]);
   if (entriesResult.error) throw new Error(`Could not load entries: ${entriesResult.error.message}`);
   if (analysisResult.error) throw new Error(`Could not load analysis: ${analysisResult.error.message}`);
-  if (correctionsResult.error) throw new Error(`Could not load corrections: ${correctionsResult.error.message}`);
-  if (organizerResult.error) throw new Error(`Could not check race permissions: ${organizerResult.error.message}`);
+  if (correctionsResult.error) {
+    throw new Error(`Could not load corrections: ${correctionsResult.error.message}`);
+  }
 
   const entries = entriesResult.data ?? [];
   const processed = entries.filter((entry) => entry.tracks?.status === "processed");
@@ -81,16 +133,47 @@ export default async function RacePerformancePage({
     storedStatus: parsed?.status ?? null,
     entrySetMatches: currentAnalysis !== null && processed.length === entries.length,
   });
+
+  const shell = (chromeNode: ReactNode) => (
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+      width="wide"
+    >
+      <SessionHeader
+        name={chrome.name}
+        venue={chrome.venue}
+        startsAt={chrome.startsAt}
+        timezone={chrome.timezone}
+        startsAtSource={chrome.startsAtSource}
+        sessionType={chrome.sessionType}
+        joinCode={chrome.joinCode}
+        showJoinCode={chrome.showJoinCode}
+        boatContext={chrome.practiceBoatName}
+        tags={chrome.tags}
+        primaryAction={chrome.primaryAction}
+      />
+      <div className="space-y-6 py-6">
+        <SessionWorkspaceNav raceId={chrome.raceId} activeTab="performance" />
+        {chromeNode}
+      </div>
+    </AuthenticatedShell>
+  );
+
   if (state !== "current" || !currentAnalysis || !parsed?.performance || !analysisResult.data) {
-    return (
+    return shell(
       <PerformanceState
         state={state === "current" ? "malformed" : state}
         raceId={race.id}
         raceName={race.name}
-        canManage={organizerResult.data ?? false}
+        canManage={chrome.isOrganizer}
         canReview={processed.length > 0}
         issues={parsed?.issues ?? []}
-      />
+        backHref={`/races/${race.id}?tab=data`}
+        backLabel="Open Data"
+        embedded
+      />,
     );
   }
 
@@ -114,13 +197,14 @@ export default async function RacePerformancePage({
     computedAt: analysisResult.data.computed_at,
   });
   const drilldownTracks = await loadPerformanceTrackMetas(raceId);
-  return (
+  return shell(
     <PerformanceOverview
       model={model}
       navigation={{
-        backHref: `/races/${race.id}`,
-        backLabel: "Back to race",
+        backHref: null,
+        backLabel: "Session",
         publicHref: race.share_slug ? `/s/${race.share_slug}/performance` : null,
+        embedded: true,
       }}
       drilldown={{
         tracks: drilldownTracks.tracks,
@@ -134,6 +218,6 @@ export default async function RacePerformancePage({
           })),
         },
       }}
-    />
+    />,
   );
 }

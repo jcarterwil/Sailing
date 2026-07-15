@@ -241,13 +241,13 @@ export function ReviewPageClient({
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 pb-28">
       <header className="flex flex-wrap items-center gap-3 border-b border-border/70 pb-4">
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/races/${raceId}`} onClick={(event) => {
+          <Link href={`/races/${raceId}?tab=data`} onClick={(event) => {
             if (dirty && !window.confirm("Discard unsaved race-review changes?")) {
               event.preventDefault();
             }
           }}>
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Back
+            Back to Data
           </Link>
         </Button>
         <div className="min-w-0">

@@ -1,10 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ReportPageClient } from "@/app/races/[raceId]/report/report-page-client";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { SessionHeader } from "@/components/sessions/session-header";
+import { SessionWorkspaceNav } from "@/components/sessions/session-workspace-nav";
 import {
   expireStaleReportGenerations,
   loadReportSnapshot,
 } from "@/lib/report/queries";
+import { loadSessionWorkspaceChrome } from "@/lib/sessions/session-workspace";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -21,31 +25,47 @@ export default async function RaceReportPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const raceResult = await supabase
-    .from("races")
-    .select("id, name, venue, starts_at, created_at")
-    .eq("id", raceId)
-    .maybeSingle();
-  if (raceResult.error) throw new Error(`Could not load race: ${raceResult.error.message}`);
-  if (!raceResult.data) notFound();
+  const chrome = await loadSessionWorkspaceChrome(supabase, raceId, user.id);
+  if (!chrome) notFound();
 
   await expireStaleReportGenerations(raceId);
-  const [organizerResult, initialSnapshot] = await Promise.all([
-    supabase.rpc("is_race_organizer", { rid: raceId }),
+  const [{ data: profile }, initialSnapshot] = await Promise.all([
+    supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     loadReportSnapshot(supabase, raceId, { includePreviousComplete: true }),
   ]);
-  if (organizerResult.error) {
-    throw new Error(`Could not check race permissions: ${organizerResult.error.message}`);
-  }
 
   return (
-    <ReportPageClient
-      raceId={raceId}
-      raceName={raceResult.data.name}
-      raceVenue={raceResult.data.venue}
-      raceDate={raceResult.data.starts_at ?? raceResult.data.created_at}
-      isOrganizer={organizerResult.data ?? false}
-      initialSnapshot={initialSnapshot}
-    />
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+      width="prose"
+    >
+      <SessionHeader
+        name={chrome.name}
+        venue={chrome.venue}
+        startsAt={chrome.startsAt}
+        timezone={chrome.timezone}
+        startsAtSource={chrome.startsAtSource}
+        sessionType={chrome.sessionType}
+        joinCode={chrome.joinCode}
+        showJoinCode={chrome.showJoinCode}
+        boatContext={chrome.practiceBoatName}
+        tags={chrome.tags}
+        primaryAction={chrome.primaryAction}
+      />
+      <div className="space-y-6 py-6">
+        <SessionWorkspaceNav raceId={chrome.raceId} activeTab="report" />
+        <ReportPageClient
+          raceId={raceId}
+          raceName={chrome.name}
+          raceVenue={chrome.venue}
+          raceDate={chrome.startsAt}
+          isOrganizer={chrome.isOrganizer}
+          initialSnapshot={initialSnapshot}
+          embedded
+        />
+      </div>
+    </AuthenticatedShell>
   );
 }

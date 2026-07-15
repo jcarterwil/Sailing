@@ -27,6 +27,8 @@ interface ReportPageClientProps {
   /** Public share view — no manage links, polling, or generate. */
   readOnly?: boolean;
   shareSlug?: string;
+  /** When true, Session workspace chrome owns the page header. */
+  embedded?: boolean;
 }
 
 function nodeText(node: ReactNode): string {
@@ -48,6 +50,7 @@ export function ReportPageClient({
   initialSnapshot,
   readOnly = false,
   shareSlug,
+  embedded = false,
 }: ReportPageClientProps) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [requestError, setRequestError] = useState<string | null>(null);
@@ -126,21 +129,32 @@ export function ReportPageClient({
   const hasPriorReport = !!completeReport?.markdown;
 
   return (
-    <main className="report-print-page mx-auto min-h-screen w-full max-w-5xl px-5 py-8 sm:px-10 lg:px-12">
+    <div
+      className={
+        embedded
+          ? "report-print-page w-full"
+          : "report-print-page mx-auto min-h-screen w-full max-w-5xl px-5 py-8 sm:px-10 lg:px-12"
+      }
+    >
       <header className="print-hidden border-b border-border/70 pb-6">
-        <Link
-          href={readOnly && shareSlug ? `/s/${shareSlug}` : `/races/${raceId}`}
-          className="mb-4 flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {readOnly ? "Back to replay" : "Manage race"}
-        </Link>
+        {!embedded ? (
+          <Link
+            href={readOnly && shareSlug ? `/s/${shareSlug}` : `/races/${raceId}`}
+            className="mb-4 flex min-h-11 w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {readOnly ? "Back to replay" : "Manage race"}
+          </Link>
+        ) : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+            <h2
+              id="session-report-heading"
+              className="flex items-center gap-2 text-xl font-semibold tracking-tight sm:text-3xl"
+            >
               <FileText className="size-6 text-primary" aria-hidden="true" />
               Coach report
-            </h1>
+            </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {raceName}
               {raceVenue ? ` · ${raceVenue}` : ""} · {new Date(raceDate).toLocaleDateString()}
@@ -148,13 +162,13 @@ export function ReportPageClient({
           </div>
           <div className="flex flex-wrap gap-2">
             {completeReport?.markdown && (
-              <Button variant="outline" onClick={() => window.print()}>
+              <Button variant="outline" className="min-h-11" onClick={() => window.print()}>
                 <Printer aria-hidden="true" />
                 Print / PDF
               </Button>
             )}
             {!readOnly && isOrganizer && (
-              <Button onClick={generate} disabled={isGenerating}>
+              <Button className="min-h-11" onClick={generate} disabled={isGenerating}>
                 {isGenerating ? (
                   <LoaderCircle className="animate-spin" aria-hidden="true" />
                 ) : (
@@ -226,6 +240,6 @@ export function ReportPageClient({
           </section>
         )
       )}
-    </main>
+    </div>
   );
 }
