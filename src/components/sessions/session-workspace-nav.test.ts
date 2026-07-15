@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,8 +10,12 @@ import {
   SESSION_WORKSPACE_TABS,
 } from "@/components/sessions/session-workspace-nav";
 
+function source(path: string): string {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
+
 describe("session workspace navigation", () => {
-  it("keeps the locked tab order", () => {
+  it("keeps the locked tab order and Report/Coach labels", () => {
     expect([...SESSION_WORKSPACE_TABS]).toEqual([
       "overview",
       "data",
@@ -23,6 +29,9 @@ describe("session workspace navigation", () => {
       "replay",
       "performance",
     ]);
+    const nav = source("src/components/sessions/session-workspace-nav.tsx");
+    expect(nav).toContain('performance: "Report"');
+    expect(nav).toContain('report: "Coach"');
   });
 
   it("builds durable hrefs for query and path tabs", () => {

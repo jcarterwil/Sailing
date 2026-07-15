@@ -48,49 +48,57 @@ export default async function RacePerformancePage({
   if (!raceResult.data) notFound();
   const race = raceResult.data;
 
-  if (chrome.isPractice) {
-    return (
-      <AuthenticatedShell
-        email={user.email ?? ""}
-        displayName={profile?.display_name}
-        isAdmin={profile?.is_admin ?? false}
-      >
-        <SessionHeader
-          name={chrome.name}
-          venue={chrome.venue}
-          startsAt={chrome.startsAt}
-          timezone={chrome.timezone}
-          startsAtSource={chrome.startsAtSource}
+  const workspaceChrome = (chromeNode: ReactNode) => (
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+      width="wide"
+    >
+      <SessionHeader
+        name={chrome.name}
+        venue={chrome.venue}
+        startsAt={chrome.startsAt}
+        timezone={chrome.timezone}
+        startsAtSource={chrome.startsAtSource}
+        sessionType={chrome.sessionType}
+        joinCode={chrome.joinCode}
+        showJoinCode={chrome.showJoinCode}
+        boatContext={chrome.practiceBoatName}
+        tags={chrome.tags}
+        // Don't invite Open report on the report surface itself.
+        primaryAction={
+          chrome.primaryAction?.kind === "open-report" ? null : chrome.primaryAction
+        }
+      />
+      <div className="space-y-6 py-6">
+        <SessionWorkspaceNav
+          raceId={chrome.raceId}
+          activeTab="performance"
           sessionType={chrome.sessionType}
-          joinCode={chrome.joinCode}
-          showJoinCode={chrome.showJoinCode}
-          boatContext={chrome.practiceBoatName}
-          tags={chrome.tags}
-          primaryAction={chrome.primaryAction}
         />
-        <div className="space-y-6 py-6">
-          <SessionWorkspaceNav
-            raceId={chrome.raceId}
-            activeTab="performance"
-            sessionType={chrome.sessionType}
-          />
-          <section
-            className="rounded-xl border bg-card/70 p-6"
-            aria-labelledby="practice-performance-heading"
-          >
-            <h2
-              id="practice-performance-heading"
-              className="text-xl font-semibold tracking-tight"
-            >
-              Performance unavailable for Practice
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Practice Sessions do not show fleet ranks, starts, or course conclusions.
-              Use Replay for absolute track review instead of race-relative metrics.
-            </p>
-          </section>
-        </div>
-      </AuthenticatedShell>
+        {chromeNode}
+      </div>
+    </AuthenticatedShell>
+  );
+
+  if (chrome.isPractice) {
+    return workspaceChrome(
+      <section
+        className="rounded-xl border bg-card/70 p-6"
+        aria-labelledby="practice-performance-heading"
+      >
+        <h2
+          id="practice-performance-heading"
+          className="text-xl font-semibold tracking-tight"
+        >
+          Report unavailable for Practice
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Practice Sessions do not show fleet ranks, starts, or course conclusions.
+          Use Replay for absolute track review instead of race-relative metrics.
+        </p>
+      </section>,
     );
   }
 
@@ -138,39 +146,8 @@ export default async function RacePerformancePage({
     entrySetMatches: currentAnalysis !== null && processed.length === entries.length,
   });
 
-  const shell = (chromeNode: ReactNode) => (
-    <AuthenticatedShell
-      email={user.email ?? ""}
-      displayName={profile?.display_name}
-      isAdmin={profile?.is_admin ?? false}
-      width="wide"
-    >
-      <SessionHeader
-        name={chrome.name}
-        venue={chrome.venue}
-        startsAt={chrome.startsAt}
-        timezone={chrome.timezone}
-        startsAtSource={chrome.startsAtSource}
-        sessionType={chrome.sessionType}
-        joinCode={chrome.joinCode}
-        showJoinCode={chrome.showJoinCode}
-        boatContext={chrome.practiceBoatName}
-        tags={chrome.tags}
-        primaryAction={chrome.primaryAction}
-      />
-      <div className="space-y-6 py-6">
-        <SessionWorkspaceNav
-          raceId={chrome.raceId}
-          activeTab="performance"
-          sessionType={chrome.sessionType}
-        />
-        {chromeNode}
-      </div>
-    </AuthenticatedShell>
-  );
-
   if (state !== "current" || !currentAnalysis || !parsed?.performance || !analysisResult.data) {
-    return shell(
+    return workspaceChrome(
       <PerformanceState
         state={state === "current" ? "malformed" : state}
         raceId={race.id}
@@ -205,27 +182,45 @@ export default async function RacePerformancePage({
     computedAt: analysisResult.data.computed_at,
   });
   const drilldownTracks = await loadPerformanceTrackMetas(raceId);
-  return shell(
-    <PerformanceOverview
-      model={model}
-      navigation={{
-        backHref: null,
-        backLabel: "Session",
-        publicHref: race.share_slug ? `/s/${race.share_slug}/performance` : null,
-        embedded: true,
-      }}
-      drilldown={{
-        tracks: drilldownTracks.tracks,
-        issues: drilldownTracks.issues,
-        performance: parsed.performance,
-        analysis: {
-          wind: currentAnalysis.wind,
-          entries: currentAnalysis.perEntry.map((entry) => ({
-            entryId: entry.entryId,
-            maneuvers: entry.maneuvers,
-          })),
-        },
-      }}
-    />,
+
+  // Current report: document composition (race title + Print/PDF), with only a
+  // thin Session tab strip above — not the workspace header CTA stack.
+  return (
+    <AuthenticatedShell
+      email={user.email ?? ""}
+      displayName={profile?.display_name}
+      isAdmin={profile?.is_admin ?? false}
+      width="wide"
+      className="!px-0 !py-0 sm:!px-0 sm:!py-0 lg:!px-0"
+    >
+      <div className="border-b border-border/70 px-4 pt-4 sm:px-10 lg:px-12">
+        <SessionWorkspaceNav
+          raceId={chrome.raceId}
+          activeTab="performance"
+          sessionType={chrome.sessionType}
+        />
+      </div>
+      <PerformanceOverview
+        model={model}
+        navigation={{
+          backHref: `/races/${race.id}`,
+          backLabel: "Back to Session",
+          publicHref: race.share_slug ? `/s/${race.share_slug}/performance` : null,
+          embedded: false,
+        }}
+        drilldown={{
+          tracks: drilldownTracks.tracks,
+          issues: drilldownTracks.issues,
+          performance: parsed.performance,
+          analysis: {
+            wind: currentAnalysis.wind,
+            entries: currentAnalysis.perEntry.map((entry) => ({
+              entryId: entry.entryId,
+              maneuvers: entry.maneuvers,
+            })),
+          },
+        }}
+      />
+    </AuthenticatedShell>
   );
 }

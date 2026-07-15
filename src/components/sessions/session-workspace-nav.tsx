@@ -17,8 +17,10 @@ const TAB_LABELS: Record<SessionWorkspaceTab, string> = {
   overview: "Overview",
   data: "Data",
   replay: "Replay",
-  performance: "Performance",
-  report: "Report",
+  // Route key stays `performance` (Epic #66 Performance Overview); label is Report.
+  performance: "Report",
+  // Route key stays `report` (Race Dossier); label is Coach.
+  report: "Coach",
 };
 
 export function parseSessionWorkspaceTab(

@@ -131,10 +131,28 @@ describe("resolveSessionPrimaryAction", () => {
     ).toBe(`/races/${base.raceId}?tab=data`);
   });
 
-  it("offers Open replay when analysis is current", () => {
+  it("offers Open report when Race analysis is current", () => {
     expect(
       resolveSessionPrimaryAction({
         ...base,
+        hasAnyTrack: true,
+        allTracksProcessed: true,
+        replayAvailable: true,
+        analysisCurrent: true,
+      }),
+    ).toEqual({
+      kind: "open-report",
+      label: "Open report",
+      href: `/races/${base.raceId}/performance`,
+      disabled: false,
+    });
+  });
+
+  it("offers Open replay when Practice analysis is current", () => {
+    expect(
+      resolveSessionPrimaryAction({
+        ...base,
+        sessionType: "practice",
         hasAnyTrack: true,
         allTracksProcessed: true,
         replayAvailable: true,

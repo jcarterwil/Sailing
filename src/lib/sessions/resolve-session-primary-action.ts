@@ -5,6 +5,7 @@ export type SessionPrimaryActionKind =
   | "processing"
   | "fix-data"
   | "review-analyze"
+  | "open-report"
   | "open-replay";
 
 export interface SessionPrimaryAction {
@@ -101,10 +102,20 @@ export function resolveSessionPrimaryAction(
   }
 
   if (input.analysisCurrent && input.replayAvailable) {
+    // Race Sessions land on the deterministic #66 report; Practice has no
+    // race-relative report, so Replay remains the ready-state CTA.
+    if (sessionType === "practice") {
+      return {
+        kind: "open-replay",
+        label: "Open replay",
+        href: `/races/${raceId}/replay`,
+        disabled: false,
+      };
+    }
     return {
-      kind: "open-replay",
-      label: "Open replay",
-      href: `/races/${raceId}/replay`,
+      kind: "open-report",
+      label: "Open report",
+      href: `/races/${raceId}/performance`,
       disabled: false,
     };
   }

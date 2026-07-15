@@ -201,7 +201,7 @@ export function PerformanceOverview({
         >
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-              Performance Overview V1
+              Race report
             </p>
             {!embedded ? (
               <h1 className="mt-1 flex items-center gap-2 text-3xl font-semibold tracking-tight">
