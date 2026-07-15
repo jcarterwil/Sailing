@@ -7,6 +7,7 @@ import { parseVkx } from "@/lib/analytics/parse/vkx";
 import { buildTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { buildProcessedTrack, summarizeTrack } from "@/lib/analytics/track/process";
 import { ParseError } from "@/lib/analytics/types";
+import { sha256HexBytes } from "@/lib/imports/hash";
 import {
   analyzeAndPersistRace,
   raceHasAllTracksProcessed,
@@ -91,10 +92,12 @@ export async function POST(
       throw new Error(`Could not download raw file: ${downloadError?.message}`);
     }
 
+    const rawBytes = new Uint8Array(await blob.arrayBuffer());
+    const contentSha256 = sha256HexBytes(rawBytes);
     const raw =
       track.format === "vkx"
-        ? parseVkx(new Uint8Array(await blob.arrayBuffer()))
-        : parseTrackCsv(await blob.text());
+        ? parseVkx(rawBytes)
+        : parseTrackCsv(new TextDecoder().decode(rawBytes));
 
     const processed = buildProcessedTrack(raw, track.entry_id);
     const summary = {
@@ -113,18 +116,26 @@ export async function POST(
 
     const t0 = processed.t0;
     const tEnd = t0 + processed.t[processed.t.length - 1];
-    const { error: trackUpdateError } = await admin
+    const processedFields = {
+      status: "processed" as const,
+      processed_path: processedPath,
+      point_count: processed.t.length,
+      started_at: new Date(t0).toISOString(),
+      ended_at: new Date(tEnd).toISOString(),
+      summary: summary as unknown as Json,
+      updated_at: new Date().toISOString(),
+    };
+    let { error: trackUpdateError } = await admin
       .from("tracks")
-      .update({
-        status: "processed",
-        processed_path: processedPath,
-        point_count: processed.t.length,
-        started_at: new Date(t0).toISOString(),
-        ended_at: new Date(tEnd).toISOString(),
-        summary: summary as unknown as Json,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...processedFields, content_sha256: contentSha256 })
       .eq("id", trackId);
+    // App-first deploy: persist without the additive hash column until migration lands.
+    if (trackUpdateError?.message?.includes("content_sha256")) {
+      ({ error: trackUpdateError } = await admin
+        .from("tracks")
+        .update(processedFields)
+        .eq("id", trackId));
+    }
     if (trackUpdateError) {
       throw new Error(`Could not update processed track: ${trackUpdateError.message}`);
     }

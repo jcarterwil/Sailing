@@ -869,8 +869,116 @@ export type Database = {
           },
         ]
       }
-      tracks: {
+      historical_import_batches: {
         Row: {
+          boat_id: string
+          committed_at: string | null
+          created_at: string
+          created_by: string
+          id: string
+          last_error: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          boat_id: string
+          committed_at?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          boat_id?: string
+          committed_at?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historical_import_batches_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historical_import_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      historical_import_items: {
+        Row: {
+          batch_id: string
+          byte_size: number
+          committed_track_id: string | null
+          content_sha256: string | null
+          created_at: string
+          duplicate_track_id: string | null
+          format: string | null
+          id: string
+          inspection: Json | null
+          mapping: Json | null
+          original_filename: string
+          staging_path: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          byte_size: number
+          committed_track_id?: string | null
+          content_sha256?: string | null
+          created_at?: string
+          duplicate_track_id?: string | null
+          format?: string | null
+          id?: string
+          inspection?: Json | null
+          mapping?: Json | null
+          original_filename: string
+          staging_path: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          byte_size?: number
+          committed_track_id?: string | null
+          content_sha256?: string | null
+          created_at?: string
+          duplicate_track_id?: string | null
+          format?: string | null
+          id?: string
+          inspection?: Json | null
+          mapping?: Json | null
+          original_filename?: string
+          staging_path?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historical_import_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "historical_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+            tracks: {
+        Row: {
+          content_sha256: string | null
           created_at: string
           ended_at: string | null
           entry_id: string
@@ -881,6 +989,7 @@ export type Database = {
           point_count: number | null
           processed_path: string | null
           raw_path: string
+          source_import_item_id: string | null
           started_at: string | null
           status: string
           summary: Json | null
@@ -888,6 +997,7 @@ export type Database = {
           uploaded_by: string
         }
         Insert: {
+          content_sha256?: string | null
           created_at?: string
           ended_at?: string | null
           entry_id: string
@@ -898,6 +1008,7 @@ export type Database = {
           point_count?: number | null
           processed_path?: string | null
           raw_path: string
+          source_import_item_id?: string | null
           started_at?: string | null
           status?: string
           summary?: Json | null
@@ -905,6 +1016,7 @@ export type Database = {
           uploaded_by: string
         }
         Update: {
+          content_sha256?: string | null
           created_at?: string
           ended_at?: string | null
           entry_id?: string
@@ -915,6 +1027,7 @@ export type Database = {
           point_count?: number | null
           processed_path?: string | null
           raw_path?: string
+          source_import_item_id?: string | null
           started_at?: string | null
           status?: string
           summary?: Json | null
@@ -970,6 +1083,16 @@ export type Database = {
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }
+      commit_historical_import_batch: {
+        Args: { target_batch_id: string }
+        Returns: {
+          already_committed: boolean
+          entry_id: string
+          item_id: string
+          race_id: string
+          track_id: string
+        }[]
+      }
       create_practice_session: {
         Args: {
           boat_id_input: string
