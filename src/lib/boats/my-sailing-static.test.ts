@@ -16,6 +16,7 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     expect(dashboard).toContain("searchParams");
     expect(dashboard).toContain("requestedBoatId");
     expect(dashboard).toContain("includeRequestedViewableBoat");
+    expect(dashboard).toContain("redirect(`/dashboard?boat=${activeBoatId}`)");
     expect(dashboard).toContain("/sessions/import?boatId=");
     expect(dashboard).toContain('.rpc("can_edit_boat"');
     expect(dashboard).toContain("Sessions you organize");

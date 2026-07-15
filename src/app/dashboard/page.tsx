@@ -71,6 +71,13 @@ export default async function DashboardPage({
     listedBoats,
   );
   const activeBoatId = resolveActiveBoatId(requestedBoatId, viewableBoats);
+  // Keep the address bar in sync with the boat shown (fallback / invalid ?boat=).
+  if (!activeBoatId && requestedBoatId) {
+    redirect("/dashboard");
+  }
+  if (activeBoatId && requestedBoatId !== activeBoatId) {
+    redirect(`/dashboard?boat=${activeBoatId}`);
+  }
   const activeBoat = viewableBoats.find((boat) => boat.id === activeBoatId) ?? null;
 
   const [{ data: canEditActive }, recentSessions, { data: organizedSessions }] =
