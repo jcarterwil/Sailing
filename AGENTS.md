@@ -25,8 +25,10 @@ Directory-specific guides exist — read the `AGENTS.md` nearest the code you to
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Dev server at http://localhost:3000 |
-| `npm run verify` | **Pre-PR gate:** lint, typecheck, test, build |
+| `npm run lint` | Fast local ESLint check |
+| `npm run typecheck` | Fast local TypeScript check |
 | `npm run test` | Vitest (analytics golden tests) |
+| `npm run verify` | **CI-owned full npm gate:** lint, typecheck, test, build |
 | `npm run db:push` | Apply pending migrations to the linked Supabase project |
 | `npm run db:types` | Regenerate `src/lib/supabase/database.types.ts` after a schema change |
 | `npx tsx scripts/seed-example-race.ts` | Seed the demo race from `Examples/` (idempotent) |
@@ -45,17 +47,17 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 
 ## How changes reach production
 
-- **CI:** `.github/workflows/ci.yml` runs `npm run verify` (lint → typecheck → test → build) on every PR and every push to `main`, on **Node 24** with inert placeholder public env vars (no secrets — server secrets are read at request time, not during the build). This is the automated gate; treat a red `verify` as blocking.
-- **Branch protection:** `main` is governed by GitHub **rulesets** — every change lands via a PR whose `verify` check passes; contributor PRs also require a code-owner (maintainer) review; the repo owner can self-merge their own PR once CI is green. No direct pushes, force-pushes, or deletion of `main`. **Squash-merge only.**
+- **CI:** `.github/workflows/ci.yml` runs dependency review and `npm run verify` (lint → typecheck → test → build) on every PR, and `npm run verify` on every push to `main`, on **Node 24** with inert placeholder public env vars (no secrets — server secrets are read at request time, not during the build). This is the automated gate; treat a red `verify` as blocking.
+- **Branch protection:** `main` is governed by GitHub **rulesets** — every change lands via a PR whose up-to-date `verify` check passes; contributor PRs also require a code-owner (maintainer) review; the repo owner can self-merge their own PR once CI is green. New pushes dismiss stale approvals, review conversations must be resolved, and AI-review availability is not a merge gate. No direct pushes, force-pushes, or deletion of `main`. **Squash-merge only.**
 - **App code:** push to `main` → Vercel builds and deploys automatically. Primary domain `https://sailing-performance.vercel.app`.
 - **Database:** the **Supabase GitHub integration** is connected to this repo with *Deploy to production* enabled on `main`. Supabase applies any new `supabase/migrations/` file automatically when it merges to `main` — no CI secrets, no manual step. (Locally you can still run `npm run db:push` to apply immediately.) Migrations must be **additive/backward-compatible** so app and schema can deploy in either order. After changing schema, run `npm run db:types` and commit the regenerated types. See `supabase/AGENTS.md`.
 
 ## Pull request flow
 
 1. Get the fast local checks green — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. In Codex, **do not run `npm run build` locally**; a clean local production build is not required because CI runs it (see above).
-2. Open the PR against `main`. CI runs `npm run verify`; fix anything it flags that's attributable to your change. Keep changes additive/backward-compatible where they touch the database or shared analytics types.
-3. `main`'s rulesets enforce the gate: the `verify` check must pass, and contributor PRs require a code-owner review before merge. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
-4. If an automated code reviewer runs on the PR, address its material findings before merging. Never merge with the `verify` check red.
+2. Open the PR against `main`. Keep work-in-progress PRs as drafts. When the PR is opened for review or marked ready, Codex and GitHub Copilot each run one automatic advisory review; they do not run on drafts or automatically re-review every push. Address or explain material findings and resolve their review conversations. Reviewer errors or exhausted quotas do not block merging.
+3. CI runs dependency review and `npm run verify`; fix anything it flags that's attributable to your change. Keep changes additive/backward-compatible where they touch the database or shared analytics types.
+4. `main`'s rulesets enforce the gate: the branch must be current with `main`, `verify` must pass, conversations must be resolved, and contributor PRs require a code-owner review of the final push. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
 
 > **Owner merging your own PR:** the plain `gh pr merge` balks — it reads the global "review required" status and ignores your ruleset bypass. Merge via the GitHub **Merge** button or `gh pr merge <N> --squash --admin` (the server honors your bypass, so this isn't a real admin override).
 

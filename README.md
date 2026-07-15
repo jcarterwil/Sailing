@@ -100,15 +100,23 @@ Do not commit the Google client secret.
 ## Testing and CI
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
-`npm run verify` (lint → typecheck → test → build) on every pull request and on
-push to `main`. **CI is the authoritative build/test gate for Codex work** —
-locally run only the fast checks (`lint`, `typecheck`, and the relevant `test`s).
-Do not run or require `npm run build` locally; push and let GitHub run the full
-build/test on its clean runner, then fix anything that `verify` reports.
+dependency review plus `npm run verify` (lint → typecheck → test → build) on
+every pull request, and `npm run verify` on push to `main`. **CI is the
+authoritative build/test gate for Codex work** — locally run only the fast
+checks (`lint`, `typecheck`, and the relevant `test`s). Do not run or require
+`npm run build` locally; push and let GitHub run the full build/test on its
+clean runner, then fix anything that `verify` reports.
 
-`main` is protected by GitHub rulesets: changes land through a PR whose `verify`
-check passes, contributor PRs also require a maintainer review, and no one pushes
-to `main` directly. The repo owner can self-merge once CI is green.
+Ready-for-review pull requests receive one advisory review each from Codex and
+GitHub Copilot; drafts do not. Contributors address material findings and
+resolve review conversations, but reviewer outages or exhausted quotas do not
+block merging. The enforced gates remain `verify` and final maintainer review.
+
+`main` is protected by GitHub rulesets: changes land through a PR whose
+up-to-date `verify` check passes, contributor PRs also require a maintainer
+review of the final push, and no one pushes to `main` directly. Review
+conversations must be resolved and only squash merges are allowed. The repo
+owner can self-merge once CI is green.
 
 ## Deployment
 
