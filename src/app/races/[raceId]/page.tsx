@@ -22,6 +22,13 @@ import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { listActiveBoats } from "@/lib/boats/active-boats";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
+import {
+  formatSessionDateTime,
+  isLegacySessionDate,
+  legacyDateWarning,
+  resolveSessionType,
+  sessionBadgeLabel,
+} from "@/lib/sessions/format";
 import { createClient } from "@/lib/supabase/server";
 import { parseVideoUploadSummary } from "@/lib/videos/upload";
 
@@ -112,6 +119,9 @@ export default async function RaceManagePage({
 
   const isOrganizer = canOrganize ?? false;
   const canManageRace = isOrganizer;
+  const sessionType = resolveSessionType(race.session_type);
+  const isPractice = sessionType === "practice";
+  const isRaceSession = sessionType === "race";
   const membershipByBoatId = new Map(
     (boatMemberships ?? []).map((membership) => [membership.boat_id, membership.role]),
   );
@@ -224,8 +234,8 @@ export default async function RaceManagePage({
         description={
           <>
               {race.venue ? `${race.venue} · ` : ""}
-              {new Date(race.starts_at ?? race.created_at).toLocaleDateString()}
-              {isOrganizer && (
+              {formatSessionDateTime(race.starts_at ?? race.created_at, race.timezone)}
+              {isRaceSession && isOrganizer && (
                 <>
                   {" · join code "}
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
@@ -247,7 +257,7 @@ export default async function RaceManagePage({
                 lastComputedAt={analysisComputedAt}
               />
             )}
-            {canManageRace && (
+            {canManageRace && isRaceSession && (
               <Button asChild variant="outline" disabled={processedCount === 0}>
                 <Link href={`/races/${race.id}/review`}>
                   <SlidersHorizontal className="size-4" aria-hidden="true" />
@@ -255,18 +265,22 @@ export default async function RaceManagePage({
                 </Link>
               </Button>
             )}
-            <Button asChild variant="outline">
-              <Link href={`/races/${race.id}/performance`}>
-                <BarChart3 className="size-4" aria-hidden="true" />
-                Performance overview
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href={`/races/${race.id}/report`}>
-                <FileText className="size-4" aria-hidden="true" />
-                Coach report
-              </Link>
-            </Button>
+            {isRaceSession && (
+              <Button asChild variant="outline">
+                <Link href={`/races/${race.id}/performance`}>
+                  <BarChart3 className="size-4" aria-hidden="true" />
+                  Performance overview
+                </Link>
+              </Button>
+            )}
+            {isRaceSession && (
+              <Button asChild variant="outline">
+                <Link href={`/races/${race.id}/report`}>
+                  <FileText className="size-4" aria-hidden="true" />
+                  Coach report
+                </Link>
+              </Button>
+            )}
             <Button asChild disabled={processedCount === 0}>
               <Link href={`/races/${race.id}/replay`}>
                 <PlayCircle className="size-4" aria-hidden="true" />
@@ -276,15 +290,17 @@ export default async function RaceManagePage({
           </>
         }
       >
-        {raceMeta.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {raceMeta.tags.map((tag) => (
-              <Badge key={tag} variant="outline">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Badge variant="outline">{sessionBadgeLabel(sessionType)}</Badge>
+          {isLegacySessionDate(race.starts_at_source) ? (
+            <Badge variant="secondary">{legacyDateWarning()}</Badge>
+          ) : null}
+          {raceMeta.tags.map((tag) => (
+            <Badge key={tag} variant="outline">
+              {tag}
+            </Badge>
+          ))}
+        </div>
       </PageHeader>
 
       <section className="space-y-6 py-8">
@@ -298,9 +314,15 @@ export default async function RaceManagePage({
           defaultWeatherLocation={race.venue ?? ""}
           defaultWeatherStartsAt={new Date(weatherStartMs).toISOString()}
           defaultWeatherEndsAt={new Date(weatherEndMs).toISOString()}
+          title={isPractice ? "Practice conditions" : "Race conditions"}
+          description={
+            isPractice
+              ? "Wind, sea state, and tags for this private practice session."
+              : "Wind, sea state, and tags for later performance correlation."
+          }
         />
 
-        {canManageRace && (
+        {canManageRace && isRaceSession && (
           <SharePanel
             key={`${race.id}:share:${race.share_slug ?? "off"}`}
             raceId={race.id}
@@ -312,11 +334,13 @@ export default async function RaceManagePage({
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle>Fleet tracks</CardTitle>
+                <CardTitle>{isPractice ? "Track" : "Fleet tracks"}</CardTitle>
                 <CardDescription>
-                  {isOrganizer
-                    ? "Select files, then confirm each file's existing boat or explicitly create an unclaimed boat."
-                    : "Upload your own boat's VKX or CSV track."}
+                  {isPractice
+                    ? "Upload this boat's VKX or CSV track for practice replay."
+                    : isOrganizer
+                      ? "Select files, then confirm each file's existing boat or explicitly create an unclaimed boat."
+                      : "Upload your own boat's VKX or CSV track."}
                 </CardDescription>
               </div>
               <Badge variant="secondary">
@@ -327,9 +351,9 @@ export default async function RaceManagePage({
           <CardContent>
             <UploadPanel
               raceId={race.id}
-              isOrganizer={isOrganizer}
+              isOrganizer={isOrganizer && isRaceSession}
               entries={panelEntries}
-              boatOptions={isOrganizer ? availableFleetBoats : []}
+              boatOptions={isOrganizer && isRaceSession ? availableFleetBoats : []}
             />
           </CardContent>
         </Card>

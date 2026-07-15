@@ -66,6 +66,8 @@ async function main() {
         name: RACE_NAME,
         venue: "Little Traverse Bay",
         starts_at: RACE_START,
+        starts_at_source: "manual",
+        session_type: "race",
       })
       .select("id")
       .single();
