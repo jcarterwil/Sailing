@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { CircleHelp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
+import { useHelpUi } from "@/components/help/help-ui-context";
 import {
   getHelpTerm,
   helpGlossaryHref,
@@ -28,7 +29,6 @@ function HelpTipTrigger({
   label,
   className,
   onClick,
-  onPointerDown,
   onKeyDown,
   ...props
 }: {
@@ -45,12 +45,9 @@ function HelpTipTrigger({
       aria-label={label}
       {...props}
       onClick={(event) => {
+        // Keep parent role=button rows from toggling when activating help.
         event.stopPropagation();
         onClick?.(event);
-      }}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        onPointerDown?.(event);
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -62,7 +59,15 @@ function HelpTipTrigger({
   );
 }
 
-function HelpPopoverBody({ termKey }: { termKey: HelpTermKey }) {
+function HelpPopoverBody({
+  termKey,
+  titleId,
+  glossaryLink,
+}: {
+  termKey: HelpTermKey;
+  titleId: string;
+  glossaryLink: boolean;
+}) {
   const term = getHelpTerm(termKey);
   const meta = [
     term.units ? `Units: ${term.units}` : null,
@@ -75,16 +80,20 @@ function HelpPopoverBody({ termKey }: { termKey: HelpTermKey }) {
   return (
     <>
       <PopoverHeader>
-        <PopoverTitle>{term.title}</PopoverTitle>
+        <PopoverTitle id={titleId}>{term.title}</PopoverTitle>
         <PopoverDescription className="text-pretty">{term.summary}</PopoverDescription>
       </PopoverHeader>
       {meta ? <p className="text-xs text-muted-foreground text-pretty">{meta}</p> : null}
-      <Link
-        href={helpGlossaryHref(termKey)}
-        className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-      >
-        Learn more in the metrics glossary
-      </Link>
+      {glossaryLink ? (
+        <Link
+          href={helpGlossaryHref(termKey)}
+          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Learn more in the metrics glossary
+        </Link>
+      ) : (
+        <p className="text-xs text-muted-foreground text-pretty">{term.body}</p>
+      )}
     </>
   );
 }
@@ -102,7 +111,10 @@ export function HelpTip({
 }) {
   const term = getHelpTerm(termKey);
   const label = `Help: ${term.title}`;
+  const titleId = useId();
+  const { glossaryLink } = useHelpUi();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
 
   useEffect(() => {
@@ -115,25 +127,44 @@ export function HelpTip({
 
   const trigger = <HelpTipTrigger label={label} className={className} />;
 
+  function onPopoverOpenChange(open: boolean) {
+    setPopoverOpen(open);
+    if (open) setTooltipOpen(false);
+  }
+
   // Touch / coarse pointers: popover only (tooltips are unreliable on tap).
   if (coarsePointer) {
     return (
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <Popover open={popoverOpen} onOpenChange={onPopoverOpenChange}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent
           align="start"
+          aria-labelledby={titleId}
           className="w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]"
           onEscapeKeyDown={() => setPopoverOpen(false)}
         >
-          <HelpPopoverBody termKey={termKey} />
+          <HelpPopoverBody
+            termKey={termKey}
+            titleId={titleId}
+            glossaryLink={glossaryLink}
+          />
         </PopoverContent>
       </Popover>
     );
   }
 
   return (
-    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <Tooltip open={popoverOpen ? false : undefined}>
+    <Popover open={popoverOpen} onOpenChange={onPopoverOpenChange}>
+      <Tooltip
+        open={tooltipOpen}
+        onOpenChange={(open) => {
+          if (popoverOpen) {
+            setTooltipOpen(false);
+            return;
+          }
+          setTooltipOpen(open);
+        }}
+      >
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         </TooltipTrigger>
@@ -143,10 +174,15 @@ export function HelpTip({
       </Tooltip>
       <PopoverContent
         align="start"
+        aria-labelledby={titleId}
         className="w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]"
         onEscapeKeyDown={() => setPopoverOpen(false)}
       >
-        <HelpPopoverBody termKey={termKey} />
+        <HelpPopoverBody
+          termKey={termKey}
+          titleId={titleId}
+          glossaryLink={glossaryLink}
+        />
       </PopoverContent>
     </Popover>
   );

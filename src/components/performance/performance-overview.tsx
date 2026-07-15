@@ -36,6 +36,7 @@ import {
 } from "@/components/performance/view-model";
 import { WeatherTimeline } from "@/components/performance/weather-timeline";
 import { HelpTip } from "@/components/help/help-tip";
+import { useHelpUi } from "@/components/help/help-ui-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,6 +164,7 @@ export function PerformanceOverview({
   const backHref = navigation?.backHref;
   const backLabel = navigation?.backLabel ?? "Back to Session";
   const publicHref = navigation?.publicHref ?? null;
+  const { glossaryLink } = useHelpUi();
 
   function updateSort(key: MetricSortKey) {
     setSort((current) => current.key === key
@@ -485,13 +487,19 @@ export function PerformanceOverview({
                     </div>
                   ))}
                 </dl>
-                <p className="text-xs text-muted-foreground">
-                  Full definitions live in the{" "}
-                  <Link href="/help/metrics" className="font-medium text-primary underline-offset-4 hover:underline">
-                    metrics glossary
-                  </Link>
-                  .
-                </p>
+                {glossaryLink ? (
+                  <p className="text-xs text-muted-foreground">
+                    Full definitions live in the{" "}
+                    <Link href="/help/metrics" className="font-medium text-primary underline-offset-4 hover:underline">
+                      metrics glossary
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Open a help tip on a metric heading for the full definition on this shared report.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>

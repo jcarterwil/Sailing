@@ -28,14 +28,25 @@ describe("HelpTip accessibility and interaction contracts", () => {
     expect(tip).toContain("PopoverTrigger");
     expect(tip).toContain("PopoverContent");
     expect(tip).toContain('(pointer: coarse)');
-    expect(tip).toContain("open={popoverOpen ? false : undefined}");
+    expect(tip).toContain("open={tooltipOpen}");
+    expect(tip).toContain("if (popoverOpen)");
+    expect(tip).not.toContain("open={popoverOpen ? false : undefined}");
   });
 
-  it("names the trigger and dismisses the popover with Escape", () => {
+  it("names the trigger/dialog and dismisses the popover with Escape", () => {
     expect(tip).toContain("aria-label={label}");
     expect(tip).toContain("`Help: ${term.title}`");
+    expect(tip).toContain("aria-labelledby={titleId}");
     expect(tip).toContain("onEscapeKeyDown={() => setPopoverOpen(false)}");
     expect(tip).toContain("event.stopPropagation()");
+    expect(tip).not.toContain("onPointerDown");
+  });
+
+  it("keeps glossary links out of anonymous public performance shares", () => {
+    const publicPage = source("src/app/s/[slug]/performance/page.tsx");
+    expect(publicPage).toContain("<HelpUiProvider glossaryLink={false}>");
+    expect(tip).toContain("glossaryLink");
+    expect(tip).toContain("term.body");
   });
 
   it("keeps popover content viewport-safe at narrow widths", () => {
