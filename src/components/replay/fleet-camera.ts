@@ -51,16 +51,42 @@ export function fleetBounds(
   positions: readonly [number, number][],
 ): FleetBounds | null {
   if (positions.length === 0) return null;
-  let west = Infinity;
   let south = Infinity;
-  let east = -Infinity;
   let north = -Infinity;
-  for (const [lon, lat] of positions) {
-    west = Math.min(west, lon);
+  const longitudes = positions
+    .map(([longitude]) => {
+      const signed = longitude === -180 ? 180 : longitude;
+      return {
+        signed,
+        normalized: signed < 0 ? signed + 360 : signed,
+      };
+    })
+    .sort((a, b) => a.normalized - b.normalized);
+  for (const [, lat] of positions) {
     south = Math.min(south, lat);
-    east = Math.max(east, lon);
     north = Math.max(north, lat);
   }
+
+  // The shortest interval on a circle is the complement of its largest gap.
+  // Returning west > east denotes an antimeridian-crossing box; MapLibre's
+  // cameraForBounds expands that wrapped interval by 360 degrees before fit.
+  let largestGap = -Infinity;
+  let largestGapEndIndex = 0;
+  for (let index = 0; index < longitudes.length; index += 1) {
+    const next =
+      index === longitudes.length - 1
+        ? longitudes[0].normalized + 360
+        : longitudes[index + 1].normalized;
+    const gap = next - longitudes[index].normalized;
+    if (gap > largestGap) {
+      largestGap = gap;
+      largestGapEndIndex = index;
+    }
+  }
+  const west =
+    longitudes[(largestGapEndIndex + 1) % longitudes.length]
+      .signed;
+  const east = longitudes[largestGapEndIndex].signed;
   return { west, south, east, north };
 }
 

@@ -30,6 +30,21 @@ describe("fleet camera geometry", () => {
     expect(fleetCameraPadding(1_200, 800)).toBe(120);
   });
 
+  it("uses the short wrapped interval across the antimeridian", () => {
+    expect(
+      fleetBounds([
+        [179, -17],
+        [-179, -16],
+        [178.5, -18],
+      ]),
+    ).toEqual({
+      west: 178.5,
+      south: -18,
+      east: -179,
+      north: -16,
+    });
+  });
+
   it("detects boats entering the outer viewport dead band", () => {
     expect(fleetOutsideDeadband([{ x: 200, y: 100 }], 400, 200)).toBe(false);
     expect(fleetOutsideDeadband([{ x: 20, y: 100 }], 400, 200)).toBe(true);
