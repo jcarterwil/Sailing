@@ -12,7 +12,7 @@ export const APP_NAV_ITEMS = [
   {
     id: "dashboard",
     href: "/dashboard",
-    label: "Dashboard",
+    label: "My Sailing",
     icon: "dashboard",
   },
   {

@@ -30,21 +30,23 @@ describe("session foundation app boundaries", () => {
     expect(actions).toContain("Fleet mapping is only available for race sessions.");
   });
 
-  it("orders dashboard sessions by starts_at and shows provenance", () => {
-    expect(dashboard).toContain('.order("starts_at", { ascending: false })');
-    expect(dashboard).toContain('select("*, race_entries(id, boats(name))"');
-    expect(dashboard).toContain("formatSessionDateTime");
-    expect(dashboard).toContain("sessionBadgeLabel");
-    expect(dashboard).toContain("legacyDateWarning");
-    expect(dashboard).toContain("Sessions");
+  it("keeps My Sailing boat-scoped with Session provenance helpers", () => {
+    expect(dashboard).toContain('title: "My Sailing"');
+    expect(dashboard).toContain("My Sailing");
+    expect(dashboard).toContain("resolveActiveBoatId");
+    expect(dashboard).toContain("loadBoatSessions");
+    expect(dashboard).toContain("MY_SAILING_RECENT_SESSION_LIMIT");
+    expect(dashboard).toContain("Add sailing data");
     expect(dashboard).toContain("CreateSessionDialog");
+    expect(dashboard).toContain("Club & organizer tools");
   });
 
-  it("renames boat hub races to sessions with type and timezone-aware dates", () => {
+  it("keeps Boat Hub Sessions with type and timezone-aware dates", () => {
     expect(boatHub).toContain("Sessions");
-    expect(boatHub).toContain('select("id, races(*), tracks(status)"');
-    expect(boatHub).toContain("formatSessionDateTime");
-    expect(boatHub).toContain("sessionBadgeLabel");
+    expect(boatHub).toContain("loadBoatSessions");
+    expect(boatHub).toContain("BoatSessionList");
+    expect(boatHub).toContain("parseBoatHubTab");
+    expect(boatHub).toContain('boatHubHref(boat.id, "activity")');
   });
 
   it("hides join/share/fleet results for practice on the session detail page", () => {
