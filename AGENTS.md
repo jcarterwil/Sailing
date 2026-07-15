@@ -65,3 +65,20 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 - **Anonymous access is server-mediated only.** There are no anon RLS policies; public share pages resolve via the admin client after a slug lookup. Do not add anon policies.
 - **The admin (service-role) client bypasses RLS** — every call site must do its own authorization check first (membership, organizer, or admin).
 - **Post-auth redirects** go through `getSafeNextPath` (`src/lib/auth/redirect.ts`) — an open-redirect guard.
+
+## Cursor Cloud specific instructions
+
+Unlike the Codex Cloud notes above (which target a remote hosted Supabase and skip `build`), the Cursor Cloud VM runs a **self-contained local Supabase stack in Docker**, so no production secrets are needed. Standard commands live in `README.md` / `CLAUDE.md` / `package.json`; this section only covers the non-obvious VM specifics.
+
+**Node**: Node 24 (nvm) is the default. `~/.bashrc` prepends the nvm node-24 bin ahead of `/exec-daemon/node` (which is v22) so login/agent shells resolve Node 24. The startup update script only runs `npm ci`.
+
+**Bringing services up in a fresh session** (nothing auto-starts these):
+1. Docker is installed but `dockerd` may not be running — check `docker info`; if down, start it with `sudo dockerd > /tmp/dockerd.log 2>&1 &` and `sudo chmod 666 /var/run/docker.sock`.
+2. `npx supabase start` — API at `http://127.0.0.1:54321`, Studio `:54323`, Mailpit (email) `http://localhost:54324`. Local stack data persists across `supabase stop`/`start`; only `supabase db reset` (or a first-ever start on an empty volume) re-runs migrations.
+3. `npm run dev` — app at `http://localhost:3000`. `.env.local` (gitignored) already points at the local stack.
+
+**GOTCHA — fresh DB init aborts on the admin-grant migration.** `supabase/migrations/20260712220000_grant_sailforever_admin.sql` fails on an empty DB because it requires the `sailforever@gmail.com` auth user to already exist, so a plain `supabase db reset` / first `supabase start` stops mid-migration. Bootstrap in two phases: (1) move every migration with a filename `>= 20260712220000` out of `supabase/migrations/`, run the reset/start (applies migrations 1–9), (2) create the user via the Auth admin API (`POST /auth/v1/admin/users` with the local secret key, `{"email":"sailforever@gmail.com","email_confirm":true}`), move the migrations back, then `npx supabase migration up`. Afterwards the working tree is unchanged. Prefer `supabase stop`/`start` over `db reset` to keep the bootstrapped state.
+
+**GOTCHA — non-admin race creation fails locally.** `createRace` (`src/app/races/actions.ts`) does `INSERT ... RETURNING` via `.select()`; the races SELECT policy calls the STABLE `security definer` `is_race_member()`, which can't see the just-inserted row inside the same statement, so PostgREST reports `new row violates row-level security policy for table "races"`. Admin users bypass this because `is_race_organizer()` short-circuits on `is_admin()`. For end-to-end organizer flows (create race, upload tracks) sign in as an **admin** — `sailforever@gmail.com` is seeded as admin by the grant migration.
+
+**Auth is passwordless magic link.** Sign in from `/login`, then open the newest **"Your sign-in link"** email in Mailpit (`http://localhost:54324`) and click its link — older "Confirm your email address" links expire and show "Email link is invalid or has expired".
