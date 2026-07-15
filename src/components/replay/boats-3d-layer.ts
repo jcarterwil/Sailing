@@ -197,9 +197,8 @@ export function createBoats3dLayer(
           object.frustumCulled = false;
         });
         const rig = boat.getObjectByName(SAILBOAT_RIG_NAME);
-        const selection = boat.getObjectByName(
-          SAILBOAT_SELECTION_NAME,
-        );
+        const selection =
+          boat.getObjectByName(SAILBOAT_SELECTION_NAME) ?? null;
         const shadow = createFlatShadow(THREE);
         const wakeVisual = createWake(THREE);
         models.set(entry.entryId, {
