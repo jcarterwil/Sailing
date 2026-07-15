@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 import { BoatSettingsForm } from "@/app/boats/[boatId]/boat-settings-form";
+import {
+  BoatHubNav,
+  boatHubHref,
+  parseBoatHubTab,
+} from "@/components/boats/boat-hub-nav";
+import { BoatSessionList } from "@/components/boats/boat-session-list";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -15,21 +21,49 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  formatSessionDateTime,
-  isLegacySessionDate,
-  legacyDateWarning,
-  sessionBadgeLabel,
-} from "@/lib/sessions/format";
+  paginateBoatSessions,
+  summarizeBoatDataCompleteness,
+} from "@/lib/boats/boat-sessions";
+import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
+import {
+  BOAT_HUB_ACTIVITY_PAGE_SIZE,
+  MY_SAILING_RECENT_SESSION_LIMIT,
+  boatAccessLabel,
+  type ViewableBoatAccess,
+} from "@/lib/boats/my-sailing";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+async function resolveBoatAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  boatId: string,
+  userId: string,
+  ownerId: string,
+): Promise<ViewableBoatAccess> {
+  if (ownerId === userId) return "owner";
+  const { data: membership } = await supabase
+    .from("boat_memberships")
+    .select("role")
+    .eq("boat_id", boatId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (membership?.role === "editor") return "editor";
+  return "viewer";
+}
+
 export default async function BoatHubPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ boatId: string }>;
+  searchParams: Promise<{ tab?: string; page?: string }>;
 }) {
   const { boatId } = await params;
+  const { tab: tabParam, page: pageParam } = await searchParams;
+  const activeTab = parseBoatHubTab(tabParam);
+  const requestedPage = Number.parseInt(pageParam ?? "1", 10);
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -45,27 +79,29 @@ export default async function BoatHubPage({
     ]);
   if (!canView) notFound();
 
-  const [{ data: boat }, { data: entries }] = await Promise.all([
+  const [{ data: boat }, sessions] = await Promise.all([
     supabase
       .from("boats")
       .select("id, name, sail_number, boat_class, owner_id")
       .eq("id", boatId)
       .maybeSingle(),
-    supabase
-      .from("race_entries")
-      // Nested * keeps boat hub loading if session columns are not live yet.
-      .select("id, races(*), tracks(status)")
-      .eq("boat_id", boatId),
+    loadBoatSessions(supabase, boatId),
   ]);
   if (!boat) notFound();
 
-  const races = (entries ?? [])
-    .filter((entry) => entry.races)
-    .sort((a, b) => {
-      const aTime = new Date(a.races!.starts_at ?? a.races!.created_at).getTime();
-      const bTime = new Date(b.races!.starts_at ?? b.races!.created_at).getTime();
-      return bTime - aTime;
-    });
+  const access = await resolveBoatAccess(
+    supabase,
+    boat.id,
+    user.id,
+    boat.owner_id ?? "",
+  );
+  const completeness = summarizeBoatDataCompleteness(sessions);
+  const recent = sessions.slice(0, MY_SAILING_RECENT_SESSION_LIMIT);
+  const activity = paginateBoatSessions(
+    sessions,
+    Number.isFinite(requestedPage) ? requestedPage : 1,
+    BOAT_HUB_ACTIVITY_PAGE_SIZE,
+  );
 
   const subtitle =
     [boat.sail_number ? `#${boat.sail_number}` : null, boat.boat_class]
@@ -78,117 +114,178 @@ export default async function BoatHubPage({
       displayName={profile?.display_name}
       isAdmin={profile?.is_admin ?? false}
     >
-        <PageHeader
-          title={boat.name}
-          description={subtitle}
-          backHref="/boats"
-          backLabel="My boats"
-          actions={
-            <>
-              {canEdit ? (
-                <Button asChild>
-                  <Link href={`/sessions/import?boatId=${boat.id}`}>
-                    Add sailing data
-                  </Link>
-                </Button>
-              ) : null}
-              {canManage ? (
-                <Button variant="outline" asChild>
-                  <Link href={`/boats/${boat.id}/crew`}>
-                    <Users className="size-4" aria-hidden="true" />
-                    Manage crew
-                  </Link>
-                </Button>
-              ) : null}
-            </>
-          }
-        />
+      <PageHeader
+        title={boat.name}
+        description={`${subtitle} · ${boatAccessLabel(access)}`}
+        backHref="/dashboard"
+        backLabel="My Sailing"
+        actions={
+          activeTab === "overview" && canEdit ? (
+            <Button asChild className="min-h-11">
+              <Link href={`/sessions/import?boatId=${boat.id}`}>
+                Add sailing data
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
-        <section className="space-y-6 py-8">
-          {canManage ? (
+      <div className="space-y-6 py-6">
+        <BoatHubNav boatId={boat.id} activeTab={activeTab} />
+
+        {activeTab === "overview" ? (
+          <section className="space-y-6" aria-labelledby="overview-heading">
+            <h2 id="overview-heading" className="sr-only">
+              Overview
+            </h2>
             <Card className="bg-card/70">
               <CardHeader>
-                <CardTitle>Boat details</CardTitle>
-                <CardDescription>Name, sail number, and class.</CardDescription>
+                <CardTitle>Boat overview</CardTitle>
+                <CardDescription>
+                  Identity, role, and how complete this boat&apos;s sailing data is.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Role:</span>{" "}
+                  {boatAccessLabel(access)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Data:</span>{" "}
+                  {completeness.sessionCount} Session
+                  {completeness.sessionCount === 1 ? "" : "s"} ·{" "}
+                  {completeness.withTrackCount} with tracks ·{" "}
+                  {completeness.processedCount} processed
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {canManage ? (
+                    <Button variant="outline" className="min-h-11" asChild>
+                      <Link href={`/boats/${boat.id}/crew`}>
+                        <Users className="size-4" aria-hidden="true" />
+                        Manage crew
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {canManage ? (
+                    <Button variant="outline" className="min-h-11" asChild>
+                      <Link href={boatHubHref(boat.id, "settings")}>Settings</Link>
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" className="min-h-11" asChild>
+                    <Link href={boatHubHref(boat.id, "activity")}>View activity</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/70">
+              <CardHeader>
+                <CardTitle>Recent Sessions</CardTitle>
+                <CardDescription>
+                  Latest {MY_SAILING_RECENT_SESSION_LIMIT} Sessions for this boat.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <BoatSettingsForm
-                  boatId={boat.id}
-                  name={boat.name}
-                  sailNumber={boat.sail_number}
-                  boatClass={boat.boat_class}
+                <BoatSessionList
+                  sessions={recent}
+                  emptyMessage="This boat isn't in any Sessions yet."
                 />
               </CardContent>
             </Card>
-          ) : null}
+          </section>
+        ) : null}
 
-          <Card className="bg-card/70">
-            <CardHeader>
-              <CardTitle>Sessions</CardTitle>
-              <CardDescription>
-                {races.length} session{races.length === 1 ? "" : "s"} for this boat
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {races.length > 0 ? (
-                <ul className="divide-y divide-border/60">
-                  {races.map((entry) => (
-                    <li
-                      key={entry.id}
-                      className="flex items-center justify-between gap-3 py-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/races/${entry.races!.id}`}
-                            className="font-medium hover:text-primary"
-                          >
-                            {entry.races!.name}
-                          </Link>
-                          <Badge variant="outline">
-                            {sessionBadgeLabel(
-                              "session_type" in entry.races!
-                                ? entry.races!.session_type
-                                : "race",
-                            )}
-                          </Badge>
-                        </div>
-                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <CalendarDays className="size-3.5" aria-hidden="true" />
-                          {formatSessionDateTime(
-                            entry.races!.starts_at ?? entry.races!.created_at,
-                            entry.races!.timezone,
-                          )}
-                          {entry.races!.venue ? ` · ${entry.races!.venue}` : ""}
-                        </p>
-                        {isLegacySessionDate(
-                          "starts_at_source" in entry.races!
-                            ? entry.races!.starts_at_source
-                            : null,
-                        ) ? (
-                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                            {legacyDateWarning()}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Badge
-                        variant={
-                          entry.tracks?.status === "processed" ? "secondary" : "outline"
-                        }
-                      >
-                        {entry.tracks?.status ?? "no track"}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
+        {activeTab === "activity" ? (
+          <section className="space-y-4" aria-labelledby="activity-heading">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 id="activity-heading" className="text-lg font-semibold">
+                  Activity
+                </h2>
                 <p className="text-sm text-muted-foreground">
-                  This boat isn&apos;t in any sessions yet.
+                  {activity.total} Session{activity.total === 1 ? "" : "s"} · page{" "}
+                  {activity.page} of {activity.totalPages}
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        </section>
+              </div>
+            </div>
+            <Card className="bg-card/70">
+              <CardContent className="pt-6">
+                <BoatSessionList
+                  sessions={activity.items}
+                  emptyMessage="This boat isn't in any Sessions yet."
+                />
+              </CardContent>
+            </Card>
+            {activity.totalPages > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {activity.page > 1 ? (
+                  <Button variant="outline" className="min-h-11" asChild>
+                    <Link href={boatHubHref(boat.id, "activity", activity.page - 1)}>
+                      Previous
+                    </Link>
+                  </Button>
+                ) : null}
+                {activity.page < activity.totalPages ? (
+                  <Button variant="outline" className="min-h-11" asChild>
+                    <Link href={boatHubHref(boat.id, "activity", activity.page + 1)}>
+                      Next
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {activeTab === "settings" ? (
+          <section className="space-y-4" aria-labelledby="settings-heading">
+            <h2 id="settings-heading" className="text-lg font-semibold">
+              Settings
+            </h2>
+            {canManage ? (
+              <>
+                <Card className="bg-card/70">
+                  <CardHeader>
+                    <CardTitle>Boat details</CardTitle>
+                    <CardDescription>Name, sail number, and class.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <BoatSettingsForm
+                      boatId={boat.id}
+                      name={boat.name}
+                      sailNumber={boat.sail_number}
+                      boatClass={boat.boat_class}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="bg-card/70">
+                  <CardHeader>
+                    <CardTitle>Crew</CardTitle>
+                    <CardDescription>
+                      Invite editors and viewers for this boat.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button className="min-h-11" asChild>
+                      <Link href={`/boats/${boat.id}/crew`}>
+                        <Users className="size-4" aria-hidden="true" />
+                        Manage crew
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card className="bg-card/70">
+                <CardContent className="py-8 text-sm text-muted-foreground">
+                  Only the boat owner can change boat settings. Your role is{" "}
+                  <Badge variant="outline">{boatAccessLabel(access)}</Badge>.
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        ) : null}
+      </div>
     </AuthenticatedShell>
   );
 }

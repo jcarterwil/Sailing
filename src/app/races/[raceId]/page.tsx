@@ -245,8 +245,8 @@ export default async function RaceManagePage({
               )}
           </>
         }
-        backHref="/dashboard"
-        backLabel="Dashboard"
+          backHref="/dashboard"
+          backLabel="My Sailing"
         actions={
           <>
             {canManageRace && (

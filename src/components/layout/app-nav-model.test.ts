@@ -9,7 +9,7 @@ import {
 describe("APP_NAV_ITEMS", () => {
   it("defines only the locked primary destinations", () => {
     expect(APP_NAV_ITEMS.map(({ href, label }) => ({ href, label }))).toEqual([
-      { href: "/dashboard", label: "Dashboard" },
+      { href: "/dashboard", label: "My Sailing" },
       { href: "/boats", label: "My boats" },
     ]);
   });

@@ -1,29 +1,43 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, Sailboat, Ticket, Trophy, UserPlus, Users } from "lucide-react";
+import {
+  CalendarDays,
+  Sailboat,
+  Ticket,
+  Trophy,
+  UserPlus,
+} from "lucide-react";
 
 import { CreateSessionDialog } from "@/app/races/create-session-dialog";
+import { BoatContextSelector } from "@/components/boats/boat-context-selector";
+import { BoatSessionList } from "@/components/boats/boat-session-list";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listActiveEditableBoats } from "@/lib/boats/active-boats";
+import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
 import {
-  formatSessionDateTime,
-  isLegacySessionDate,
-  legacyDateWarning,
-  sessionBadgeLabel,
-} from "@/lib/sessions/format";
+  boatAccessLabel,
+  listViewableBoats,
+  MY_SAILING_RECENT_SESSION_LIMIT,
+  resolveActiveBoatId,
+} from "@/lib/boats/my-sailing";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Dashboard",
+  title: "My Sailing",
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ boat?: string }>;
+}) {
+  const { boat: requestedBoatId } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,27 +47,24 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [
-    { data: profile },
-    { data: races },
-    { data: boats },
-    { data: crewAccess },
-    editableBoats,
-  ] = await Promise.all([
+  const [{ data: profile }, viewableBoats, editableBoats] = await Promise.all([
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
-    supabase
-      .from("races")
-      // Select * so an app-first deploy still works before session columns land.
-      .select("*, race_entries(id, boats(name))")
-      .order("starts_at", { ascending: false }),
-    supabase.from("boats").select("id, name, sail_number").eq("owner_id", user.id),
-    supabase
-      .from("boat_memberships")
-      .select("role, boats(id, name, sail_number)")
-      .eq("user_id", user.id),
+    listViewableBoats(supabase, user.id),
     listActiveEditableBoats(supabase, user.id),
   ]);
   const isAdmin = profile?.is_admin ?? false;
+
+  const activeBoatId = resolveActiveBoatId(requestedBoatId, viewableBoats);
+  const activeBoat = viewableBoats.find((boat) => boat.id === activeBoatId) ?? null;
+
+  const [{ data: canEditActive }, recentSessions] = await Promise.all([
+    activeBoatId
+      ? supabase.rpc("can_edit_boat", { bid: activeBoatId })
+      : Promise.resolve({ data: false as boolean | null }),
+    activeBoatId ? loadBoatSessions(supabase, activeBoatId) : Promise.resolve([]),
+  ]);
+
+  const recent = recentSessions.slice(0, MY_SAILING_RECENT_SESSION_LIMIT);
 
   return (
     <AuthenticatedShell
@@ -61,130 +72,120 @@ export default async function DashboardPage() {
       displayName={profile?.display_name}
       isAdmin={isAdmin}
     >
-        <PageHeader
-          title={isAdmin ? "Admin dashboard" : "Racer dashboard"}
-          description={
-            isAdmin
-              ? "Open, upload to, and generate reports for every session in the club."
-              : "Create a race or practice with an actual date, or join a race with a code."
-          }
-          actions={
-            <>
-              <Button variant="outline" asChild>
-                <Link href="/series">
-                  <Trophy className="size-4" aria-hidden="true" />
-                  Series
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/claim">
-                  <Ticket className="size-4" aria-hidden="true" />
-                  Claim a boat
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/races/join">
-                  <UserPlus className="size-4" aria-hidden="true" />
-                  Join by code
-                </Link>
-              </Button>
-              <CreateSessionDialog boats={editableBoats} />
-            </>
-          }
-        >
-          {isAdmin ? (
-            <Badge variant="secondary" className="mt-1">
-              Admin
-            </Badge>
-          ) : null}
-        </PageHeader>
-
-      <section className="py-8">
-        <h2 className="text-xl font-semibold tracking-tight">
-          {isAdmin ? "All sessions" : "Sessions"}
-        </h2>
-
-        {races && races.length > 0 ? (
-          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {races.map((race) => {
-              const entryCount = race.race_entries?.length ?? 0;
-              const practiceBoatName =
-                race.session_type === "practice"
-                  ? (race.race_entries ?? []).find((row) => row.boats?.name)?.boats?.name ?? null
-                  : null;
-              return (
-                <Link key={race.id} href={`/races/${race.id}`} className="group">
-                  <Card className="h-full bg-card/70 transition-colors group-hover:border-primary/50">
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base">{race.name}</CardTitle>
-                        <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                          <Badge variant="outline">{sessionBadgeLabel(race.session_type)}</Badge>
-                          {race.organizer_id === user.id && (
-                            <Badge variant="secondary">Organizer</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      <p className="flex items-center gap-2">
-                        <CalendarDays className="size-4" aria-hidden="true" />
-                        {formatSessionDateTime(
-                          race.starts_at ?? race.created_at,
-                          race.timezone,
-                        )}
-                      </p>
-                      {isLegacySessionDate(
-                        "starts_at_source" in race ? race.starts_at_source : null,
-                      ) ? (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                          {legacyDateWarning()}
-                        </p>
-                      ) : null}
-                      <p className="mt-1">
-                        {race.venue ? `${race.venue} · ` : ""}
-                        {race.session_type === "practice"
-                          ? practiceBoatName ?? "1 boat"
-                          : `${entryCount} boat${entryCount === 1 ? "" : "s"}`}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
+      <PageHeader
+        title="My Sailing"
+        description={
+          activeBoat
+            ? `${activeBoat.name}${
+                activeBoat.sailNumber ? ` · #${activeBoat.sailNumber}` : ""
+              } · ${boatAccessLabel(activeBoat.access)}`
+            : "Your boats, recent Sessions, and sailing data."
+        }
+        actions={
+          canEditActive && activeBoatId ? (
+            <Button asChild className="min-h-11">
+              <Link href={`/sessions/import?boatId=${activeBoatId}`}>
+                Add sailing data
+              </Link>
+            </Button>
+          ) : null
+        }
+      >
+        {viewableBoats.length > 0 && activeBoatId ? (
+          <div className="pt-3">
+            <BoatContextSelector boats={viewableBoats} activeBoatId={activeBoatId} />
           </div>
+        ) : null}
+        {isAdmin ? (
+          <Badge variant="secondary" className="mt-2">
+            Admin
+          </Badge>
+        ) : null}
+      </PageHeader>
+
+      <section className="space-y-4 py-8" aria-labelledby="recent-sessions-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2
+            id="recent-sessions-heading"
+            className="flex items-center gap-2 text-xl font-semibold tracking-tight"
+          >
+            <CalendarDays className="size-5 text-primary" aria-hidden="true" />
+            Recent Sessions
+          </h2>
+          {activeBoatId ? (
+            <Button variant="ghost" className="min-h-11" asChild>
+              <Link href={`/boats/${activeBoatId}?tab=activity`}>Boat activity</Link>
+            </Button>
+          ) : null}
+        </div>
+
+        {!activeBoatId ? (
+          <Card className="bg-card/70">
+            <CardContent className="space-y-3 py-8 text-sm text-muted-foreground">
+              <p>No boat yet. Claim a boat or join a race to start your sailing history.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="min-h-11" asChild>
+                  <Link href="/claim">
+                    <Ticket className="size-4" aria-hidden="true" />
+                    Claim a boat
+                  </Link>
+                </Button>
+                <Button variant="outline" className="min-h-11" asChild>
+                  <Link href="/races/join">
+                    <UserPlus className="size-4" aria-hidden="true" />
+                    Join by code
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
-          <Card className="mt-6 bg-card/70">
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              No sessions yet. Create a race or practice and upload VKX or CSV tracks.
+          <Card className="bg-card/70">
+            <CardContent className="pt-6">
+              <BoatSessionList
+                sessions={recent}
+                emptyMessage="No Sessions for this boat yet. Add sailing data to import past races and practices."
+              />
             </CardContent>
           </Card>
         )}
       </section>
 
-      <section className="border-t border-border/70 py-8">
+      <section className="border-t border-border/70 py-8" aria-labelledby="boats-heading">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <h2
+            id="boats-heading"
+            className="flex items-center gap-2 text-xl font-semibold tracking-tight"
+          >
             <Sailboat className="size-5 text-primary" aria-hidden="true" />
-            My boats
+            Your boats
           </h2>
-          {boats && boats.length > 0 ? (
-            <Button variant="ghost" size="sm" asChild>
+          {viewableBoats.length > 0 ? (
+            <Button variant="ghost" className="min-h-11" asChild>
               <Link href="/boats">View all</Link>
             </Button>
           ) : null}
         </div>
-        {boats && boats.length > 0 ? (
+        {viewableBoats.length > 0 ? (
           <ul className="mt-4 grid gap-2 text-sm md:grid-cols-3">
-            {boats.map((boat) => (
-              <li key={boat.id} className="rounded-lg border border-border/70 bg-card/70 px-4 py-3">
-                <Link href={`/boats/${boat.id}`} className="font-medium hover:text-primary">
+            {viewableBoats.map((boat) => (
+              <li
+                key={boat.id}
+                className="rounded-lg border border-border/70 bg-card/70 px-4 py-3"
+              >
+                <Link
+                  href={`/boats/${boat.id}`}
+                  className="font-medium hover:text-primary"
+                >
                   {boat.name}
                 </Link>
-                {boat.sail_number && (
-                  <span className="ml-2 text-muted-foreground">#{boat.sail_number}</span>
-                )}
-                <p className="mt-1 text-xs text-muted-foreground">Owner · manage boat</p>
+                {boat.sailNumber ? (
+                  <span className="ml-2 text-muted-foreground">#{boat.sailNumber}</span>
+                ) : null}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {boatAccessLabel(boat.access)}
+                  {boat.id === activeBoatId ? " · active" : ""}
+                </p>
               </li>
             ))}
           </ul>
@@ -195,28 +196,42 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {(crewAccess ?? []).length > 0 && (
-        <section className="border-t border-border/70 py-8">
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Users className="size-5 text-primary" aria-hidden="true" />
-            Crew access
-          </h2>
-          <ul className="mt-4 grid gap-2 text-sm md:grid-cols-3">
-            {(crewAccess ?? []).map((access) => (
-              <li
-                key={access.boats.id}
-                className="rounded-lg border border-border/70 bg-card/70 px-4 py-3"
-              >
-                <span className="font-medium">{access.boats.name}</span>
-                {access.boats.sail_number && (
-                  <span className="ml-2 text-muted-foreground">#{access.boats.sail_number}</span>
-                )}
-                <p className="mt-1 text-xs capitalize text-muted-foreground">{access.role}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <section
+        className="border-t border-border/70 py-8"
+        aria-labelledby="club-tools-heading"
+      >
+        <Card className="bg-muted/30">
+          <CardHeader>
+            <CardTitle
+              id="club-tools-heading"
+              className="text-base font-medium text-muted-foreground"
+            >
+              Club & organizer tools
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button variant="outline" className="min-h-11" asChild>
+              <Link href="/series">
+                <Trophy className="size-4" aria-hidden="true" />
+                Series
+              </Link>
+            </Button>
+            <Button variant="outline" className="min-h-11" asChild>
+              <Link href="/claim">
+                <Ticket className="size-4" aria-hidden="true" />
+                Claim a boat
+              </Link>
+            </Button>
+            <Button variant="outline" className="min-h-11" asChild>
+              <Link href="/races/join">
+                <UserPlus className="size-4" aria-hidden="true" />
+                Join by code
+              </Link>
+            </Button>
+            <CreateSessionDialog boats={editableBoats} />
+          </CardContent>
+        </Card>
+      </section>
     </AuthenticatedShell>
   );
 }
