@@ -35,12 +35,17 @@ describe("replay visualization v2 boundaries", () => {
   });
 
   it("keeps all replay renderers on the shared publication stream", () => {
+    expect(mapViewSource).toContain(
+      "frameSource.subscribe",
+    );
+    expect(broadcastSource).toContain("source.subscribe");
+    expect(helmSource).toContain("source.subscribe");
+
     for (const source of [
       mapViewSource,
       broadcastSource,
       helmSource,
     ]) {
-      expect(source).toContain("source.subscribe");
       expect(source).not.toContain("sampleAt");
       expect(source).not.toContain(
         "usePlaybackStore.subscribe",
