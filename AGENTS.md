@@ -16,7 +16,7 @@ Directory-specific guides exist — read the `AGENTS.md` nearest the code you to
 ## Golden rules
 
 1. **Read the Next.js 16 docs before writing framework code.** Request interception is `src/proxy.ts` (the renamed `middleware.ts`). Data pages use `export const dynamic = "force-dynamic"`; route handlers take `params: Promise<{…}>`. Confirm conventions in `node_modules/next/dist/docs/` rather than from memory.
-2. **CI is the build/test gate — let it run.** GitHub Actions runs `npm run verify` (lint → typecheck → test → build) on every PR and on push to `main`; that check is authoritative. Locally, run the fast, reliable pieces — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. **Don't gate your work on a full local production `build`, especially in constrained or cloud sandboxes where it's flaky — push and let CI build/test**, then fix whatever it flags. (The `build` step needs real time and memory; a wobbly sandbox is the wrong place to run it.)
+2. **CI is the build/test gate — let it run.** GitHub Actions runs `npm run verify` (lint → typecheck → test → build) on every PR and on push to `main`; that check is authoritative. When working locally in Codex, run the fast, reliable pieces — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. **Do not attempt or require a local production `build` during Codex work.** In constrained or cloud sandboxes it is flaky and expensive; push the branch and let GitHub CI build/test, then fix whatever CI flags. (The `build` step needs real time and memory, so the GitHub runner is the intended owner of it.)
 3. **Surgical changes only.** Match surrounding style; touch only what the task needs; don't refactor adjacent code.
 4. **Never put a secret in a `NEXT_PUBLIC_` variable.** The service-role key (`SUPABASE_SECRET_KEY`) is server-only via `src/lib/supabase/admin.ts` (`import "server-only"`). Client and server components use the publishable key.
 
@@ -52,7 +52,7 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 
 ## Pull request flow
 
-1. Get the fast local checks green — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. A clean local production `build` is **not** required; CI runs it (see above).
+1. Get the fast local checks green — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. In Codex, **do not run `npm run build` locally**; a clean local production build is not required because CI runs it (see above).
 2. Open the PR against `main`. CI runs `npm run verify`; fix anything it flags that's attributable to your change. Keep changes additive/backward-compatible where they touch the database or shared analytics types.
 3. `main`'s rulesets enforce the gate: the `verify` check must pass, and contributor PRs require a code-owner review before merge. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
 4. If an automated code reviewer runs on the PR, address its material findings before merging. Never merge with the `verify` check red.
