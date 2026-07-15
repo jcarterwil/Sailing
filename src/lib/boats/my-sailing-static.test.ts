@@ -52,6 +52,8 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     expect(helpers).toContain('return "Date needs review"');
     expect(loader).toContain("BOAT_SESSION_QUERY_LIMIT");
     expect(loader).toContain(".limit(BOAT_SESSION_QUERY_LIMIT)");
+    expect(loader).toContain('referencedTable: "races"');
+    expect(loader).toContain("races!inner");
     expect(loader).not.toContain("race.created_at");
   });
 });

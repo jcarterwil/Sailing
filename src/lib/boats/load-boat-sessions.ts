@@ -14,13 +14,16 @@ export async function loadBoatSessions(
   supabase: SupabaseClient<Database>,
   boatId: string,
 ): Promise<BoatSessionListItem[]> {
+  // Order parent rows by Session starts_at (then race id) so the safety cap
+  // keeps the newest sailed Sessions, not the newest race_entries.id values.
   const { data: entries, error } = await supabase
     .from("race_entries")
     .select(
-      "id, races(id, name, session_type, starts_at, starts_at_source, timezone, venue), tracks(status)",
+      "id, races!inner(id, name, session_type, starts_at, starts_at_source, timezone, venue), tracks(status)",
     )
     .eq("boat_id", boatId)
-    .order("id", { ascending: false })
+    .order("starts_at", { referencedTable: "races", ascending: false })
+    .order("id", { referencedTable: "races", ascending: false })
     .limit(BOAT_SESSION_QUERY_LIMIT);
 
   if (error) throw new Error(`Could not load boat sessions: ${error.message}`);
