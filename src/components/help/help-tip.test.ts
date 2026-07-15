@@ -83,7 +83,8 @@ describe("HelpTip accessibility and interaction contracts", () => {
     }
     // Performance table heads pass registry keys via SortableHead's helpKey.
     expect(surfaces).toContain('helpKey="sog"');
-    expect(surfaces).toContain('helpKey="vmg"');
+    expect(surfaces).toContain('helpKey="straight"');
+    expect(surfaces).toContain('termKey="vmg"');
     expect(surfaces).toContain("<HelpTip termKey={helpKey}");
 
     expect(surfaces).toContain('href="/help/metrics"');

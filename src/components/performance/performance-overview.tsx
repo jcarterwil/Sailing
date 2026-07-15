@@ -380,8 +380,8 @@ export function PerformanceOverview({
                 <SortableHead label="Efficiency (%)" sortKey="courseEfficiencyPct" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="courseEfficiency" />
                 <SortableHead label="Up straight VMG (kt)" sortKey="upwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="straight" />
                 <SortableHead label="Up maneuver VMG (kt)" sortKey="upwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="maneuver" />
-                <SortableHead label="Down straight VMG (kt)" sortKey="downwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="vmg" />
-                <SortableHead label="Down maneuver VMG (kt)" sortKey="downwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
+                <SortableHead label="Down straight VMG (kt)" sortKey="downwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="straight" />
+                <SortableHead label="Down maneuver VMG (kt)" sortKey="downwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="maneuver" />
                 <SortableHead label="Tacks (#)" sortKey="tacks" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Gybes (#)" sortKey="gybes" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Botched (#)" sortKey="botched" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
@@ -413,7 +413,10 @@ export function PerformanceOverview({
 
         <section aria-labelledby="distribution-heading" className="space-y-4">
           <div>
-            <h2 id="distribution-heading" className="text-xl font-semibold">VMG distributions</h2>
+            <h2 id="distribution-heading" className="flex flex-wrap items-center gap-1 text-xl font-semibold">
+              VMG distributions
+              <HelpTip termKey="vmg" />
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">Persisted common bins; straight-line samples are preferred when available.</p>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
