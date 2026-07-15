@@ -593,7 +593,8 @@ export function createBroadcastRenderer(
       adaptiveQuality.profile.dynamicShadows,
     );
     const rigObject = group.getObjectByName(SAILBOAT_RIG_NAME);
-    const selection = group.getObjectByName(SAILBOAT_SELECTION_NAME);
+    const selection =
+      group.getObjectByName(SAILBOAT_SELECTION_NAME) ?? null;
     const wakeVisual = createWake(THREE);
     scene.add(group, wakeVisual.mesh);
 
