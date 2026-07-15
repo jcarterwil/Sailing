@@ -1,4 +1,4 @@
-import { CalendarDays, Trophy } from "lucide-react";
+import { CalendarDays, Pencil, Trophy } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -62,12 +62,20 @@ export default async function SeriesPage() {
                   <p className="text-muted-foreground">
                     {item.venue || "Venue not set"} · revision {item.revision}
                   </p>
-                  <Button asChild className="w-full">
-                    <Link href={`/series/${item.id}/edit`}>
-                      <Trophy className="size-4" aria-hidden="true" />
-                      Open organizer
-                    </Link>
-                  </Button>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button asChild>
+                      <Link href={`/series/${item.id}`}>
+                        <Trophy className="size-4" aria-hidden="true" />
+                        Standings
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link href={`/series/${item.id}/edit`}>
+                        <Pencil className="size-4" aria-hidden="true" />
+                        Organizer
+                      </Link>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
