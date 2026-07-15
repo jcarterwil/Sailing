@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -13,6 +14,7 @@ import { Maneuvers } from "@/components/replay/panels/maneuvers";
 import { resolveMobileSheetGesture } from "@/components/replay/panels/mobile-sheet";
 import { Performance } from "@/components/replay/panels/performance";
 import { Polars } from "@/components/replay/panels/polars";
+import { REPLAY_WORKSPACE_ATTR } from "@/components/replay/replay-safe-zones";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -97,6 +99,18 @@ export function PanelTabs({
     transition: dragging ? "none" : "transform 200ms ease-out",
   } as CSSProperties;
   const panelExposed = mobileOpen || dragging;
+
+  // Imperatively sync open state onto the workspace so overlay safe-zone
+  // CSS can expand without React re-rendering map overlays every frame.
+  useEffect(() => {
+    const workspace = sheetRef.current?.closest(
+      `[${REPLAY_WORKSPACE_ATTR}]`,
+    );
+    if (!(workspace instanceof HTMLElement)) return;
+    workspace.dataset.replayPanelOpen = panelExposed
+      ? "true"
+      : "false";
+  }, [panelExposed]);
 
   return (
     <aside

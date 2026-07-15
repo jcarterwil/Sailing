@@ -15,6 +15,7 @@ const panelSource = replaySource("panels/panel-tabs.tsx");
 const broadcastSource = replaySource("broadcast-3d.tsx");
 const helmSource = replaySource("helm-pov.tsx");
 const controlsSource = replaySource("playback-controls.tsx");
+const viewSettingsSource = replaySource("replay-view-settings.tsx");
 const commentarySource = replaySource("replay-commentary.tsx");
 const timelineSource = replaySource("timeline.tsx");
 const nauticalChartSource = replaySource("nautical-chart.ts");
@@ -114,32 +115,33 @@ describe("replay visualization v2 boundaries", () => {
   });
 
   it("keeps mobile secondary controls in one bottom settings sheet", () => {
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain(
       "<SheetTitle>View settings</SheetTitle>",
     );
-    expect(controlsSource).toContain('side="bottom"');
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain('side="bottom"');
+    expect(viewSettingsSource).toContain(
       'className="ml-auto size-11 shrink-0 sm:hidden"',
     );
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain(
       'className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]"',
     );
-    expect(controlsSource).not.toContain(
+    expect(viewSettingsSource).not.toContain(
       'className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden"',
     );
     expect(controlsSource).toContain(
       'className="size-11 shrink-0 sm:size-9"',
     );
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain(
       'aria-label="Nautical chart opacity"',
     );
-    expect(controlsSource).toContain('step="0.01"');
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain('step="0.01"');
+    expect(viewSettingsSource).toContain(
       "data-replay-desktop-settings",
     );
-    expect(controlsSource).toContain(
+    expect(viewSettingsSource).toContain(
       "data-replay-mobile-settings",
     );
+    expect(controlsSource).toContain("<ReplayViewSettings>");
     expect(panelSource).toContain(
       "data-replay-data-panel",
     );

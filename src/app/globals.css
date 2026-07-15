@@ -143,7 +143,80 @@
   }
 }
 
+/* Replay overlay safe zones — shared inset tokens for map chrome. */
+[data-replay-workspace] {
+  --replay-safe-inset: 0.75rem;
+  --replay-map-ctrl-stack: 6.75rem;
+  --replay-bottom-reserved: var(--replay-safe-inset);
+  --replay-wind-lift: 2.75rem;
+  --replay-top-left-max-width: min(16rem, calc(100% - 5rem));
+}
+
+@media (max-width: 767px) {
+  [data-replay-workspace] {
+    --replay-bottom-reserved: calc(3.25rem + var(--replay-safe-inset));
+  }
+  [data-replay-workspace][data-replay-panel-open="true"] {
+    --replay-bottom-reserved: calc(min(55dvh, 28rem) + var(--replay-safe-inset));
+  }
+}
+
+[data-replay-overlay="leaderboard"] {
+  position: absolute;
+  z-index: 10;
+  top: var(--replay-safe-inset);
+  left: var(--replay-safe-inset);
+  max-width: var(--replay-top-left-max-width);
+}
+
+[data-replay-overlay="video"] {
+  position: absolute;
+  z-index: 10;
+  top: calc(var(--replay-safe-inset) + var(--replay-map-ctrl-stack));
+  right: var(--replay-safe-inset);
+  max-width: calc(100% - (2 * var(--replay-safe-inset)));
+}
+
+[data-replay-overlay="wind"] {
+  position: absolute;
+  z-index: 10;
+  right: var(--replay-safe-inset);
+  bottom: calc(var(--replay-bottom-reserved) + var(--replay-wind-lift));
+}
+
+[data-replay-overlay="legend"] {
+  position: absolute;
+  z-index: 10;
+  left: var(--replay-safe-inset);
+  bottom: var(--replay-bottom-reserved);
+}
+
+[data-replay-overlay="chart-notice"] {
+  position: absolute;
+  z-index: 10;
+  right: var(--replay-safe-inset);
+  bottom: var(--replay-bottom-reserved);
+  max-width: min(24rem, calc(100% - (2 * var(--replay-safe-inset))));
+}
+
+[data-replay-stage] .maplibregl-ctrl-top-right {
+  top: var(--replay-safe-inset);
+  right: var(--replay-safe-inset);
+}
+
+[data-replay-stage] .maplibregl-ctrl-bottom-left,
+[data-replay-stage] .maplibregl-ctrl-bottom-right {
+  bottom: var(--replay-bottom-reserved);
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
+  [data-replay-workspace] {
+    --replay-bottom-reserved: calc(3.25rem + var(--replay-safe-inset));
+  }
+  [data-replay-workspace][data-replay-panel-open="true"] {
+    --replay-bottom-reserved: calc(min(55dvh, 28rem) + var(--replay-safe-inset));
+  }
+
   /* Preserve renderer space when width breakpoints would expose desktop UI. */
   [data-replay-desktop-settings] {
     display: none !important;
