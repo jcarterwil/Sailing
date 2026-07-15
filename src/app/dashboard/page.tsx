@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listActiveEditableBoats } from "@/lib/boats/active-boats";
+import { dateNeedsReviewLabel } from "@/lib/boats/boat-sessions";
 import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
 import {
   boatAccessLabel,
@@ -25,6 +26,11 @@ import {
   MY_SAILING_RECENT_SESSION_LIMIT,
   resolveActiveBoatId,
 } from "@/lib/boats/my-sailing";
+import {
+  formatSessionDateTime,
+  isLegacySessionDate,
+  sessionBadgeLabel,
+} from "@/lib/sessions/format";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -32,6 +38,9 @@ export const metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+/** Bounded organizer list in the secondary club-tools region. */
+const ORGANIZED_SESSION_LIMIT = 12;
 
 export default async function DashboardPage({
   searchParams,
@@ -64,12 +73,20 @@ export default async function DashboardPage({
   const activeBoatId = resolveActiveBoatId(requestedBoatId, viewableBoats);
   const activeBoat = viewableBoats.find((boat) => boat.id === activeBoatId) ?? null;
 
-  const [{ data: canEditActive }, recentSessions] = await Promise.all([
-    activeBoatId
-      ? supabase.rpc("can_edit_boat", { bid: activeBoatId })
-      : Promise.resolve({ data: false as boolean | null }),
-    activeBoatId ? loadBoatSessions(supabase, activeBoatId) : Promise.resolve([]),
-  ]);
+  const [{ data: canEditActive }, recentSessions, { data: organizedSessions }] =
+    await Promise.all([
+      activeBoatId
+        ? supabase.rpc("can_edit_boat", { bid: activeBoatId })
+        : Promise.resolve({ data: false as boolean | null }),
+      activeBoatId ? loadBoatSessions(supabase, activeBoatId) : Promise.resolve([]),
+      // Keep organizer-only Sessions reachable (no entries / other boats).
+      supabase
+        .from("races")
+        .select("id, name, session_type, starts_at, starts_at_source, timezone, venue")
+        .eq("organizer_id", user.id)
+        .order("starts_at", { ascending: false })
+        .limit(ORGANIZED_SESSION_LIMIT),
+    ]);
 
   const recent = recentSessions.slice(0, MY_SAILING_RECENT_SESSION_LIMIT);
 
@@ -216,26 +233,68 @@ export default async function DashboardPage({
               Club & organizer tools
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Button variant="outline" className="min-h-11" asChild>
-              <Link href="/series">
-                <Trophy className="size-4" aria-hidden="true" />
-                Series
-              </Link>
-            </Button>
-            <Button variant="outline" className="min-h-11" asChild>
-              <Link href="/claim">
-                <Ticket className="size-4" aria-hidden="true" />
-                Claim a boat
-              </Link>
-            </Button>
-            <Button variant="outline" className="min-h-11" asChild>
-              <Link href="/races/join">
-                <UserPlus className="size-4" aria-hidden="true" />
-                Join by code
-              </Link>
-            </Button>
-            <CreateSessionDialog boats={editableBoats} />
+          <CardContent className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className="min-h-11" asChild>
+                <Link href="/series">
+                  <Trophy className="size-4" aria-hidden="true" />
+                  Series
+                </Link>
+              </Button>
+              <Button variant="outline" className="min-h-11" asChild>
+                <Link href="/claim">
+                  <Ticket className="size-4" aria-hidden="true" />
+                  Claim a boat
+                </Link>
+              </Button>
+              <Button variant="outline" className="min-h-11" asChild>
+                <Link href="/races/join">
+                  <UserPlus className="size-4" aria-hidden="true" />
+                  Join by code
+                </Link>
+              </Button>
+              <CreateSessionDialog boats={editableBoats} />
+            </div>
+
+            {(organizedSessions ?? []).length > 0 ? (
+              <div className="space-y-3" aria-labelledby="organized-sessions-heading">
+                <h3
+                  id="organized-sessions-heading"
+                  className="text-sm font-medium text-muted-foreground"
+                >
+                  Sessions you organize
+                </h3>
+                <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-background/60">
+                  {(organizedSessions ?? []).map((session) => (
+                    <li key={session.id} className="px-4 py-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/races/${session.id}`}
+                          className="font-medium hover:text-primary"
+                        >
+                          {session.name}
+                        </Link>
+                        <Badge variant="outline">
+                          {sessionBadgeLabel(session.session_type)}
+                        </Badge>
+                      </div>
+                      <p
+                        className={
+                          isLegacySessionDate(session.starts_at_source)
+                            ? "mt-1 text-xs text-amber-700 dark:text-amber-400"
+                            : "mt-1 text-xs text-muted-foreground"
+                        }
+                      >
+                        {isLegacySessionDate(session.starts_at_source)
+                          ? dateNeedsReviewLabel()
+                          : formatSessionDateTime(session.starts_at, session.timezone)}
+                        {session.venue ? ` · ${session.venue}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>

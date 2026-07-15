@@ -18,6 +18,8 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     expect(dashboard).toContain("includeRequestedViewableBoat");
     expect(dashboard).toContain("/sessions/import?boatId=");
     expect(dashboard).toContain('.rpc("can_edit_boat"');
+    expect(dashboard).toContain("Sessions you organize");
+    expect(dashboard).toContain('.eq("organizer_id", user.id)');
     expect(dashboard).toContain("min-h-11");
     expect(dashboard).not.toContain("from(\"tracks\")");
     expect(dashboard).not.toContain("processed_path");
