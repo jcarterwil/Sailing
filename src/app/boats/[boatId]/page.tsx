@@ -77,6 +77,19 @@ export default async function BoatHubPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Redirect tombstones before the view check — merge clears source ownership
+  // and memberships, but authenticated clients can still read merged_into_id.
+  const { data: boatMeta } = await supabase
+    .from("boats")
+    .select("id, merged_into_id")
+    .eq("id", boatId)
+    .maybeSingle();
+  if (!boatMeta) notFound();
+  if (boatMeta.merged_into_id) {
+    const tabQuery = activeTab !== "overview" ? `?tab=${activeTab}` : "";
+    redirect(`/boats/${boatMeta.merged_into_id}${tabQuery}`);
+  }
+
   const [{ data: profile }, { data: canView }, { data: canManage }, { data: canEdit }] =
     await Promise.all([
       supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),

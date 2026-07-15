@@ -72,8 +72,7 @@ export function mergeEditableBoatOptions(
 }
 
 /**
- * Active currently means a normal boat row. Issue #125 will add the tombstone
- * predicate here, so every selector adopts reconciliation behavior together.
+ * Active boats omit merge tombstones (`merged_into_id is null`).
  */
 export async function listActiveBoats(
   supabase: SupabaseClient<Database>,
@@ -82,6 +81,7 @@ export async function listActiveBoats(
   const { data, error } = await supabase
     .from("boats")
     .select("id, name, sail_number, boat_class")
+    .is("merged_into_id", null)
     .order("name", { ascending: true })
     .order("id", { ascending: true })
     .limit(clampLimit(limit));
@@ -103,6 +103,7 @@ export async function listActiveEditableBoats(
         .from("boats")
         .select("id, name, sail_number, boat_class")
         .eq("owner_id", userId)
+        .is("merged_into_id", null)
         .order("name", { ascending: true })
         .order("id", { ascending: true })
         .limit(boundedLimit),
@@ -127,6 +128,7 @@ export async function listActiveEditableBoats(
       .from("boats")
       .select("id, name, sail_number, boat_class")
       .in("id", editorIds)
+      .is("merged_into_id", null)
       .order("name", { ascending: true })
       .order("id", { ascending: true })
       .limit(boundedLimit);

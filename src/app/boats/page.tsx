@@ -29,12 +29,17 @@ export default async function BoatsIndexPage() {
       .from("boats")
       .select("id, name, sail_number, boat_class")
       .eq("owner_id", user.id)
+      .is("merged_into_id", null)
       .order("name"),
     supabase
       .from("boat_memberships")
-      .select("role, boats(id, name, sail_number, boat_class)")
+      .select("role, boats(id, name, sail_number, boat_class, merged_into_id)")
       .eq("user_id", user.id),
   ]);
+
+  const crewActive = (crew ?? []).filter(
+    (access) => access.boats && access.boats.merged_into_id == null,
+  );
 
   return (
     <AuthenticatedShell
@@ -90,11 +95,11 @@ export default async function BoatsIndexPage() {
           )}
         </section>
 
-        {(crew ?? []).length > 0 && (
+        {crewActive.length > 0 && (
           <section className="border-t border-border/70 py-8">
             <h2 className="text-xl font-semibold tracking-tight">Crew access</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {(crew ?? []).map((access) =>
+              {crewActive.map((access) =>
                 access.boats ? (
                   <Link key={access.boats.id} href={`/boats/${access.boats.id}`} className="group">
                     <Card className="h-full bg-card/70 transition-colors group-hover:border-primary/50">

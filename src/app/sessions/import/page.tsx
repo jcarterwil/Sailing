@@ -29,6 +29,7 @@ export default async function StartHistoricalImportPage({
       .from("boats")
       .select("id, name")
       .eq("id", boatId)
+      .is("merged_into_id", null)
       .maybeSingle(),
   ]);
 
