@@ -35,11 +35,13 @@ import {
   type SortDirection,
 } from "@/components/performance/view-model";
 import { WeatherTimeline } from "@/components/performance/weather-timeline";
+import { HelpTip } from "@/components/help/help-tip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { HELP_REGISTRY, type HelpTermKey } from "@/content/help-registry";
 import {
   ANALYZED_WIND_REPORT_LABEL,
   WEATHER_CONTEXT_REPORT_LABEL,
@@ -67,22 +69,27 @@ function SortableHead({
   activeKey,
   direction,
   onSort,
+  helpKey,
 }: {
   label: string;
   sortKey: MetricSortKey;
   activeKey: MetricSortKey;
   direction: SortDirection;
   onSort: (key: MetricSortKey) => void;
+  helpKey?: HelpTermKey;
 }) {
   const active = activeKey === sortKey;
   return (
     <TableHead aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap py-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSort(sortKey)}>
-        {label}
-        {active && (direction === "asc"
-          ? <ArrowUp className="size-3" aria-hidden="true" />
-          : <ArrowDown className="size-3" aria-hidden="true" />)}
-      </button>
+      <div className="inline-flex items-center gap-0.5 whitespace-nowrap">
+        <button type="button" className="inline-flex items-center gap-1 py-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSort(sortKey)}>
+          {label}
+          {active && (direction === "asc"
+            ? <ArrowUp className="size-3" aria-hidden="true" />
+            : <ArrowDown className="size-3" aria-hidden="true" />)}
+        </button>
+        {helpKey ? <HelpTip termKey={helpKey} className="size-6" /> : null}
+      </div>
     </TableHead>
   );
 }
@@ -250,7 +257,14 @@ export function PerformanceOverview({
             </Card>
 
             <Card className="border-primary/50 bg-primary/5">
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="size-4 text-primary" aria-hidden="true" />{ANALYZED_WIND_REPORT_LABEL}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="size-4 text-primary" aria-hidden="true" />
+                  {ANALYZED_WIND_REPORT_LABEL}
+                  <HelpTip termKey="analyzedWind" />
+                  <HelpTip termKey="confidence" />
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <p className="text-3xl font-semibold">{formatNumber(model.analyzedWind.directionDeg, 0)}° <span className="text-lg font-normal text-muted-foreground">at {formatNumber(model.analyzedWind.speedKts, 1)} kt</span></p>
                 <p className="mt-3 text-xs text-muted-foreground">Canonical analysis input · {model.analyzedWind.source} · {model.analyzedWind.confidence} confidence</p>
@@ -258,7 +272,13 @@ export function PerformanceOverview({
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CloudSun className="size-4" aria-hidden="true" />{WEATHER_CONTEXT_REPORT_LABEL}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CloudSun className="size-4" aria-hidden="true" />
+                  {WEATHER_CONTEXT_REPORT_LABEL}
+                  <HelpTip termKey="analyzedWeather" />
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{weatherDatasetLabel(evidence?.dataset)}</Badge>
@@ -342,7 +362,10 @@ export function PerformanceOverview({
 
         <section aria-labelledby="fleet-metrics-heading" className="space-y-4">
           <div>
-            <h2 id="fleet-metrics-heading" className="text-xl font-semibold">Fleet metrics</h2>
+            <h2 id="fleet-metrics-heading" className="flex flex-wrap items-center gap-1 text-xl font-semibold">
+              Fleet metrics
+              <HelpTip termKey="coverage" />
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">Click a header to sort. Missing coverage stays an em dash, never numeric zero.</p>
           </div>
           <div className="max-w-full overflow-x-auto rounded-lg border">
@@ -351,13 +374,13 @@ export function PerformanceOverview({
                 <SortableHead label="Boat" sortKey="boatName" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Place (#)" sortKey="rank" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Elapsed (h:mm:ss)" sortKey="elapsedMs" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
-                <SortableHead label="Avg SOG (kt)" sortKey="avgSogKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
+                <SortableHead label="Avg SOG (kt)" sortKey="avgSogKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="sog" />
                 <SortableHead label="Max SOG (kt)" sortKey="maxSogKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Distance (nm)" sortKey="sailedDistanceM" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
-                <SortableHead label="Efficiency (%)" sortKey="courseEfficiencyPct" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
-                <SortableHead label="Up straight VMG (kt)" sortKey="upwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
-                <SortableHead label="Up maneuver VMG (kt)" sortKey="upwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
-                <SortableHead label="Down straight VMG (kt)" sortKey="downwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
+                <SortableHead label="Efficiency (%)" sortKey="courseEfficiencyPct" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="courseEfficiency" />
+                <SortableHead label="Up straight VMG (kt)" sortKey="upwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="straight" />
+                <SortableHead label="Up maneuver VMG (kt)" sortKey="upwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="maneuver" />
+                <SortableHead label="Down straight VMG (kt)" sortKey="downwindStraightKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} helpKey="vmg" />
                 <SortableHead label="Down maneuver VMG (kt)" sortKey="downwindManeuverKts" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Tacks (#)" sortKey="tacks" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
                 <SortableHead label="Gybes (#)" sortKey="gybes" activeKey={sort.key} direction={sort.direction} onSort={updateSort} />
@@ -436,7 +459,13 @@ export function PerformanceOverview({
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Info className="size-4" aria-hidden="true" />Metric contract</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Info className="size-4" aria-hidden="true" />
+                  Metric contract
+                  <HelpTip termKey="provenance" />
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
                   <dt className="text-muted-foreground">Contract</dt><dd className="text-right">{model.quality.metricContract}</dd>
@@ -446,11 +475,20 @@ export function PerformanceOverview({
                   <dt className="text-muted-foreground">Corrections</dt><dd className="text-right">{model.quality.correctionsVersion === null ? "none" : `V${model.quality.correctionsVersion}`}</dd>
                 </dl>
                 <dl className="space-y-2 border-t pt-4 text-xs">
-                  <div><dt className="font-medium">SOG</dt><dd className="text-muted-foreground">Speed over ground from valid processed samples.</dd></div>
-                  <div><dt className="font-medium">VMG</dt><dd className="text-muted-foreground">Velocity made good relative to canonical analyzed wind.</dd></div>
-                  <div><dt className="font-medium">Efficiency</dt><dd className="text-muted-foreground">Course distance divided by sailed distance.</dd></div>
-                  <div><dt className="font-medium">Straight vs maneuver</dt><dd className="text-muted-foreground">Directional VMG outside and inside bounded maneuver windows.</dd></div>
+                  {(["sog", "vmg", "courseEfficiency", "straight", "maneuver"] as const).map((key) => (
+                    <div key={key}>
+                      <dt className="font-medium">{HELP_REGISTRY[key].title}</dt>
+                      <dd className="text-muted-foreground">{HELP_REGISTRY[key].summary}</dd>
+                    </div>
+                  ))}
                 </dl>
+                <p className="text-xs text-muted-foreground">
+                  Full definitions live in the{" "}
+                  <Link href="/help/metrics" className="font-medium text-primary underline-offset-4 hover:underline">
+                    metrics glossary
+                  </Link>
+                  .
+                </p>
               </CardContent>
             </Card>
           </div>

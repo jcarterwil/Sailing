@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Copy, Link2 } from "lucide-react";
 
 import { toggleShare } from "@/app/races/actions";
+import { HelpTip } from "@/components/help/help-tip";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,6 +72,7 @@ export function SharePanel({
         <CardTitle className="flex items-center gap-2">
           <Link2 className="size-4 text-primary" aria-hidden="true" />
           Public share link
+          <HelpTip termKey="publicShare" />
         </CardTitle>
         <CardDescription>
           Anyone with the link can open the replay and coach report without signing in.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  BookOpenText,
   Boxes,
   LayoutDashboard,
   Loader2,
@@ -169,6 +170,11 @@ export function AppNav({
               <DropdownMenuItem asChild className="min-h-11">
                 <Link href="/boats">
                   <Boxes className="size-4" aria-hidden="true" /> My boats
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="min-h-11">
+                <Link href="/help/metrics">
+                  <BookOpenText className="size-4" aria-hidden="true" /> Metrics glossary
                 </Link>
               </DropdownMenuItem>
               {isAdmin ? (

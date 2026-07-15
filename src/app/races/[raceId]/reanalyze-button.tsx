@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 
+import { HelpTip } from "@/components/help/help-tip";
 import { Button } from "@/components/ui/button";
 
 export function ReanalyzeButton({
@@ -41,19 +42,23 @@ export function ReanalyzeButton({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={!ready || pending}
-        onClick={onClick}
-      >
-        {pending ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <RefreshCw className="size-4" aria-hidden="true" />
-        )}
-        Re-analyze
-      </Button>
+      <div className="flex items-center gap-1">
+        <HelpTip termKey="reanalyze" />
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={!ready || pending}
+          onClick={onClick}
+        >
+          {pending ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="size-4" aria-hidden="true" />
+          )}
+          Re-analyze
+        </Button>
+      </div>
       {lastComputedAt && (
         <span className="text-[11px] text-muted-foreground">
           Analyzed {new Date(lastComputedAt).toLocaleString()}
