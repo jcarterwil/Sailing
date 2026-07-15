@@ -28,6 +28,7 @@ describe("authenticated Performance Overview integration", () => {
 
   it("links the race page and visibly distinguishes required report sections", () => {
     expect(racePage).toContain("SessionWorkspaceNav");
+    expect(overview).toContain("Race report");
     expect(overview).toContain("Single-race performance results");
     expect(overview).toContain("Best sustained performance");
     expect(overview).toContain("PerformanceOpportunities");
@@ -45,3 +46,4 @@ describe("authenticated Performance Overview integration", () => {
     expect(opportunities).toContain("#leg-drilldown-heading");
   });
 });
+

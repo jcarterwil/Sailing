@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Pause,
-  Play,
-  Settings2,
-  X,
-} from "lucide-react";
+import { Pause, Play, X } from "lucide-react";
 
 import {
   usePlaybackStore,
-  type CameraMode,
-  type TrailMode,
 } from "@/components/replay/playback-store";
 import type { ReplayDisplayPreferences } from "@/components/replay/replay-display-preferences";
+import {
+  ReplayViewSettings,
+  ViewSettingsFields,
+} from "@/components/replay/replay-view-settings";
 import { sampleAt } from "@/components/replay/track-index";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { Button } from "@/components/ui/button";
@@ -24,14 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { DEG } from "@/lib/analytics/angles";
 import {
   distanceToSegmentM,
@@ -219,276 +208,6 @@ function distanceChipText(
   return text;
 }
 
-function ViewSettingsFields({
-  preferences,
-  onPreferencesChange,
-  trailMode,
-  onTrailModeChange,
-  cameraMode,
-  onCameraModeChange,
-  hasSelection,
-}: {
-  preferences: ReplayDisplayPreferences;
-  onPreferencesChange: (
-    patch: DisplayPreferencesPatch,
-  ) => void;
-  trailMode: TrailMode;
-  onTrailModeChange: (mode: TrailMode) => void;
-  cameraMode: CameraMode;
-  onCameraModeChange: (mode: CameraMode) => void;
-  hasSelection: boolean;
-}) {
-  return (
-    <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
-      <div className="grid gap-1">
-        <span className="text-xs font-medium sm:sr-only">
-          Replay view
-        </span>
-        <Select
-          value={preferences.viewMode}
-          onValueChange={(value) =>
-            onPreferencesChange({
-              viewMode:
-                value as ReplayDisplayPreferences["viewMode"],
-            })
-          }
-        >
-          <SelectTrigger
-            className="h-11 w-full sm:h-9 sm:w-36"
-            aria-label="Replay view"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tactical">Tactical</SelectItem>
-            <SelectItem value="broadcast">
-              Broadcast 3D
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {preferences.viewMode === "tactical" ? (
-        <>
-          <div className="grid gap-1">
-            <span className="text-xs font-medium sm:sr-only">
-              Trail mode
-            </span>
-            <Select
-              value={trailMode}
-              onValueChange={(value) =>
-                onTrailModeChange(value as TrailMode)
-              }
-            >
-              <SelectTrigger
-                className="h-11 w-full sm:h-9 sm:w-28"
-                aria-label="Trail mode"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="tail">Tail</SelectItem>
-                <SelectItem value="full">
-                  Full tail
-                </SelectItem>
-                <SelectItem value="speed">Speed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-1">
-            <span className="text-xs font-medium sm:sr-only">
-              Base map
-            </span>
-            <Select
-              value={preferences.baseStyle}
-              onValueChange={(value) =>
-                onPreferencesChange({
-                  baseStyle:
-                    value as ReplayDisplayPreferences["baseStyle"],
-                })
-              }
-            >
-              <SelectTrigger
-                className="h-11 w-full sm:h-9 sm:w-28"
-                aria-label="Base map"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="map">Map</SelectItem>
-                <SelectItem value="satellite">
-                  Satellite
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-1">
-            <span className="text-xs font-medium sm:sr-only">
-              Nautical chart
-            </span>
-            <Select
-              value={
-                preferences.nauticalChart ? "on" : "off"
-              }
-              onValueChange={(value) =>
-                onPreferencesChange({
-                  nauticalChart: value === "on",
-                })
-              }
-            >
-              <SelectTrigger
-                className="h-11 w-full sm:h-9 sm:w-32"
-                aria-label="Nautical chart"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="off">
-                  Chart off
-                </SelectItem>
-                <SelectItem value="on">
-                  NOAA chart
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {preferences.nauticalChart ? (
-            <label className="grid min-w-44 gap-1 text-xs font-medium">
-              <span>
-                Chart opacity{" "}
-                {Math.round(
-                  preferences.chartOpacity * 100,
-                )}
-                %
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={preferences.chartOpacity}
-                onChange={(event) =>
-                  onPreferencesChange({
-                    chartOpacity: Number(
-                      event.currentTarget.value,
-                    ),
-                  })
-                }
-                className="h-11 w-full accent-primary sm:h-9"
-                aria-label="Nautical chart opacity"
-              />
-            </label>
-          ) : null}
-
-          <div className="grid gap-1">
-            <span className="text-xs font-medium sm:sr-only">
-              Tactical boats
-            </span>
-            <Select
-              value={
-                preferences.showTacticalHulls
-                  ? "hulls"
-                  : "arrows"
-              }
-              onValueChange={(value) =>
-                onPreferencesChange({
-                  showTacticalHulls: value === "hulls",
-                })
-              }
-            >
-              <SelectTrigger
-                className="h-11 w-full sm:h-9 sm:w-36"
-                aria-label="Tactical boats"
-                title="Stylized hulls appear at close zoom; arrows remain the fleet fallback"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="arrows">
-                  Boat arrows
-                </SelectItem>
-                <SelectItem value="hulls">
-                  Stylized hulls
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-1">
-            <span className="text-xs font-medium sm:sr-only">
-              Tactical camera
-            </span>
-            <Select
-              value={cameraMode}
-              onValueChange={(value) =>
-                onCameraModeChange(value as CameraMode)
-              }
-            >
-              <SelectTrigger
-                className="h-11 w-full sm:h-9 sm:w-28"
-                aria-label="Tactical camera"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fleet">
-                  Fleet auto
-                </SelectItem>
-                <SelectItem value="north">
-                  North-up
-                </SelectItem>
-                <SelectItem
-                  value="follow"
-                  disabled={!hasSelection}
-                >
-                  Follow
-                </SelectItem>
-                <SelectItem
-                  value="chase"
-                  disabled={!hasSelection}
-                >
-                  Chase
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </>
-      ) : (
-        <div className="grid gap-1">
-          <span className="text-xs font-medium sm:sr-only">
-            Broadcast camera
-          </span>
-          <Select
-            value={preferences.broadcastCamera}
-            onValueChange={(value) =>
-              onPreferencesChange({
-                broadcastCamera:
-                  value as ReplayDisplayPreferences["broadcastCamera"],
-              })
-            }
-          >
-            <SelectTrigger
-              className="h-11 w-full sm:h-9 sm:w-36"
-              aria-label="Broadcast camera"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="chase">Chase</SelectItem>
-              <SelectItem value="aerial">
-                Fleet aerial
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function PlaybackControls({
   tzOffsetMinutes,
   displayPreferences,
@@ -594,7 +313,7 @@ export function PlaybackControls({
     });
   }, [startsMs, tracks, tzOffsetMinutes]);
 
-  const renderViewSettings = () => (
+  const viewSettings = (
     <ViewSettingsFields
       preferences={displayPreferences}
       onPreferencesChange={onDisplayPreferencesChange}
@@ -613,6 +332,7 @@ export function PlaybackControls({
         className="size-11 shrink-0 sm:size-9"
         onClick={() => setPlaying(!playing)}
         aria-label={playing ? "Pause" : "Play"}
+        aria-pressed={playing}
       >
         {playing ? (
           <Pause className="size-4" />
@@ -627,6 +347,14 @@ export function PlaybackControls({
             ? "text-amber-600 dark:text-amber-400"
             : ""
         }`}
+        role="timer"
+        aria-live="off"
+        aria-atomic="true"
+        aria-label={
+          clock.isRace
+            ? `Race clock ${clock.primary}, wall ${clock.wall}`
+            : `Replay clock ${clock.primary}`
+        }
         title={
           clock.isRace ? `Wall ${clock.wall}` : undefined
         }
@@ -670,19 +398,13 @@ export function PlaybackControls({
         </SelectContent>
       </Select>
 
-      <div
-        className="hidden min-w-0 sm:block"
-        data-replay-desktop-settings
-      >
-        {renderViewSettings()}
-      </div>
-
       {rangeSelection ? (
         <Button
           variant="outline"
           size="sm"
           className="h-11 shrink-0 sm:h-9"
           onClick={() => setRange(null)}
+          aria-label="Clear range"
         >
           <X className="size-3.5" aria-hidden="true" />
           <span className="hidden sm:inline">
@@ -692,35 +414,7 @@ export function PlaybackControls({
         </Button>
       ) : null}
 
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="ml-auto size-11 shrink-0 sm:hidden"
-            data-replay-mobile-settings
-            aria-label="Open View settings"
-          >
-            <Settings2 className="size-4" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent
-          side="bottom"
-          className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]"
-        >
-          <SheetHeader>
-            <SheetTitle>View settings</SheetTitle>
-            <SheetDescription>
-              Choose the replay renderer, chart, trails,
-              boats, and camera without pausing playback.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-4 pb-4">
-            {renderViewSettings()}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <ReplayViewSettings>{viewSettings}</ReplayViewSettings>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseRaceMeta } from "@/lib/races/meta";
+import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import { resolveSessionType } from "@/lib/sessions/format";
 import {
   resolveSessionPrimaryAction,
@@ -12,6 +13,24 @@ import {
 import type { SessionType } from "@/lib/sessions/types";
 import type { Database } from "@/lib/supabase/database.types";
 
+/** True when persisted analysis can render the Epic #66 Performance report. */
+export function sessionReportAvailable(input: {
+  sessionType: SessionType;
+  analysis: unknown;
+  computedAt: string | null | undefined;
+  processedTrackUpdatedAts: readonly (string | null | undefined)[];
+  correctionsUpdatedAt: string | null | undefined;
+}): boolean {
+  if (input.sessionType !== "race") return false;
+  const parsed = parseStoredRaceAnalysis({
+    value: input.analysis,
+    computedAt: input.computedAt ?? null,
+    processedTrackUpdatedAts: input.processedTrackUpdatedAts,
+    correctionsUpdatedAt: input.correctionsUpdatedAt,
+  });
+  return parsed.status === "valid" && parsed.performance !== null;
+}
+
 /** Build the shared Session workspace primary action from page-loaded state. */
 export function buildSessionPrimaryAction(input: {
   raceId: string;
@@ -20,6 +39,7 @@ export function buildSessionPrimaryAction(input: {
   canEdit: boolean;
   tracks: readonly SessionTrackSummaryInput[];
   analysisCurrent: boolean;
+  reportAvailable?: boolean;
 }): SessionPrimaryAction | null {
   const trackFlags = summarizeSessionTrackStatuses(input.tracks);
   return resolveSessionPrimaryAction({
@@ -28,6 +48,7 @@ export function buildSessionPrimaryAction(input: {
     canUpload: input.canUpload,
     canEdit: input.canEdit,
     analysisCurrent: input.analysisCurrent,
+    reportAvailable: input.reportAvailable ?? false,
     ...trackFlags,
   });
 }
@@ -86,7 +107,7 @@ export async function loadSessionWorkspaceChrome(
       .eq("user_id", userId),
     supabase
       .from("race_analyses")
-      .select("computed_at")
+      .select("analysis, computed_at")
       .eq("race_id", raceId)
       .maybeSingle(),
     supabase
@@ -134,14 +155,22 @@ export async function loadSessionWorkspaceChrome(
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",
   );
+  const processedUpdatedAts = processedEntries.map((entry) => entry.tracks!.updated_at);
   const analysisCurrent =
     processedEntries.length > 0 &&
     processedEntries.length === (entries?.length ?? 0) &&
     analysisIsFresh(
       analysisRow?.computed_at,
-      processedEntries.map((entry) => entry.tracks!.updated_at),
+      processedUpdatedAts,
       correctionsRow?.updated_at,
     );
+  const reportAvailable = sessionReportAvailable({
+    sessionType,
+    analysis: analysisRow?.analysis,
+    computedAt: analysisRow?.computed_at,
+    processedTrackUpdatedAts: processedUpdatedAts,
+    correctionsUpdatedAt: correctionsRow?.updated_at,
+  });
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
   const practiceBoatName =
     sessionType === "practice"
@@ -170,6 +199,7 @@ export async function loadSessionWorkspaceChrome(
       canEdit: isOrganizer,
       tracks,
       analysisCurrent,
+      reportAvailable,
     }),
   };
 }

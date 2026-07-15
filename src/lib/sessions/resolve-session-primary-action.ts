@@ -5,6 +5,7 @@ export type SessionPrimaryActionKind =
   | "processing"
   | "fix-data"
   | "review-analyze"
+  | "open-report"
   | "open-replay";
 
 export interface SessionPrimaryAction {
@@ -36,6 +37,11 @@ export interface ResolveSessionPrimaryActionInput {
   analysisCurrent: boolean;
   /** At least one processed track with a loadable processed_path. */
   replayAvailable: boolean;
+  /**
+   * Persisted Performance V1 report can render (Epic #66).
+   * Independent of replay file readiness.
+   */
+  reportAvailable: boolean;
 }
 
 export interface SessionTrackSummaryInput {
@@ -100,6 +106,19 @@ export function resolveSessionPrimaryAction(
     };
   }
 
+  // Race Sessions prefer the deterministic #66 report when it can render.
+  // Do not use replay file readiness as a proxy for report readiness.
+  if (sessionType === "race" && input.reportAvailable) {
+    return {
+      kind: "open-report",
+      label: "Open report",
+      href: `/races/${raceId}/performance`,
+      disabled: false,
+    };
+  }
+
+  // Practice has no race-relative report; Race falls back to replay when the
+  // report payload is absent but tracks are playable.
   if (input.analysisCurrent && input.replayAvailable) {
     return {
       kind: "open-replay",

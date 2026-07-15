@@ -246,12 +246,12 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
 
   if (closed) {
     return (
-      <div className="absolute right-3 top-3 z-10">
+      <div data-replay-overlay="video" className="z-10">
         <Button
           type="button"
           size="sm"
           variant="secondary"
-          className="h-8 gap-1.5 bg-slate-950/85 text-white hover:bg-slate-900/90"
+          className="h-11 gap-1.5 bg-slate-950/85 text-white hover:bg-slate-900/90 sm:h-8"
           onClick={() => setClosed(false)}
         >
           <MonitorPlay className="size-3.5" aria-hidden="true" />
@@ -267,10 +267,10 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
 
   return (
     <div
+      data-replay-overlay="video"
       className={[
-        "absolute right-3 top-3 z-10 overflow-hidden rounded-md border border-white/20 bg-slate-950/90 text-white shadow-lg backdrop-blur",
+        "z-10 overflow-hidden rounded-md border border-white/20 bg-slate-950/90 text-white shadow-lg backdrop-blur",
         minimized ? "w-auto" : SIZE_CLASS[size],
-        "max-w-[calc(100%-1.5rem)]",
       ].join(" ")}
       aria-label="Race video overlay"
     >
@@ -301,8 +301,9 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 text-white/80 hover:bg-white/10 hover:text-white"
+          className="size-11 p-0 text-white/80 hover:bg-white/10 hover:text-white sm:size-6"
           aria-label={minimized ? "Expand video" : "Minimize video"}
+          aria-pressed={minimized}
           onClick={() => setMinimized((v) => !v)}
         >
           {minimized ? (
@@ -316,7 +317,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0 text-white/80 hover:bg-white/10 hover:text-white"
+            className="size-11 p-0 text-white/80 hover:bg-white/10 hover:text-white sm:size-6"
             aria-label="Resize video"
             onClick={() => setSize((s) => nextSize(s))}
           >
@@ -327,7 +328,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 text-white/80 hover:bg-white/10 hover:text-white"
+          className="size-11 p-0 text-white/80 hover:bg-white/10 hover:text-white sm:size-6"
           aria-label="Close video"
           onClick={() => {
             setClosed(true);
@@ -397,7 +398,7 @@ export function VideoOverlay({ videos }: { videos: VideoMeta[] }) {
               type="button"
               size="sm"
               variant="secondary"
-              className="h-7 gap-1 text-xs"
+              className="h-11 gap-1 text-xs sm:h-7"
               disabled={refreshing}
               onClick={() => {
                 const id = selectedIdRef.current;
