@@ -68,7 +68,8 @@ export function WindIndicator({ windAt }: { windAt: ReplayWindResolver | null })
   if (!reading) {
     return (
       <div
-        className="absolute right-3 bottom-24 z-10 rounded-md border border-white/20 bg-slate-950/85 px-2.5 py-2 text-xs text-white/65 shadow-lg backdrop-blur"
+        data-replay-overlay="wind"
+        className="z-10 rounded-md border border-white/20 bg-slate-950/85 px-2.5 py-2 text-xs text-white/65 shadow-lg backdrop-blur"
         aria-label="Wind unavailable"
       >
         <span className="font-medium tracking-wide uppercase">Wind</span>
@@ -81,9 +82,9 @@ export function WindIndicator({ windAt }: { windAt: ReplayWindResolver | null })
   const label = `Wind ${directionText(reading.twdDeg)}, ${speedText(reading)}. ${provenance}.`;
 
   return (
-    <details className="group absolute right-3 bottom-24 z-10">
+    <details className="group z-10" data-replay-overlay="wind">
       <summary
-        className="flex cursor-help list-none items-center gap-2 rounded-md border border-white/20 bg-slate-950/85 px-2.5 py-2 text-white shadow-lg outline-none backdrop-blur focus-visible:ring-2 focus-visible:ring-cyan-300 [&::-webkit-details-marker]:hidden"
+        className="flex min-h-11 cursor-help list-none items-center gap-2 rounded-md border border-white/20 bg-slate-950/85 px-2.5 py-2 text-white shadow-lg outline-none backdrop-blur focus-visible:ring-2 focus-visible:ring-cyan-300 [&::-webkit-details-marker]:hidden"
         aria-label={label}
         aria-describedby={tooltipId}
       >

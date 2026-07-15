@@ -1018,18 +1018,22 @@ export function MapView({
   ]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" data-replay-stage>
       <div ref={containerRef} className="h-full w-full" />
 
       {nauticalChart ? (
-        <div className="pointer-events-none absolute right-2 bottom-5 z-10 max-w-[min(24rem,calc(100%-1rem))] rounded-md border border-amber-200/30 bg-slate-950/85 px-2.5 py-1.5 text-[11px] text-amber-50 shadow-lg backdrop-blur">
+        <div
+          data-replay-overlay="chart-notice"
+          className="pointer-events-none z-10 rounded-md border border-amber-200/30 bg-slate-950/85 px-2.5 py-1.5 text-[11px] text-amber-50 shadow-lg backdrop-blur"
+        >
           {NAUTICAL_CHART_NOTICE}
         </div>
       ) : null}
 
       {trailMode === "speed" ? (
         <div
-          className="absolute bottom-5 left-5 z-10 w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur"
+          data-replay-overlay="legend"
+          className="z-10 w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur"
           aria-label={`Speed scale from ${speedDomain.minKts.toFixed(1)} to ${speedDomain.maxKts.toFixed(1)} knots`}
         >
           <div className="mb-1.5 text-xs font-medium">

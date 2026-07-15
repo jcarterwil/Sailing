@@ -207,7 +207,10 @@ export function Leaderboard({
 
   if (!twdAt) {
     return (
-      <div className="absolute top-3 left-3 z-10 max-w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur">
+      <div
+        data-replay-overlay="leaderboard"
+        className="z-10 max-w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur"
+      >
         {readOnly ? (
           <p>Wind direction not set — ranks unavailable</p>
         ) : (
@@ -240,7 +243,8 @@ export function Leaderboard({
 
   return (
     <div
-      className="absolute top-3 left-3 z-10 w-64 max-w-[calc(100%-4.5rem)] rounded-md border border-white/20 bg-slate-950/85 text-white shadow-lg backdrop-blur"
+      data-replay-overlay="leaderboard"
+      className="z-10 w-64 rounded-md border border-white/20 bg-slate-950/85 text-white shadow-lg backdrop-blur"
       aria-label="Live leaderboard"
     >
       <div className="flex items-center gap-1 border-b border-white/10 px-2 py-1.5">
@@ -252,7 +256,7 @@ export function Leaderboard({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-6 px-1.5 text-[11px] text-white/80 hover:bg-white/10 hover:text-white"
+            className="h-11 min-w-11 px-2 text-[11px] text-white/80 hover:bg-white/10 hover:text-white sm:h-6 sm:min-w-0 sm:px-1.5"
             onClick={() => setRivalsOnly((v) => !v)}
           >
             {rivalsOnly ? "Fleet" : "Rivals"}
@@ -262,8 +266,9 @@ export function Leaderboard({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-6 text-white/80 hover:bg-white/10 hover:text-white"
+          className="size-11 text-white/80 hover:bg-white/10 hover:text-white sm:size-6"
           aria-label={expanded ? "Collapse details" : "Expand details"}
+          aria-pressed={expanded}
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? (
@@ -302,7 +307,7 @@ export function Leaderboard({
             <li key={rung.entryId}>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/10"
+                className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/10 sm:min-h-0"
                 style={{
                   backgroundColor: isSelected ? "rgba(255,255,255,0.12)" : undefined,
                   boxShadow: isSelected ? `inset 2px 0 0 ${track.color}` : undefined,

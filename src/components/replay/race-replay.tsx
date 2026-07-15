@@ -450,8 +450,15 @@ export function RaceReplay({
       data-has-analysis={analysis ? "1" : "0"}
       data-replay-view={displayPreferences.viewMode}
     >
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="relative min-w-0 flex-1">
+      <div
+        className="relative flex min-h-0 flex-1 overflow-hidden"
+        data-replay-workspace
+        data-replay-panel-open="false"
+      >
+        <div
+          className="relative min-w-0 flex-1"
+          data-replay-stage
+        >
           {povEnabled ? (
             <HelmPov source={frameSource} />
           ) : displayPreferences.viewMode === "broadcast" ? (
