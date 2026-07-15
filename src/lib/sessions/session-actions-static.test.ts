@@ -15,10 +15,10 @@ const racePage = source("src/app/races/[raceId]/page.tsx");
 const databaseTypes = source("src/lib/supabase/database.types.ts");
 
 describe("session foundation app boundaries", () => {
-  it("creates races with manual provenance and practices via the atomic RPC", () => {
+  it("creates races with app-first-safe inserts and practices via the atomic RPC", () => {
     expect(actions).toContain("export async function createSession");
-    expect(actions).toContain('starts_at_source: "manual"');
-    expect(actions).toContain('session_type: "race"');
+    expect(actions).toContain("starts_at: converted.iso");
+    expect(actions).toContain("Omit session_type / starts_at_source");
     expect(actions).toContain('.rpc("create_practice_session"');
     expect(actions).toContain('.rpc("can_edit_boat"');
     expect(actions).toContain("localDateTimeToUtc");
@@ -32,6 +32,7 @@ describe("session foundation app boundaries", () => {
 
   it("orders dashboard sessions by starts_at and shows provenance", () => {
     expect(dashboard).toContain('.order("starts_at", { ascending: false })');
+    expect(dashboard).toContain('select("*, race_entries(id, boats(name))"');
     expect(dashboard).toContain("formatSessionDateTime");
     expect(dashboard).toContain("sessionBadgeLabel");
     expect(dashboard).toContain("legacyDateWarning");
@@ -41,7 +42,7 @@ describe("session foundation app boundaries", () => {
 
   it("renames boat hub races to sessions with type and timezone-aware dates", () => {
     expect(boatHub).toContain("Sessions");
-    expect(boatHub).toContain("session_type");
+    expect(boatHub).toContain('select("id, races(*), tracks(status)"');
     expect(boatHub).toContain("formatSessionDateTime");
     expect(boatHub).toContain("sessionBadgeLabel");
   });

@@ -52,9 +52,8 @@ export default async function BoatHubPage({
       .maybeSingle(),
     supabase
       .from("race_entries")
-      .select(
-        "id, races(id, name, venue, starts_at, starts_at_source, timezone, session_type, created_at), tracks(status)",
-      )
+      // Nested * keeps boat hub loading if session columns are not live yet.
+      .select("id, races(*), tracks(status)")
       .eq("boat_id", boatId),
   ]);
   if (!boat) notFound();
@@ -62,8 +61,8 @@ export default async function BoatHubPage({
   const races = (entries ?? [])
     .filter((entry) => entry.races)
     .sort((a, b) => {
-      const aTime = new Date(a.races!.starts_at).getTime();
-      const bTime = new Date(b.races!.starts_at).getTime();
+      const aTime = new Date(a.races!.starts_at ?? a.races!.created_at).getTime();
+      const bTime = new Date(b.races!.starts_at ?? b.races!.created_at).getTime();
       return bTime - aTime;
     });
 
@@ -137,18 +136,26 @@ export default async function BoatHubPage({
                             {entry.races!.name}
                           </Link>
                           <Badge variant="outline">
-                            {sessionBadgeLabel(entry.races!.session_type)}
+                            {sessionBadgeLabel(
+                              "session_type" in entry.races!
+                                ? entry.races!.session_type
+                                : "race",
+                            )}
                           </Badge>
                         </div>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <CalendarDays className="size-3.5" aria-hidden="true" />
                           {formatSessionDateTime(
-                            entry.races!.starts_at,
+                            entry.races!.starts_at ?? entry.races!.created_at,
                             entry.races!.timezone,
                           )}
                           {entry.races!.venue ? ` · ${entry.races!.venue}` : ""}
                         </p>
-                        {isLegacySessionDate(entry.races!.starts_at_source) ? (
+                        {isLegacySessionDate(
+                          "starts_at_source" in entry.races!
+                            ? entry.races!.starts_at_source
+                            : null,
+                        ) ? (
                           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                             {legacyDateWarning()}
                           </p>

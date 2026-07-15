@@ -76,6 +76,8 @@ export async function createSession(formData: FormData) {
   if (!converted.ok) throw new Error(localToUtcErrorMessage(converted.reason));
 
   if (sessionType === "race") {
+    // Omit session_type / starts_at_source so app-first deploys still insert
+    // against the pre-migration schema; DB defaults fill them after migrate.
     const { data: race, error } = await supabase
       .from("races")
       .insert({
@@ -83,9 +85,7 @@ export async function createSession(formData: FormData) {
         name,
         venue: venue || null,
         starts_at: converted.iso,
-        starts_at_source: "manual",
         timezone,
-        session_type: "race",
         share_slug: null,
       })
       .select("id")
@@ -190,12 +190,12 @@ export async function createRaceEntryForFleetFile(input: {
 
   const { data: race, error: raceError } = await supabase
     .from("races")
-    .select("id, session_type")
+    .select("*")
     .eq("id", input.raceId)
     .maybeSingle();
   if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
   if (!race) throw new Error("Race not found.");
-  if (race.session_type === "practice") {
+  if ("session_type" in race && race.session_type === "practice") {
     throw new Error("Fleet mapping is only available for race sessions.");
   }
 
@@ -471,12 +471,12 @@ export async function toggleShare(
 
   const { data: race, error: raceError } = await supabase
     .from("races")
-    .select("id, session_type")
+    .select("*")
     .eq("id", raceId)
     .maybeSingle();
   if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
   if (!race) throw new Error("Race not found.");
-  if (race.session_type === "practice") {
+  if ("session_type" in race && race.session_type === "practice") {
     throw new Error("Practice sessions cannot be shared publicly.");
   }
 

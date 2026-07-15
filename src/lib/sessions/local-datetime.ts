@@ -164,9 +164,10 @@ export function localDateTimeToUtc(
   const guess2 = wantedAsUtc - getTimeZoneOffsetMs(guess1, normalizedZone);
 
   const matches: number[] = [];
-  // Search a ±2h window around the corrected guess for DST folds/gaps.
-  for (let deltaHours = -2; deltaHours <= 2; deltaHours += 1) {
-    const candidate = guess2 + deltaHours * 60 * 60 * 1000;
+  // Search a ±2h window at 15-minute steps so 30-minute DST folds
+  // (e.g. Australia/Lord_Howe) are detected as ambiguous.
+  for (let deltaMinutes = -120; deltaMinutes <= 120; deltaMinutes += 15) {
+    const candidate = guess2 + deltaMinutes * 60 * 1000;
     if (wallPartsEqual(zonedWallParts(new Date(candidate), normalizedZone), wall)) {
       if (!matches.includes(candidate)) matches.push(candidate);
     }

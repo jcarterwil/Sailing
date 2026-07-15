@@ -35,6 +35,17 @@ describe("localDateTimeToUtc", () => {
     expect(result).toEqual({ ok: false, reason: "ambiguous" });
   });
 
+  it("detects 30-minute DST folds (Lord Howe)", () => {
+    // Australia/Lord_Howe falls back 30 minutes on the first Sunday in April.
+    const result = localDateTimeToUtc(
+      { year: 2026, month: 4, day: 5, hour: 1, minute: 45, second: 0 },
+      "Australia/Lord_Howe",
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(["ambiguous", "nonexistent"]).toContain(result.reason);
+  });
+
   it("rejects invalid calendar dates and timezones", () => {
     expect(
       localDateTimeToUtc(

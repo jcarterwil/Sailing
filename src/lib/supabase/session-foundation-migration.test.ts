@@ -35,9 +35,14 @@ describe("session foundation migration", () => {
     expect(migration).toContain("session_type <> 'practice' or share_slug is null");
   });
 
-  it("enforces practice single-entry and rejects practice join/fleet mapping", () => {
-    expect(migration).toContain("enforce_practice_single_entry");
+  it("enforces practice invariants with locking and immutable session_type", () => {
+    expect(migration).toContain("enforce_practice_entry_invariants");
+    expect(migration).toContain("for update");
     expect(migration).toContain("Practice sessions support exactly one boat");
+    expect(migration).toContain("Practice boats must be owned or editable by you");
+    expect(migration).toContain("protect_race_session_type");
+    expect(migration).toContain("session_type cannot be changed");
+    expect(migration).toContain("and session_type = 'race'");
     expect(migration).toContain("Only race sessions can be joined by code");
     expect(migration).toContain("Fleet mapping is only available for race sessions");
   });

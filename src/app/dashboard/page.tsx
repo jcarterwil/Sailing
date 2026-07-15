@@ -43,9 +43,8 @@ export default async function DashboardPage() {
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     supabase
       .from("races")
-      .select(
-        "id, name, venue, starts_at, starts_at_source, timezone, session_type, created_at, organizer_id, race_entries(id, boats(name))",
-      )
+      // Select * so an app-first deploy still works before session columns land.
+      .select("*, race_entries(id, boats(name))")
       .order("starts_at", { ascending: false }),
     supabase.from("boats").select("id, name, sail_number").eq("owner_id", user.id),
     supabase
@@ -130,9 +129,14 @@ export default async function DashboardPage() {
                     <CardContent className="text-sm text-muted-foreground">
                       <p className="flex items-center gap-2">
                         <CalendarDays className="size-4" aria-hidden="true" />
-                        {formatSessionDateTime(race.starts_at, race.timezone)}
+                        {formatSessionDateTime(
+                          race.starts_at ?? race.created_at,
+                          race.timezone,
+                        )}
                       </p>
-                      {isLegacySessionDate(race.starts_at_source) ? (
+                      {isLegacySessionDate(
+                        "starts_at_source" in race ? race.starts_at_source : null,
+                      ) ? (
                         <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                           {legacyDateWarning()}
                         </p>

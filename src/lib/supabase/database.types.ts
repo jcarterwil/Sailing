@@ -837,7 +837,7 @@ export type Database = {
           session_type?: string
           share_slug?: string | null
           starts_at: string
-          starts_at_source: string
+          starts_at_source?: string
           tags?: string[]
           timezone?: string | null
           updated_at?: string

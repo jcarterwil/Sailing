@@ -59,6 +59,10 @@ where starts_at is null
 alter table public.races
   alter column starts_at set not null;
 
+-- Default keeps Race inserts app-first compatible once the column exists.
+alter table public.races
+  alter column starts_at_source set default 'manual';
+
 alter table public.races
   alter column starts_at_source set not null;
 
@@ -76,6 +80,18 @@ begin
   end if;
 end $$;
 
+-- Direct authenticated inserts may only create Race sessions. Practice must go
+-- through create_practice_session (security definer) so boat+entry are atomic.
+drop policy if exists "Racers create races" on public.races;
+create policy "Racers create races"
+on public.races
+for insert
+to authenticated
+with check (
+  organizer_id = (select auth.uid())
+  and session_type = 'race'
+);
+
 do $$
 begin
   if not exists (
@@ -90,8 +106,9 @@ begin
   end if;
 end $$;
 
--- Practice V1: exactly one race_entries row.
-create or replace function public.enforce_practice_single_entry()
+-- Practice V1: lock the parent session, keep exactly one entry, and require an
+-- editable boat so private practice cannot be re-pointed at an arbitrary boat.
+create or replace function public.enforce_practice_entry_invariants()
 returns trigger
 language plpgsql
 security definer
@@ -101,12 +118,29 @@ declare
   session_kind text;
   existing_count integer;
 begin
+  -- Serialize concurrent entry writes for this session.
   select r.session_type
   into session_kind
   from public.races r
-  where r.id = new.race_id;
+  where r.id = coalesce(new.race_id, old.race_id)
+  for update;
 
-  if session_kind = 'practice' then
+  if session_kind is distinct from 'practice' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    raise exception 'Practice sessions must keep their single boat entry';
+  end if;
+
+  if not public.can_edit_boat(new.boat_id) then
+    raise exception 'Practice boats must be owned or editable by you';
+  end if;
+
+  if tg_op = 'INSERT' then
     select count(*)::integer
     into existing_count
     from public.race_entries e
@@ -117,15 +151,46 @@ begin
     end if;
   end if;
 
+  if tg_op = 'UPDATE' then
+    if new.race_id is distinct from old.race_id then
+      raise exception 'Practice entries cannot move between sessions';
+    end if;
+  end if;
+
   return new;
 end;
 $$;
 
 drop trigger if exists race_entries_practice_single_entry on public.race_entries;
-create trigger race_entries_practice_single_entry
-  before insert on public.race_entries
+drop trigger if exists race_entries_practice_invariants on public.race_entries;
+create trigger race_entries_practice_invariants
+  before insert or update or delete on public.race_entries
   for each row
-  execute procedure public.enforce_practice_single_entry();
+  execute procedure public.enforce_practice_entry_invariants();
+
+-- session_type is immutable after create (prevents multi-boat "practice").
+create or replace function public.protect_race_session_type()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.session_type is distinct from old.session_type then
+    raise exception 'session_type cannot be changed';
+  end if;
+  if new.session_type = 'practice' and new.share_slug is not null then
+    raise exception 'Practice sessions cannot be shared publicly';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists races_protect_session_type on public.races;
+create trigger races_protect_session_type
+  before update on public.races
+  for each row
+  execute procedure public.protect_race_session_type();
 
 -- Join-by-code resolves Race sessions only.
 create or replace function public.join_race_with_boat(

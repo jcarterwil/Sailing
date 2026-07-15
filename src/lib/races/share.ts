@@ -32,6 +32,11 @@ export async function resolveSharedRace(slug: string): Promise<{
   if (!race?.share_slug) {
     return { admin, race: null };
   }
+  // Defense in depth: Practice sessions must never resolve publicly even if a
+  // share_slug were somehow present before constraints applied.
+  if ("session_type" in race && race.session_type === "practice") {
+    return { admin, race: null };
+  }
   return {
     admin,
     race: {
