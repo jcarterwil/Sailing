@@ -434,6 +434,9 @@ function ViewSettingsFields({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="fleet">
+                  Fleet auto
+                </SelectItem>
                 <SelectItem value="north">
                   North-up
                 </SelectItem>

@@ -13,6 +13,15 @@ import {
   shouldAddReplayMapLayers,
 } from "@/components/replay/map-layers";
 import {
+  activeFleetPositions,
+  fleetBounds,
+  fleetCameraDecision,
+  fleetCameraPadding,
+  fleetOutsideDeadband,
+  FLEET_CAMERA_INTERVAL_MS,
+  FLEET_CAMERA_MAX_ZOOM,
+} from "@/components/replay/fleet-camera";
+import {
   NAUTICAL_CHART_NOTICE,
   addNauticalChartLayer,
   setNauticalChartOpacity,
@@ -267,6 +276,10 @@ export function MapView({
   const camBearingRef = useRef(0);
   const lastCamFrameNowRef = useRef(0);
   const prevCameraModeRef = useRef<CameraMode>("north");
+  const lastFleetCameraUpdateRef = useRef(0);
+  const fleetCompactSinceRef = useRef<number | null>(null);
+  const fleetCameraInitializedRef = useRef(false);
+  const refreshPlaybackRef = useRef<(() => void) | null>(null);
   const skipResetEaseRef = useRef(false);
   const boats3dResourcesRef =
     useRef<Boats3dResources | null>(null);
@@ -336,6 +349,9 @@ export function MapView({
       "top-right",
     );
     mapRef.current = map;
+    fleetCameraInitializedRef.current = false;
+    fleetCompactSinceRef.current = null;
+    lastFleetCameraUpdateRef.current = 0;
 
     const addReplayLayers = () => {
       if (!map.getImage("boat-arrow")) {
@@ -558,6 +574,7 @@ export function MapView({
         },
       });
       readyRef.current = true;
+      refreshPlaybackRef.current?.();
     };
 
     const addLayers = () => {
@@ -609,22 +626,24 @@ export function MapView({
     map.on("mouseleave", "boats", () => {
       map.getCanvas().style.cursor = "";
     });
-
-    const breakFollowCamera = (
+    // Any direct map gesture breaks automatic fleet/follow/chase control.
+    // Programmatic camera updates lack originalEvent and are ignored.
+    const breakAutomaticCamera = (
       event: maplibregl.MapLibreEvent,
     ) => {
       if (!event.originalEvent) return;
-      if (
-        usePlaybackStore.getState().cameraMode === "north"
-      ) {
-        return;
-      }
-      skipResetEaseRef.current = true;
+      const currentCameraMode =
+        usePlaybackStore.getState().cameraMode;
+      if (currentCameraMode === "north") return;
+      skipResetEaseRef.current =
+        currentCameraMode === "follow" ||
+        currentCameraMode === "chase";
       usePlaybackStore.getState().setCameraMode("north");
     };
-    map.on("dragstart", breakFollowCamera);
-    map.on("rotatestart", breakFollowCamera);
-    map.on("pitchstart", breakFollowCamera);
+    map.on("dragstart", breakAutomaticCamera);
+    map.on("zoomstart", breakAutomaticCamera);
+    map.on("rotatestart", breakAutomaticCamera);
+    map.on("pitchstart", breakAutomaticCamera);
 
     return () => {
       readyRef.current = false;
@@ -785,56 +804,127 @@ export function MapView({
         .getSource<maplibregl.GeoJSONSource>("boats")
         ?.setData(boatsGeoJson(frame));
 
-      const selected = frame.boats.find(
-        (boat) => boat.selected,
-      );
-      if (
-        cameraMode !== "north" &&
-        selected?.inTrack
-      ) {
-        const center: [number, number] = [
-          selected.position.lon,
-          selected.position.lat,
-        ];
-        if (cameraMode === "follow") {
-          map.jumpTo({
-            center,
-            bearing: 0,
-            pitch: 0,
-          });
-        } else {
-          const target = selected.pose.headingDeg;
-          const now = performance.now();
-          const dtSec =
-            lastCamFrameNowRef.current === 0
-              ? 0
-              : Math.min(
-                  0.25,
-                  (now - lastCamFrameNowRef.current) / 1_000,
-                );
-          lastCamFrameNowRef.current = now;
-
-          const enteringChase = previousMode !== "chase";
-          if (Number.isFinite(target)) {
-            if (
-              enteringChase ||
-              frame.updateKind !== "continuous"
-            ) {
-              camBearingRef.current = target;
-            } else if (dtSec > 0) {
-              camBearingRef.current = lerpAngle(
-                camBearingRef.current,
-                target,
-                1 - Math.exp(-dtSec / 2),
+      if (cameraMode === "fleet") {
+        const now = performance.now();
+        const force =
+          previousMode !== "fleet" ||
+          !fleetCameraInitializedRef.current;
+        if (
+          force ||
+          now - lastFleetCameraUpdateRef.current >=
+            FLEET_CAMERA_INTERVAL_MS
+        ) {
+          lastFleetCameraUpdateRef.current = now;
+          const positions = activeFleetPositions(
+            frame.boats.map((boat) => ({
+              lon: boat.position.lon,
+              lat: boat.position.lat,
+              inTrack: boat.inTrack,
+            })),
+          );
+          const bounds = fleetBounds(positions);
+          const container = map.getContainer();
+          if (
+            bounds &&
+            container.clientWidth > 0 &&
+            container.clientHeight > 0
+          ) {
+            const padding = fleetCameraPadding(
+              container.clientWidth,
+              container.clientHeight,
+            );
+            const target = map.cameraForBounds(
+              [
+                [bounds.west, bounds.south],
+                [bounds.east, bounds.north],
+              ],
+              { padding, maxZoom: FLEET_CAMERA_MAX_ZOOM },
+            );
+            if (target?.center && typeof target.zoom === "number") {
+              const outsideDeadband = fleetOutsideDeadband(
+                positions.map(([lon, lat]) =>
+                  map.project([lon, lat]),
+                ),
+                container.clientWidth,
+                container.clientHeight,
               );
+              const decision = fleetCameraDecision({
+                nowMs: now,
+                currentZoom: map.getZoom(),
+                targetZoom: Math.min(target.zoom, FLEET_CAMERA_MAX_ZOOM),
+                outsideDeadband,
+                compactSinceMs: fleetCompactSinceRef.current,
+                force,
+              });
+              fleetCompactSinceRef.current = decision.compactSinceMs;
+              fleetCameraInitializedRef.current = true;
+              if (decision.move) {
+                map.easeTo({
+                  center: target.center,
+                  zoom: decision.zoom,
+                  bearing: 0,
+                  pitch: 0,
+                  duration: force ? 500 : 350,
+                  essential: true,
+                });
+              }
             }
           }
+        }
+      } else {
+        const selected = frame.boats.find(
+          (boat) => boat.selected,
+        );
+        if (
+          (cameraMode === "follow" ||
+            cameraMode === "chase") &&
+          selected?.inTrack
+        ) {
+          const center: [number, number] = [
+            selected.position.lon,
+            selected.position.lat,
+          ];
+          if (cameraMode === "follow") {
+            map.jumpTo({
+              center,
+              bearing: 0,
+              pitch: 0,
+            });
+          } else {
+            const target = selected.pose.headingDeg;
+            const now = performance.now();
+            const dtSec =
+              lastCamFrameNowRef.current === 0
+                ? 0
+                : Math.min(
+                    0.25,
+                    (now - lastCamFrameNowRef.current) /
+                      1_000,
+                  );
+            lastCamFrameNowRef.current = now;
 
-          map.jumpTo({
-            center,
-            bearing: camBearingRef.current,
-            pitch: 60,
-          });
+            const enteringChase = previousMode !== "chase";
+            if (Number.isFinite(target)) {
+              if (
+                enteringChase ||
+                frame.updateKind !== "continuous"
+              ) {
+                camBearingRef.current = target;
+              } else if (dtSec > 0) {
+                camBearingRef.current = lerpAngle(
+                  camBearingRef.current,
+                  target,
+                  1 - Math.exp(-dtSec / 2),
+                );
+              }
+            }
+
+            map.jumpTo({
+              center,
+              bearing: camBearingRef.current,
+              pitch: 60,
+            });
+          }
         }
       }
 
@@ -867,12 +957,20 @@ export function MapView({
           );
       }
     };
-
+    const refresh = () => {
+      update(frameSource.frameRef.current);
+    };
+    refreshPlaybackRef.current = refresh;
     const unsubscribe = frameSource.subscribe((frame) => {
       update(frame);
     });
-    update(frameSource.frameRef.current);
-    return unsubscribe;
+    refresh();
+    return () => {
+      if (refreshPlaybackRef.current === refresh) {
+        refreshPlaybackRef.current = null;
+      }
+      unsubscribe();
+    };
   }, [
     cameraMode,
     frameSource,

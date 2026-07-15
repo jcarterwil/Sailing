@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Flag } from "lucide-react";
 
 import { usePlaybackStore } from "@/components/replay/playback-store";
+import type { ReplayEventMarker } from "@/components/replay/replay-events";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 
 const STRIP_HEIGHT = 22;
@@ -18,9 +20,11 @@ function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
 export function Timeline({
   tracks,
   startsMs = [],
+  eventMarkers = [],
 }: {
   tracks: LoadedTrack[];
   startsMs?: number[];
+  eventMarkers?: ReplayEventMarker[];
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
@@ -116,13 +120,30 @@ export function Timeline({
         ctx.closePath();
         ctx.fill();
       }
+
+      // Reviewed race milestones: first fleet rounding at each mark and first finish.
+      for (const marker of eventMarkers) {
+        if (marker.timeMs < t0 || marker.timeMs > t1) continue;
+        const x = ((marker.timeMs - t0) / span) * width;
+        ctx.save();
+        ctx.strokeStyle = marker.kind === "finish"
+          ? "rgba(16, 185, 129, 0.9)"
+          : "rgba(139, 92, 246, 0.85)";
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height - AXIS_HEIGHT);
+        ctx.stroke();
+        ctx.restore();
+      }
     };
 
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, [tracks, height, startsMs]);
+  }, [tracks, height, startsMs, eventMarkers]);
 
   // Cursor + brush overlay, driven per-frame by transient subscription.
   useEffect(() => {
@@ -181,6 +202,7 @@ export function Timeline({
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Element && e.target.closest("[data-replay-event]")) return;
       wrap.setPointerCapture(e.pointerId);
       const state = usePlaybackStore.getState();
       if (e.shiftKey) {
@@ -225,6 +247,10 @@ export function Timeline({
     };
   }, []);
 
+  const { t0, t1 } = usePlaybackStore.getState();
+  const span = t1 - t0;
+  const tz = tracks[0]?.tzOffsetMinutes ?? null;
+
   return (
     <div
       ref={wrapRef}
@@ -234,6 +260,33 @@ export function Timeline({
     >
       <canvas ref={baseRef} className="absolute inset-0" />
       <canvas ref={overlayRef} className="absolute inset-0" />
+      {span > 0 && eventMarkers.map((marker) => {
+        if (marker.timeMs < t0 || marker.timeMs > t1) return null;
+        const boatName = tracks.find((track) => track.entryId === marker.entryId)?.boatName;
+        const pct = ((marker.timeMs - t0) / span) * 100;
+        const title = `${marker.title}${boatName ? ` — ${boatName}` : ""} at ${formatClock(marker.timeMs, tz)}. Click to jump.`;
+        return (
+          <button
+            key={marker.id}
+            type="button"
+            data-replay-event={marker.id}
+            className={`absolute top-0 z-10 flex h-[18px] min-w-8 -translate-x-1/2 items-center justify-center gap-0.5 rounded-b px-1 font-mono text-[9px] font-semibold leading-none text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+              marker.kind === "finish" ? "bg-emerald-600/95" : "bg-violet-600/95"
+            }`}
+            style={{ left: `${Math.min(97.5, Math.max(2.5, pct))}%` }}
+            aria-label={title}
+            title={title}
+            onClick={() => {
+              const state = usePlaybackStore.getState();
+              state.setPlaying(false);
+              state.seek(marker.timeMs);
+            }}
+          >
+            <Flag className="size-2.5" aria-hidden="true" />
+            {marker.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

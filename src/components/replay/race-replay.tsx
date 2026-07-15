@@ -20,6 +20,7 @@ import {
   saveReplayDisplayPreferences,
   type ReplayDisplayPreferences,
 } from "@/components/replay/replay-display-preferences";
+import { replayEventMarkers } from "@/components/replay/replay-events";
 import { createReplayRenderFrameSource } from "@/components/replay/replay-render-source";
 import { Timeline } from "@/components/replay/timeline";
 import {
@@ -181,6 +182,10 @@ export function RaceReplay({
         ? fleetStarts(tracks.map((track) => track.extras))
         : [],
     [tracks],
+  );
+  const eventMarkers = useMemo(
+    () => replayEventMarkers(analysis?.performance),
+    [analysis?.performance],
   );
   const frameSource = useMemo(
     () =>
@@ -412,6 +417,7 @@ export function RaceReplay({
           <Timeline
             tracks={tracks}
             startsMs={startsMs}
+            eventMarkers={eventMarkers}
           />
         </div>
       </div>

@@ -39,4 +39,4 @@ The client-only race replay has two renderer views: a MapLibre Tactical view and
 
 ## Store
 
-`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"north"` | `"follow"` | `"chase"`). Deselecting a boat or calling `setBounds` (new race load) resets `cameraMode` to `"north"`. Keep it minimal; derived renderer values belong in `ReplayRenderFrame`, while other derived values are computed by consumers from the track arrays.
+`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"fleet"` | `"north"` | `"follow"` | `"chase"`). A new race defaults to the hysteretic `"fleet"` auto-frame; manual map gestures switch to `"north"`, and deselecting a followed/chased boat returns to `"fleet"`. Keep it minimal; derived renderer values belong in `ReplayRenderFrame`, while other derived values are computed by consumers from the track arrays.
