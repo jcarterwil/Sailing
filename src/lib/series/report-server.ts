@@ -12,6 +12,7 @@ import { parseRaceMeta } from "@/lib/races/meta";
 import {
   resolveSeriesReportRaceStateV1,
   seriesReportAnalysisRequiredV1,
+  seriesReportPerformanceHrefV1,
   seriesReportRaceSetupMatchesV1,
   seriesReportSetupMatchesSnapshotV1,
   type SeriesReportCurrentRaceSetupV1,
@@ -26,6 +27,28 @@ import { parseStoredSeriesSnapshotV1 } from "@/lib/series/snapshot";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type ServerSupabase = SupabaseClient<Database>;
+type SeriesReportSeriesRow = Pick<
+  Database["public"]["Tables"]["race_series"]["Row"],
+  | "id"
+  | "name"
+  | "venue"
+  | "timezone"
+  | "starts_on"
+  | "ends_on"
+  | "archived_at"
+  | "scoring_version"
+  | "scoring_config"
+  | "share_slug"
+>;
+type SeriesReportSnapshotRow = Pick<
+  Database["public"]["Tables"]["race_series_score_snapshots"]["Row"],
+  | "id"
+  | "revision"
+  | "computed_at"
+  | "scoring_version"
+  | "source_fingerprint"
+  | "result"
+>;
 type SeriesEntryEvidenceRow = { id: string; race_id: string };
 type SeriesTrackEvidenceRow = { entry_id: string; status: string; updated_at: string };
 type SnapshotIdentitySourceV1 = {
@@ -87,16 +110,7 @@ function snapshotIdentitySourcesV1(
   return identities;
 }
 
-function snapshotState(
-  row: {
-    id: string;
-    revision: number;
-    computed_at: string;
-    scoring_version: string;
-    source_fingerprint: string;
-    result: unknown;
-  } | null,
-): SeriesReportSnapshotV1 {
+function snapshotState(row: SeriesReportSnapshotRow | null): SeriesReportSnapshotV1 {
   const parsed = parseStoredSeriesSnapshotV1(row
     ? {
         scoringVersion: row.scoring_version,
@@ -197,39 +211,19 @@ async function loadSeriesTrackEvidence(
   fail("Could not load track states", "series evidence exceeds the supported scoring bounds");
 }
 
-/** Load only RLS-visible series facts and bounded summaries; no track payloads leave this module. */
-export async function loadSeriesReportModelV1(
+async function buildSeriesReportModelV1(
   supabase: ServerSupabase,
-  actorId: string,
-  seriesId: string,
-): Promise<SeriesReportLoadResultV1> {
-  const [seriesResult, profileResult, organizerResult, snapshotResult] = await Promise.all([
-    supabase
-      .from("race_series")
-      .select(
-        "id, name, venue, timezone, starts_on, ends_on, archived_at, scoring_version, scoring_config",
-      )
-      .eq("id", seriesId)
-      .maybeSingle(),
-    supabase.from("profiles").select("display_name, is_admin").eq("id", actorId).maybeSingle(),
-    supabase.rpc("is_race_series_organizer", { sid: seriesId }),
-    supabase
-      .from("race_series_score_snapshots")
-      .select("id, revision, computed_at, scoring_version, source_fingerprint, result")
-      .eq("series_id", seriesId)
-      .order("revision", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-  if (seriesResult.error) fail("Could not load series", seriesResult.error.message);
-  if (!seriesResult.data) return { status: "not-found" };
-  if (profileResult.error) fail("Could not load profile", profileResult.error.message);
-  if (organizerResult.error) fail("Could not check series permissions", organizerResult.error.message);
-  if (snapshotResult.error) fail("Could not load score snapshot", snapshotResult.error.message);
-
-  const series = seriesResult.data;
-  const snapshot = snapshotState(snapshotResult.data);
+  series: SeriesReportSeriesRow,
+  snapshotRow: SeriesReportSnapshotRow | null,
+  options: {
+    audience: SeriesReportModelV1["audience"];
+    organizerHref: string | null;
+    publicHref: string | null;
+  },
+): Promise<SeriesReportModelV1> {
+  const snapshot = snapshotState(snapshotRow);
   const baseReport: SeriesReportModelV1 = {
+    audience: options.audience,
     series: {
       name: series.name,
       venue: series.venue,
@@ -242,13 +236,10 @@ export async function loadSeriesReportModelV1(
     boats: [],
     races: [],
     scoringSetupState: null,
-    organizerHref: organizerResult.data ? `/series/${series.id}/edit` : null,
+    organizerHref: options.organizerHref,
+    publicHref: options.publicHref,
   };
-  const profile = {
-    displayName: profileResult.data?.display_name ?? null,
-    isAdmin: profileResult.data?.is_admin ?? false,
-  };
-  if (snapshot.status !== "ready") return { status: "ready", profile, report: baseReport };
+  if (snapshot.status !== "ready") return baseReport;
 
   const raceIds = snapshot.result.races.map((race) => race.raceId);
   const boatIds = snapshot.result.standings.map((standing) => standing.boatId);
@@ -270,19 +261,19 @@ export async function loadSeriesReportModelV1(
         .select(
           "race_id, sequence, included, discard_eligible, state, official_results, official_results_revision",
         )
-        .eq("series_id", seriesId),
+        .eq("series_id", series.id),
       supabase
         .from("race_series_competitors")
         .select("boat_id, role")
-        .eq("series_id", seriesId),
+        .eq("series_id", series.id),
       supabase
         .from("race_series_boat_aliases")
         .select("source_boat_id, canonical_boat_id")
-        .eq("series_id", seriesId),
+        .eq("series_id", series.id),
       raceIds.length
         ? supabase
             .from("races")
-            .select("id, name, venue, starts_at, created_at, conditions, tags, timezone")
+            .select("id, name, venue, starts_at, created_at, conditions, tags, timezone, share_slug")
             .in("id", raceIds)
         : Promise.resolve({ data: [], error: null }),
       raceIds.length
@@ -438,25 +429,122 @@ export async function loadSeriesReportModelV1(
       performance: sourceState === "current" && currentAnalysis && parsed?.performance
         ? performanceFacts({ analysis: currentAnalysis, performance: parsed.performance })
         : null,
-      performanceHref: race ? `/races/${race.id}/performance` : null,
+      performanceHref: race
+        ? seriesReportPerformanceHrefV1({
+            audience: options.audience,
+            raceId: race.id,
+            shareSlug: race.share_slug,
+          })
+        : null,
     };
   });
 
   return {
+    ...baseReport,
+    scoringSetupState,
+    boats: boatIds.map((boatId, index) => {
+      const boat = (boatsResult.data ?? []).find((candidate) => candidate.id === boatId);
+      return {
+        boatId,
+        name: boat?.name ?? `Boat ${index + 1}`,
+        sailNumber: boat?.sail_number ?? null,
+      };
+    }),
+    races: reportRaces,
+  };
+}
+
+/** Load only RLS-visible series facts and bounded summaries; no track payloads leave this module. */
+export async function loadSeriesReportModelV1(
+  supabase: ServerSupabase,
+  actorId: string,
+  seriesId: string,
+): Promise<SeriesReportLoadResultV1> {
+  const [seriesResult, profileResult, organizerResult, snapshotResult] = await Promise.all([
+    supabase
+      .from("race_series")
+      .select(
+        "id, name, venue, timezone, starts_on, ends_on, archived_at, scoring_version, scoring_config, share_slug",
+      )
+      .eq("id", seriesId)
+      .maybeSingle(),
+    supabase.from("profiles").select("display_name, is_admin").eq("id", actorId).maybeSingle(),
+    supabase.rpc("is_race_series_organizer", { sid: seriesId }),
+    supabase
+      .from("race_series_score_snapshots")
+      .select("id, revision, computed_at, scoring_version, source_fingerprint, result")
+      .eq("series_id", seriesId)
+      .order("revision", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (seriesResult.error) fail("Could not load series", seriesResult.error.message);
+  if (!seriesResult.data) return { status: "not-found" };
+  if (profileResult.error) fail("Could not load profile", profileResult.error.message);
+  if (organizerResult.error) fail("Could not check series permissions", organizerResult.error.message);
+  if (snapshotResult.error) fail("Could not load score snapshot", snapshotResult.error.message);
+
+  return {
     status: "ready",
-    profile,
-    report: {
-      ...baseReport,
-      scoringSetupState,
-      boats: boatIds.map((boatId, index) => {
-        const boat = (boatsResult.data ?? []).find((candidate) => candidate.id === boatId);
-        return {
-          boatId,
-          name: boat?.name ?? `Boat ${index + 1}`,
-          sailNumber: boat?.sail_number ?? null,
-        };
-      }),
-      races: reportRaces,
+    profile: {
+      displayName: profileResult.data?.display_name ?? null,
+      isAdmin: profileResult.data?.is_admin ?? false,
     },
+    report: await buildSeriesReportModelV1(
+      supabase,
+      seriesResult.data,
+      snapshotResult.data,
+      {
+        audience: "authenticated",
+        organizerHref: organizerResult.data ? `/series/${seriesResult.data.id}/edit` : null,
+        publicHref: seriesResult.data.share_slug
+          ? `/series/s/${encodeURIComponent(seriesResult.data.share_slug)}`
+          : null,
+      },
+    ),
+  };
+}
+
+export type SharedSeriesReportLoadResultV1 =
+  | { status: "not-found" }
+  | { status: "ready"; report: SeriesReportModelV1 };
+
+/** Resolve one capability slug before any service-role series reads. */
+export async function loadSharedSeriesReportModelV1(
+  admin: ServerSupabase,
+  slug: string,
+): Promise<SharedSeriesReportLoadResultV1> {
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(slug)) return { status: "not-found" };
+  const seriesResult = await admin
+    .from("race_series")
+    .select(
+      "id, name, venue, timezone, starts_on, ends_on, archived_at, scoring_version, scoring_config, share_slug",
+    )
+    .eq("share_slug", slug)
+    .maybeSingle();
+  if (seriesResult.error) fail("Could not resolve shared series", seriesResult.error.message);
+  if (!seriesResult.data?.share_slug) return { status: "not-found" };
+
+  const snapshotResult = await admin
+    .from("race_series_score_snapshots")
+    .select("id, revision, computed_at, scoring_version, source_fingerprint, result")
+    .eq("series_id", seriesResult.data.id)
+    .order("revision", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (snapshotResult.error) fail("Could not load shared score snapshot", snapshotResult.error.message);
+
+  return {
+    status: "ready",
+    report: await buildSeriesReportModelV1(
+      admin,
+      seriesResult.data,
+      snapshotResult.data,
+      {
+        audience: "public",
+        organizerHref: null,
+        publicHref: `/series/s/${encodeURIComponent(seriesResult.data.share_slug)}`,
+      },
+    ),
   };
 }

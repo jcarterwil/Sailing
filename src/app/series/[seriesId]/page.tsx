@@ -35,8 +35,10 @@ export default async function SeriesReportPage({
       displayName={profile.displayName}
       isAdmin={profile.isAdmin}
       width="wide"
+      className="series-report-shell"
     >
       <PageHeader
+        className="print-hidden"
         title={report.series.name}
         description="Authenticated overall standings from the latest immutable score snapshot, with version-matched compact Performance facts."
         backHref="/series"

@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -319,6 +321,66 @@ export async function archiveSeries(input: {
   if (!data) throw new Error("This series changed in another tab. Reload and try again.");
   revalidatePath("/series");
   revalidatePath(`/series/${input.seriesId}/edit`);
+}
+
+export async function toggleSeriesShare(input: {
+  seriesId: string;
+  expectedRevision: number;
+  enable: boolean;
+}): Promise<{ shareSlug: string | null; revision: number }> {
+  requireUuid(input.seriesId, "series");
+  requireRevision(input.expectedRevision);
+  const { supabase } = await requireActor();
+  const [{ data: canOrganize, error: authzError }, { data: current, error: currentError }] =
+    await Promise.all([
+      supabase.rpc("is_race_series_organizer", { sid: input.seriesId }),
+      supabase
+        .from("race_series")
+        .select("id, revision, share_slug")
+        .eq("id", input.seriesId)
+        .maybeSingle(),
+    ]);
+  if (authzError) throw new Error(`Could not check series permissions: ${authzError.message}`);
+  if (currentError) throw new Error(`Could not load series sharing: ${currentError.message}`);
+  if (!canOrganize || !current) throw new Error("Series not found or access denied.");
+  if (current.revision !== input.expectedRevision) {
+    throw new Error("This series changed in another tab. Reload before changing sharing.");
+  }
+  if (input.enable === Boolean(current.share_slug)) {
+    return { shareSlug: current.share_slug, revision: current.revision };
+  }
+
+  const previousSlug = current.share_slug;
+  const attempts = input.enable ? 8 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const shareSlug = input.enable ? randomBytes(16).toString("base64url") : null;
+    const { data: updated, error } = await supabase
+      .from("race_series")
+      .update({
+        share_slug: shareSlug,
+        revision: input.expectedRevision + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.seriesId)
+      .eq("revision", input.expectedRevision)
+      .select("share_slug, revision")
+      .maybeSingle();
+    if (!error && updated) {
+      revalidatePath("/series");
+      revalidatePath(`/series/${input.seriesId}`);
+      revalidatePath(`/series/${input.seriesId}/edit`);
+      if (previousSlug) revalidatePath(`/series/s/${previousSlug}`);
+      if (updated.share_slug) revalidatePath(`/series/s/${updated.share_slug}`);
+      return { shareSlug: updated.share_slug, revision: updated.revision };
+    }
+    if (error?.code === "23505" && input.enable) continue;
+    if (!updated && !error) {
+      throw new Error("This series changed in another tab. Reload and try again.");
+    }
+    throw new Error(`Could not ${input.enable ? "enable" : "disable"} sharing: ${error?.message ?? "No result returned."}`);
+  }
+
+  throw new Error("Could not generate a unique series share link.");
 }
 
 export async function previewSeriesScoring(input: SeriesDraftInput): Promise<SeriesPreviewResponse> {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { SeriesWorkflowEditor } from "@/app/series/[seriesId]/edit/series-workflow-editor";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { SeriesSharePanel } from "@/components/series/series-share-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
@@ -53,6 +54,14 @@ export default async function SeriesEditorPage({
           {model.series.archivedAt ? <Badge variant="outline">Archived</Badge> : null}
         </div>
       </PageHeader>
+      <div className="pt-8">
+        <SeriesSharePanel
+          key={`${model.series.revision}:${model.series.shareSlug ?? "off"}`}
+          seriesId={model.series.id}
+          initialRevision={model.series.revision}
+          initialSlug={model.series.shareSlug}
+        />
+      </div>
       <SeriesWorkflowEditor key={model.series.revision} model={model} />
     </AuthenticatedShell>
   );
