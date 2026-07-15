@@ -7,6 +7,7 @@ import { CheckCircle2, CircleAlert, FileUp, Loader2 } from "lucide-react";
 import { EntryMetaEditor } from "@/app/races/[raceId]/race-meta-panel";
 import { createRaceEntryForFleetFile, requestTrackUpload } from "@/app/races/actions";
 import { BoatSelect } from "@/components/boats/boat-select";
+import { HelpTip } from "@/components/help/help-tip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -350,16 +351,20 @@ export function UploadPanel({
                 <span className="text-xs text-muted-foreground">no track</span>
               )}
               {entry.canUpload && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setTargetEntry(entry.entryId);
-                    entryUploadRef.current?.click();
-                  }}
-                >
-                  {entry.track ? "Replace" : "Upload"}
-                </Button>
+                <div className="flex items-center gap-0.5">
+                  {entry.track ? <HelpTip termKey="replaceTrack" /> : null}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => {
+                      setTargetEntry(entry.entryId);
+                      entryUploadRef.current?.click();
+                    }}
+                  >
+                    {entry.track ? "Replace" : "Upload"}
+                  </Button>
+                </div>
               )}
             </div>
             {entry.track?.status === "processed" && (

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 
 import { createSession } from "@/app/races/actions";
 import { BoatSelect } from "@/components/boats/boat-select";
+import { HelpTip } from "@/components/help/help-tip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -95,7 +96,12 @@ export function CreateSessionDialog({
         </DialogHeader>
         <form action={handleSubmit} className="space-y-4">
           <fieldset className="space-y-2">
-            <Legend>Session type</Legend>
+            <Legend>
+              <span className="inline-flex items-center gap-1">
+                Session type
+                <HelpTip termKey="sessionType" />
+              </span>
+            </Legend>
             <div className="grid grid-cols-2 gap-2">
               <TypeButton
                 active={sessionType === "race"}
@@ -151,7 +157,10 @@ export function CreateSessionDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="session-timezone">Timezone (IANA)</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="session-timezone">Timezone (IANA)</Label>
+              <HelpTip termKey="timezone" />
+            </div>
             <Input
               id="session-timezone"
               name="timezone"

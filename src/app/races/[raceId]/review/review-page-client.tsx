@@ -25,6 +25,7 @@ import {
   loadReviewTracks,
   type TrackMeta,
 } from "@/components/replay/track-loader";
+import { HelpTip } from "@/components/help/help-tip";
 import { createReplayWindResolver } from "@/components/replay/wind-resolution";
 import { WindIndicator } from "@/components/replay/wind-indicator";
 import { Button } from "@/components/ui/button";
@@ -251,7 +252,10 @@ export function ReviewPageClient({
           </Link>
         </Button>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">Review race data</h1>
+          <h1 className="flex items-center gap-1 truncate text-lg font-semibold">
+            <span className="truncate">Review race data</span>
+            <HelpTip termKey="review" />
+          </h1>
           <p className="truncate text-sm text-muted-foreground">{raceName}</p>
         </div>
         {(previewing || pending) && (
@@ -399,7 +403,12 @@ export function ReviewPageClient({
             <section className="space-y-3 rounded-lg border border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-medium">Manual TWD / TWS</h2>
+                  <h2 className="flex flex-wrap items-center gap-1 text-sm font-medium">
+                    Manual TWD / TWS
+                    <HelpTip termKey="twd" />
+                    <HelpTip termKey="tws" />
+                    <HelpTip termKey="analyzedWind" />
+                  </h2>
                   <p className="text-xs text-muted-foreground">
                     Override fleet wind with organizer values.
                   </p>

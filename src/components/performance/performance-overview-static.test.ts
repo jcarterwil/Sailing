@@ -34,6 +34,9 @@ describe("authenticated Performance Overview integration", () => {
     expect(overview).toContain("VMG distributions");
     expect(overview).toContain("Weather context is reported separately");
     expect(overview).toContain("authorized tracks are used only for bounded drilldown displays");
+    expect(overview).toContain("HELP_REGISTRY");
+    expect(overview).toContain('termKey="analyzedWind"');
+    expect(overview).toContain('href="/help/metrics"');
     expect(opportunities).toContain("must not be summed into total time lost");
     expect(opportunities).toContain("Benchmark ·");
     expect(opportunities).toContain("Assumption:");

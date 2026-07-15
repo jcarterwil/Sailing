@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Anchor, Loader2 } from "lucide-react";
 
+import { HelpTip } from "@/components/help/help-tip";
 import { ImportFileList } from "@/components/imports/import-file-list";
 import {
   alreadyProcessedItemIds,
@@ -720,7 +721,10 @@ export function HistoricalImportWizard({
       {displayStep === "add" ? (
         <section className="space-y-4">
           <div>
-            <h2 className="font-heading text-lg font-semibold">Add sailing files</h2>
+            <h2 className="flex flex-wrap items-center gap-1 font-heading text-lg font-semibold">
+              Add sailing files
+              <HelpTip termKey="vkxCsv" />
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Accepted types: .vkx and .csv. Up to {HISTORICAL_IMPORT_MAX_FILES} files,
               10&nbsp;MB each, 500&nbsp;MB total per import.

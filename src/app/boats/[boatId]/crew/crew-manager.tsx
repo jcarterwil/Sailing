@@ -9,6 +9,7 @@ import {
   resendCrewInvite,
   updateCrewRole,
 } from "@/app/boats/crew-actions";
+import { HelpTip } from "@/components/help/help-tip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,7 +97,11 @@ function InviteCrewDialog({ boatId }: { boatId: string }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="crew-role">Access</Label>
+            <div className="flex flex-wrap items-center gap-1">
+              <Label htmlFor="crew-role">Access</Label>
+              <HelpTip termKey="viewer" />
+              <HelpTip termKey="editor" />
+            </div>
             <Select value={role} onValueChange={(value) => setRole(value as BoatCrewRole)}>
               <SelectTrigger id="crew-role">
                 <SelectValue />
