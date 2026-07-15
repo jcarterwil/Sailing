@@ -287,6 +287,7 @@ export function MapView({
   const lastFleetCameraUpdateRef = useRef(0);
   const fleetCompactSinceRef = useRef<number | null>(null);
   const fleetCameraInitializedRef = useRef(false);
+  const refreshPlaybackRef = useRef<(() => void) | null>(null);
   const skipResetEaseRef = useRef(false);
   const boatFrameRef = useRef<Boat3dFrame>(emptyBoat3dFrame());
   const boats3dResourcesRef = useRef<Boats3dResources | null>(null);
@@ -505,6 +506,7 @@ export function MapView({
         },
       });
       readyRef.current = true;
+      refreshPlaybackRef.current?.();
     };
 
     // `load` and `styledata` both fire on first paint, and `addSource`/`addImage` can emit
@@ -821,12 +823,21 @@ export function MapView({
         );
       }
     };
-    const state = usePlaybackStore.getState();
-    update(state.timeMs, state.trailMode, state.selectedEntryId, state.cameraMode);
+    const refresh = () => {
+      const state = usePlaybackStore.getState();
+      update(state.timeMs, state.trailMode, state.selectedEntryId, state.cameraMode);
+    };
+    refreshPlaybackRef.current = refresh;
+    refresh();
     const unsub = usePlaybackStore.subscribe((s) =>
       update(s.timeMs, s.trailMode, s.selectedEntryId, s.cameraMode),
     );
-    return unsub;
+    return () => {
+      if (refreshPlaybackRef.current === refresh) {
+        refreshPlaybackRef.current = null;
+      }
+      unsub();
+    };
   }, [tracks, startsMs]);
 
   return (
