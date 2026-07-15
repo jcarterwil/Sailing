@@ -123,7 +123,7 @@ Raw-track drilldown series are not persisted. An authorized worker may return at
 
 The corrected two-ended start-line midpoint is the authoritative course origin. A fleet centroid at gun is low-confidence course origin only and is never promoted to a start line. Mark and finish cluster rules, outlier rejection, minimum support, and warnings are implemented by #77.
 
-Course geometry uses one closest-approach candidate per entry. Component-wise local-XY medians are recomputed once after rejecting candidates beyond `max(150 m, 3 × MAD)`. At least two entries are required, clusters wider than 250 m are unavailable, mark-seed searches are capped at 300 m, and entry passages must approach within 75 m. These values are named exports in `constants.ts`.
+Course geometry uses one closest-approach candidate per entry. Component-wise local-XY medians are recomputed once after rejecting candidates beyond `max(150 m, 3 × MAD)`. At least two entries are required, clusters wider than 250 m are unavailable, mark-seed searches are capped at 300 m, and entry passages must approach within 75 m. A finish inferred only from positions at the common fleet boundary additionally requires support from a strict majority of canonical entries; otherwise the finish and final-leg geometry remain unavailable pending organizer review. These values are named exports in `constants.ts`.
 
 ### 4.2 Passage fields
 
@@ -216,7 +216,7 @@ Start rank is independent of race rank.
 
 ## 8. Best-distance intervals
 
-For target `D ∈ {500, 1000, 1852}` metres, each contiguous valid finished-race path builds cumulative geodesic distance. A two-pointer search linearly interpolates both target boundaries so evaluated path distance equals `D` within 0.01 m. Score is `averageSpeedKts = D / elapsedSeconds / 0.514444`, not mean sampled SOG.
+For target `D ∈ {500, 1000, 1852}` metres, each contiguous valid race path builds cumulative geodesic distance. The scope ends at the official finish when available, otherwise at the entry's last supported post-gun passage and the interval is marked `partial=true`. A two-pointer search linearly interpolates both target boundaries so evaluated path distance equals `D` within 0.01 m. Score is `averageSpeedKts = D / elapsedSeconds / 0.514444`, not mean sampled SOG.
 
 | Field | Unit / rule | Null / provenance |
 |---|---|---|
@@ -225,6 +225,7 @@ For target `D ∈ {500, 1000, 1852}` metres, each contiguous valid finished-race
 | `elapsedMs` | positive end-start | reject nonpositive/implausible |
 | `averageSpeedKts` | formula above | full precision |
 | `fleetBest` | maximum unrounded speed for that target | equal speed tie-break: earliest start, then entry ID |
+| `partial` | true when the search ends at the last supported passage instead of an official finish | optional only for backward compatibility with older persisted V1 payloads |
 
 Intervals cannot cross race boundaries, invalid coordinates, duplicate/backward timestamps, or gaps over 10 s.
 

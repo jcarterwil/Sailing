@@ -11,6 +11,8 @@ import { resamplePerformanceInterval } from "@/lib/analytics/performance/samples
 import type {
   PerformanceBestDistanceM,
   PerformanceBestIntervalV1,
+  PerformanceConfidence,
+  PerformanceCourseAnalysisV1,
   PerformanceEntryBestIntervalsV1,
   PerformanceProvenanceV1,
   PerformanceRaceResultV1,
@@ -24,6 +26,7 @@ export interface AnalyzeBestIntervalsInput {
   entryIds: readonly string[];
   tracks: readonly ProcessedTrack[];
   analysis: RaceAnalysis;
+  course: PerformanceCourseAnalysisV1;
   results: readonly PerformanceRaceResultV1[];
   gunTimeMs: number | null;
 }
@@ -45,14 +48,28 @@ interface IntervalCandidate {
   averageSpeedKts: number;
 }
 
-function provenance(entryId: string, targetDistanceM: number): PerformanceProvenanceV1 {
+type SupportedConfidence = Exclude<PerformanceConfidence, "unavailable">;
+
+interface SupportedPassage {
+  timeMs: number;
+  confidence: SupportedConfidence;
+}
+
+function provenance(
+  targetDistanceM: number,
+  partialConfidence: SupportedConfidence | null,
+): PerformanceProvenanceV1 {
+  const partial = partialConfidence !== null;
   return {
     source: "computed",
-    confidence: "high",
-    inputs: ["processedTrack", "results.finish", `targetDistanceM:${targetDistanceM}`],
+    confidence: partial ? (partialConfidence === "low" ? "low" : "medium") : "high",
+    inputs: partial
+      ? ["processedTrack", "course.passagesByEntry", `targetDistanceM:${targetDistanceM}`]
+      : ["processedTrack", "results.finish", `targetDistanceM:${targetDistanceM}`],
     coveragePct: 100,
-    note: `Fastest contiguous ${targetDistanceM} m interval for entry ${entryId}.`
-      .slice(0, PERFORMANCE_MAX_WARNING_MESSAGE_CHARS),
+    note: partial
+      ? "Computed through the last supported passage because an official finish is unavailable."
+      : null,
   };
 }
 
@@ -83,6 +100,35 @@ function canonicalTrackMap(tracks: readonly ProcessedTrack[]): Map<string, Proce
     ) selected.set(track.entryId, { track, count });
   }
   return new Map([...selected.entries()].map(([entryId, value]) => [entryId, value.track]));
+}
+
+function lastSupportedPassage(
+  course: PerformanceCourseAnalysisV1,
+  entryId: string,
+  gunTimeMs: number,
+): SupportedPassage | null {
+  const passages = course.passagesByEntry
+    .find((entry) => entry.entryId === entryId)
+    ?.passages.filter((passage) =>
+      passage.pointIndex > 0 &&
+      passage.source !== "unavailable" &&
+      passage.confidence !== "unavailable" &&
+      finite(passage.timeMs) &&
+      passage.timeMs > gunTimeMs)
+    .map((passage): SupportedPassage => ({
+      timeMs: passage.timeMs!,
+      confidence: passage.confidence as SupportedConfidence,
+    }));
+  if (!passages?.length) return null;
+  return passages.reduce((latest, passage) => {
+    if (passage.timeMs !== latest.timeMs) {
+      return passage.timeMs > latest.timeMs ? passage : latest;
+    }
+    if (passage.confidence === "low") return passage;
+    if (latest.confidence === "low") return latest;
+    if (passage.confidence === "medium") return passage;
+    return latest;
+  });
 }
 
 function distanceSegments(
@@ -236,22 +282,35 @@ export function analyzeBestIntervals(
   const bestIntervals = entryIds.map((entryId): PerformanceEntryBestIntervalsV1 => {
     const track = trackByEntryId.get(entryId);
     const result = resultByEntryId.get(entryId);
-    const validFinish = track && result?.status === "finished" && result.finish !== null &&
+    const finished = result?.status === "finished" && result.finish !== null &&
       finite(input.gunTimeMs) && result.finish.timeMs > input.gunTimeMs;
-    if (!validFinish) {
+    const fallbackPassage = finite(input.gunTimeMs)
+      ? lastSupportedPassage(input.course, entryId, input.gunTimeMs)
+      : null;
+    const endTimeMs = finished ? result.finish!.timeMs : fallbackPassage?.timeMs ?? null;
+    if (!track || !finite(input.gunTimeMs) || endTimeMs === null || endTimeMs <= input.gunTimeMs) {
       addWarning(
         warnings,
         "insufficient-coverage",
-        "Best-distance intervals require a processed track and valid finished-race boundary.",
+        "Best-distance intervals require a processed track, corrected gun, and official finish or supported passage.",
         entryId,
       );
       return { entryId, intervals: [null, null, null] };
     }
+    const partial = !finished;
+    if (partial) {
+      addWarning(
+        warnings,
+        "insufficient-coverage",
+        "Best-distance intervals use the last supported passage because an official finish is unavailable.",
+        entryId,
+      );
+    }
     const resolved = distanceSegments(
       track,
       input.analysis,
-      input.gunTimeMs!,
-      result.finish!.timeMs,
+      input.gunTimeMs,
+      endTimeMs,
     );
     if (resolved.sourceGap) {
       addWarning(
@@ -273,7 +332,8 @@ export function analyzeBestIntervals(
         elapsedMs: best.elapsedMs,
         averageSpeedKts: best.averageSpeedKts,
         fleetBest: false,
-        provenance: provenance(entryId, targetDistanceM),
+        partial,
+        provenance: provenance(targetDistanceM, partial ? fallbackPassage!.confidence : null),
       } : null;
     });
     return { entryId, intervals };

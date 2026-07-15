@@ -6,6 +6,7 @@ import {
 import {
   PERFORMANCE_DISTRIBUTION_BIN_KTS,
   PERFORMANCE_DISTRIBUTION_MAX_KTS,
+  PERFORMANCE_CALCULATION_VERSION,
   PERFORMANCE_MAX_DISTRIBUTIONS,
   PERFORMANCE_MAX_ENTRY_COUNT,
   PERFORMANCE_MAX_PAYLOAD_BYTES,
@@ -34,7 +35,7 @@ import type {
 import { analyzeVmgDistributions } from "@/lib/analytics/performance/vmg-distribution";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
 
-export const PERFORMANCE_CALCULATION_VERSION = "performance-v1.1.0";
+export { PERFORMANCE_CALCULATION_VERSION } from "@/lib/analytics/constants";
 
 function payloadBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -163,6 +164,7 @@ export function buildPerformanceAnalysis(
     entryIds,
     tracks,
     analysis: baseAnalysis,
+    course: courseBuild.course,
     results: resultsBuild.results,
     gunTimeMs,
   });

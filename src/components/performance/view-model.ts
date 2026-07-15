@@ -5,6 +5,7 @@ import type {
   PerformanceDistributionV1,
   PerformanceMetricsV1,
   PerformanceRaceResultV1,
+  PerformanceWarningV1,
 } from "@/lib/analytics/performance/types";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceConditions } from "@/lib/races/meta";
@@ -143,6 +144,16 @@ function resultReason(result: PerformanceRaceResultV1): string | null {
   return null;
 }
 
+/** Remove structured entry IDs from legacy warning text before any public rendering. */
+export function formatPerformanceWarningMessage(
+  warning: Pick<PerformanceWarningV1, "entryId" | "message">,
+): string {
+  if (!warning.entryId) return warning.message;
+  return warning.message
+    .replaceAll(`Entry ${warning.entryId}`, "This boat")
+    .replaceAll(warning.entryId, "this boat");
+}
+
 function bestIntervalForTarget(
   performance: PerformanceAnalysisV1,
   targetDistanceM: PerformanceBestDistanceM,
@@ -227,9 +238,11 @@ export function buildPerformanceOverviewModel(input: {
       boatName: entry.boatName,
       color: entry.color,
       interval: winner.interval,
-      coverageWarning: coverage !== null && coverage < 95
-        ? `Coverage ${coverage.toFixed(0)}%; compare cautiously.`
-        : winner.interval.provenance.note,
+      coverageWarning: winner.interval.partial
+        ? "Partial race scope: computed through the last supported passage."
+        : coverage !== null && coverage < 95
+          ? `Coverage ${coverage.toFixed(0)}%; compare cautiously.`
+          : null,
     };
   });
   const metrics = performance.wholeRace.map((metric): PerformanceMetricRow => ({

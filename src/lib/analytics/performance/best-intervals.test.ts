@@ -7,7 +7,11 @@ import {
 import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { fromLocalXY } from "@/lib/analytics/geo";
 import { analyzeBestIntervals } from "@/lib/analytics/performance/best-intervals";
-import type { PerformanceRaceResultV1 } from "@/lib/analytics/performance/types";
+import type {
+  PerformanceConfidence,
+  PerformanceCourseAnalysisV1,
+  PerformanceRaceResultV1,
+} from "@/lib/analytics/performance/types";
 import type { ProcessedTrack } from "@/lib/analytics/types";
 
 const GUN_MS = Date.UTC(2026, 6, 14, 22, 0, 0);
@@ -90,6 +94,47 @@ function result(track: ProcessedTrack, durationSec: number): PerformanceRaceResu
   };
 }
 
+function courseWithSupportedPassage(
+  tracks: readonly ProcessedTrack[],
+  passageSec: number,
+  confidence: Exclude<PerformanceConfidence, "unavailable"> = "high",
+): PerformanceCourseAnalysisV1 {
+  return {
+    points: [],
+    legs: [],
+    courseDistanceM: null,
+    passagesByEntry: tracks.map((track) => ({
+      entryId: track.entryId,
+      passages: [
+        {
+          pointIndex: 0,
+          timeMs: GUN_MS,
+          minDistanceM: null,
+          source: "gun",
+          confidence: "high",
+          warningCodes: [],
+        },
+        {
+          pointIndex: 1,
+          timeMs: GUN_MS + passageSec * 1_000,
+          minDistanceM: 0,
+          source: "segment-approach",
+          confidence,
+          warningCodes: [],
+        },
+      ],
+    })),
+    reviewRequired: false,
+    provenance: {
+      source: "computed",
+      confidence: "high",
+      inputs: ["test"],
+      coveragePct: 100,
+      note: null,
+    },
+  };
+}
+
 function analyze(tracks: ProcessedTrack[], durationSec: number) {
   const analysis = analyzeRace(tracks, {
     corrections: normalizeCorrections({
@@ -100,6 +145,7 @@ function analyze(tracks: ProcessedTrack[], durationSec: number) {
     entryIds: tracks.map((track) => track.entryId),
     tracks,
     analysis,
+    course: courseWithSupportedPassage(tracks, durationSec),
     results: tracks.map((track) => result(track, durationSec)),
     gunTimeMs: GUN_MS,
   });
@@ -189,7 +235,7 @@ describe("analyzeBestIntervals", () => {
     expect(built.bestIntervals[0].intervals[2]).toBeNull();
   });
 
-  it("requires a valid finished-race boundary", () => {
+  it("uses a partial scope through the last supported passage when the finish is unresolved", () => {
     const track = straightTrack({ entryId: "one", speedKts: 6, durationSec: 700 });
     const analysis = analyzeRace([track]);
     const unresolved = result(track, 700);
@@ -204,10 +250,72 @@ describe("analyzeBestIntervals", () => {
       entryIds: [track.entryId],
       tracks: [track],
       analysis,
+      course: courseWithSupportedPassage([track], 400),
+      results: [unresolved],
+      gunTimeMs: GUN_MS,
+    });
+    expect(built.bestIntervals[0].intervals.map((interval) => interval?.targetDistanceM ?? null))
+      .toEqual([500, 1000, null]);
+    expect(built.bestIntervals[0].intervals[0]).toMatchObject({
+      partial: true,
+      provenance: {
+        confidence: "medium",
+        inputs: ["processedTrack", "course.passagesByEntry", "targetDistanceM:500"],
+      },
+    });
+    expect(built.warnings[0].code).toBe("insufficient-coverage");
+    expect(built.warnings[0].message).toContain("last supported passage");
+  });
+
+  it("keeps intervals unavailable without a finish or supported post-gun passage", () => {
+    const track = straightTrack({ entryId: "one", speedKts: 6, durationSec: 700 });
+    const analysis = analyzeRace([track]);
+    const unresolved = result(track, 700);
+    Object.assign(unresolved, {
+      status: "unresolved",
+      finish: null,
+      elapsedMs: null,
+      rank: null,
+      deltaMs: null,
+    });
+    const course = courseWithSupportedPassage([track], 400);
+    course.passagesByEntry[0].passages[1] = {
+      ...course.passagesByEntry[0].passages[1],
+      timeMs: null,
+      source: "unavailable",
+      confidence: "unavailable",
+    };
+    const built = analyzeBestIntervals({
+      entryIds: [track.entryId],
+      tracks: [track],
+      analysis,
+      course,
       results: [unresolved],
       gunTimeMs: GUN_MS,
     });
     expect(built.bestIntervals[0].intervals).toEqual([null, null, null]);
-    expect(built.warnings[0].code).toBe("insufficient-coverage");
+    expect(built.warnings[0].message).toContain("official finish or supported passage");
+  });
+
+  it("does not overstate a low-confidence fallback passage", () => {
+    const track = straightTrack({ entryId: "one", speedKts: 6, durationSec: 700 });
+    const analysis = analyzeRace([track]);
+    const unresolved = result(track, 700);
+    Object.assign(unresolved, {
+      status: "unresolved",
+      finish: null,
+      elapsedMs: null,
+      rank: null,
+      deltaMs: null,
+    });
+    const built = analyzeBestIntervals({
+      entryIds: [track.entryId],
+      tracks: [track],
+      analysis,
+      course: courseWithSupportedPassage([track], 400, "low"),
+      results: [unresolved],
+      gunTimeMs: GUN_MS,
+    });
+    expect(built.bestIntervals[0].intervals[0]?.provenance.confidence).toBe("low");
   });
 });
