@@ -8,6 +8,7 @@ import {
 import { coursePreviewFromPerformance } from "@/lib/analytics/performance/assemble";
 import type { PerformanceCourseBuildResult } from "@/lib/analytics/performance/course";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
+import { persistBoatSessionObservations } from "@/lib/boats/observations/persist";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -179,6 +180,20 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   );
   if (upsertError) {
     throw new AnalyzeRaceError(`Could not store analysis: ${upsertError.message}`);
+  }
+
+  // Compact Performance V1 into boat-scoped history observations (#172).
+  // Failure here must not undo the analysis upsert — observations can recompute.
+  if (analysis.performance) {
+    try {
+      await persistBoatSessionObservations({
+        raceId,
+        performance: analysis.performance,
+        sourceComputedAt: computedAt,
+      });
+    } catch (observationError) {
+      console.error("Could not persist boat session observations:", observationError);
+    }
   }
 
   return {

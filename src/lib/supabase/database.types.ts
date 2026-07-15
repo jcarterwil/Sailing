@@ -279,6 +279,73 @@ export type Database = {
           },
         ]
       }
+      boat_session_observations: {
+        Row: {
+          boat_id: string
+          created_at: string
+          entry_id: string
+          id: string
+          metric_version: string
+          payload: Json
+          race_id: string
+          session_type: string
+          source_computed_at: string
+          starts_at: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          boat_id: string
+          created_at?: string
+          entry_id: string
+          id?: string
+          metric_version: string
+          payload: Json
+          race_id: string
+          session_type: string
+          source_computed_at: string
+          starts_at: string
+          timezone: string
+          updated_at?: string
+        }
+        Update: {
+          boat_id?: string
+          created_at?: string
+          entry_id?: string
+          id?: string
+          metric_version?: string
+          payload?: Json
+          race_id?: string
+          session_type?: string
+          source_computed_at?: string
+          starts_at?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_session_observations_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_session_observations_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: true
+            referencedRelation: "race_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_session_observations_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       impersonation_events: {
         Row: {
           admin_user_id: string
