@@ -8,7 +8,10 @@ import {
 import { coursePreviewFromPerformance } from "@/lib/analytics/performance/assemble";
 import type { PerformanceCourseBuildResult } from "@/lib/analytics/performance/course";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
-import { persistBoatSessionObservations } from "@/lib/boats/observations/persist";
+import {
+  clearBoatSessionObservationsForRace,
+  persistBoatSessionObservations,
+} from "@/lib/boats/observations/persist";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -203,6 +206,25 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     trackCount: tracks.length,
     correctionsUpdatedAt,
   };
+}
+
+/**
+ * Drop persisted fleet analysis and compacted boat observations for a race.
+ * Call whenever `race_analyses` is invalidated so history rows cannot linger.
+ * Uses the service-role client — callers must authorize.
+ */
+export async function invalidatePersistedRaceAnalysis(raceId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error: deleteAnalysisError } = await admin
+    .from("race_analyses")
+    .delete()
+    .eq("race_id", raceId);
+  if (deleteAnalysisError) {
+    throw new AnalyzeRaceError(
+      `Could not clear stale analysis: ${deleteAnalysisError.message}`,
+    );
+  }
+  await clearBoatSessionObservationsForRace(raceId);
 }
 
 /** True when every race entry has a processed track with a storage path. */

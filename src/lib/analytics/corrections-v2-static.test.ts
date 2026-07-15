@@ -19,7 +19,7 @@ describe("RaceCorrections V2 integration", () => {
     expect(route).toContain('supabase.rpc(\n    "is_race_organizer"');
     expect(route).toContain("validateCorrectionsForSave");
     expect(route).toContain("version: 2");
-    expect(route).toContain('.from("race_analyses")');
+    expect(route).toContain("invalidatePersistedRaceAnalysis(raceId)");
     expect(route).toContain('.from("race_reports")');
     expect(route).toContain("analyzeAndPersistRace(raceId)");
     expect(route).toContain("status: 403");

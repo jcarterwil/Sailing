@@ -8,9 +8,9 @@ import { buildTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { buildProcessedTrack, summarizeTrack } from "@/lib/analytics/track/process";
 import { ParseError } from "@/lib/analytics/types";
 import { sha256HexBytes } from "@/lib/imports/hash";
-import { clearBoatSessionObservationsForRace } from "@/lib/boats/observations/persist";
 import {
   analyzeAndPersistRace,
+  invalidatePersistedRaceAnalysis,
   raceHasAllTracksProcessed,
 } from "@/lib/races/analyze-race";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -155,17 +155,10 @@ export async function POST(
     // replay never serves wind/maneuvers computed against an older track set;
     // then rebuild when the whole fleet is ready. Delete failure must not flip
     // the track to error — processing already succeeded.
-    const { error: deleteAnalysisError } = await admin
-      .from("race_analyses")
-      .delete()
-      .eq("race_id", entry.race_id);
-    if (deleteAnalysisError) {
-      console.error("Could not clear stale analysis:", deleteAnalysisError);
-    }
     try {
-      await clearBoatSessionObservationsForRace(entry.race_id);
-    } catch (clearObservationError) {
-      console.error("Could not clear stale observations:", clearObservationError);
+      await invalidatePersistedRaceAnalysis(entry.race_id);
+    } catch (invalidateError) {
+      console.error("Could not clear stale analysis:", invalidateError);
     }
 
     let analyzed: { computedAt: string; trackCount: number } | null = null;
