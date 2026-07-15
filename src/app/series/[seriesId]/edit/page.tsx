@@ -1,9 +1,12 @@
+import { Trophy } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { SeriesWorkflowEditor } from "@/app/series/[seriesId]/edit/series-workflow-editor";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { loadSeriesEditorModel } from "@/lib/series/server";
 
@@ -35,6 +38,14 @@ export default async function SeriesEditorPage({
         description="Organizer workflow for ordered races, canonical identity, official decisions, and immutable score snapshots."
         backHref="/series"
         backLabel="Race series"
+        actions={(
+          <Button asChild variant="outline">
+            <Link href={`/series/${model.series.id}`}>
+              <Trophy className="size-4" aria-hidden="true" />
+              View standings
+            </Link>
+          </Button>
+        )}
       >
         <div className="flex flex-wrap gap-2 pt-1">
           <Badge variant="outline">Revision {model.series.revision}</Badge>
