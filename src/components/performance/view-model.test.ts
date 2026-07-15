@@ -193,6 +193,68 @@ describe("performance overview view model", () => {
     expect(report).toContain("Partial race scope: computed through the last supported passage.");
   });
 
+  it("shows inferred finish geometry as the result evidence source", () => {
+    const stored = analysis();
+    const performance = stored.performance!;
+    const inferred = performance.results[0];
+    inferred.finish!.source = "passage-approach";
+    inferred.finish!.confidence = "low";
+    inferred.provenance.source = "inferred-finish-geometry";
+    inferred.provenance.confidence = "low";
+    inferred.reviewRequired = true;
+    performance.course.points.at(-1)!.provenance.source = "inferred-finish-geometry";
+    stored.race.finish = {
+      timeMs: performance.start.gunTimeMs! + 500_000,
+      source: "vkx-race-timer",
+      confidence: "high",
+    };
+    stored.race.durationMs = 500_000;
+    const model = buildPerformanceOverviewModel({
+      race: { id: "x", name: "X", venue: null, startsAt: null, createdAt: "2026-07-14T00:00:00Z" },
+      conditions: null,
+      entries: performance.provenance.entryIds.map((entryId, index) => ({
+        entryId,
+        boatName: entryId,
+        color: ENTRY_COLORS[index],
+      })),
+      analysis: stored,
+      performance,
+      computedAt: "2026-07-14T16:00:00Z",
+    });
+    expect(model.results.find((result) => result.entryId === inferred.entryId)).toMatchObject({
+      source: "inferred-finish-geometry",
+      confidence: "low",
+    });
+    const latestFinishMs = Math.max(...performance.results.map((result) => result.finish!.timeMs));
+    expect(model.race.finishTimeMs).toBe(latestFinishMs);
+    expect(model.race.durationMs).toBe(latestFinishMs - performance.start.gunTimeMs!);
+
+    stored.race.finish = {
+      timeMs: performance.start.gunTimeMs! + 500_000,
+      source: "organizer-override",
+      confidence: "high",
+    };
+    stored.race.durationMs = 500_000;
+    const organizerModel = buildPerformanceOverviewModel({
+      race: { id: "x", name: "X", venue: null, startsAt: null, createdAt: "2026-07-14T00:00:00Z" },
+      conditions: null,
+      entries: performance.provenance.entryIds.map((entryId, index) => ({
+        entryId,
+        boatName: entryId,
+        color: ENTRY_COLORS[index],
+      })),
+      analysis: stored,
+      performance,
+      computedAt: "2026-07-14T16:00:00Z",
+    });
+    expect(organizerModel.race.finishTimeMs).toBe(stored.race.finish.timeMs);
+    expect(organizerModel.race.durationMs).toBe(500_000);
+    expect(renderToStaticMarkup(createElement(PerformancePrintReport, {
+      model,
+      publicHref: null,
+    }))).toContain("inferred-finish-geometry · low");
+  });
+
   it("keeps missing values distinct from zero and sorts nulls last", () => {
     expect(formatNumber(null)).toBe("—");
     expect(formatNumber(0)).toBe("0");

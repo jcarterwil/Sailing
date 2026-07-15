@@ -179,6 +179,80 @@ describe("parseStoredPerformance", () => {
     expect(parsePerformanceV1(cyclic).status).toBe("malformed");
   });
 
+  it("bounds persisted inferred-finish result evidence", () => {
+    const tooFar = cloneFixture();
+    const result = (tooFar.results as Array<Record<string, unknown>>)[0];
+    const finish = result.finish as Record<string, unknown>;
+    const provenance = result.provenance as Record<string, unknown>;
+    Object.assign(finish, {
+      source: "passage-approach",
+      confidence: "low",
+      crossing: false,
+      distanceM: 1_000,
+    });
+    Object.assign(provenance, {
+      source: "inferred-finish-geometry",
+      confidence: "low",
+    });
+    result.reviewRequired = true;
+    const tooFarParsed = parsePerformanceV1(tooFar);
+    expect(tooFarParsed.status).toBe("malformed");
+    expect(tooFarParsed.issues.join(" ")).toContain("low-confidence reviewable passage approach");
+
+    finish.distanceM = 10;
+    provenance.confidence = "high";
+    const highConfidenceParsed = parsePerformanceV1(tooFar);
+    expect(highConfidenceParsed.status).toBe("malformed");
+    expect(highConfidenceParsed.issues.join(" ")).toContain("low-confidence reviewable passage approach");
+
+    provenance.confidence = "low";
+    const mismatchedCourseParsed = parsePerformanceV1(tooFar);
+    expect(mismatchedCourseParsed.status).toBe("malformed");
+    expect(mismatchedCourseParsed.issues.join(" ")).toContain("course finish geometry and its entry passage evidence");
+  });
+
+  it("reconciles inferred finish support with the persisted fleet passages", () => {
+    const overclaimedFleet = cloneFixture();
+    const overclaimedCourse = overclaimedFleet.course as {
+      points: Array<Record<string, unknown>>;
+      passagesByEntry: Array<{ passages: Array<Record<string, unknown>> }>;
+      reviewRequired: boolean;
+    };
+    const overclaimedFinish = overclaimedCourse.points.at(-1)!;
+    Object.assign(overclaimedFinish.provenance as Record<string, unknown>, {
+      source: "inferred-finish-geometry",
+      confidence: "low",
+    });
+    overclaimedFinish.supportingEntryCount = overclaimedCourse.passagesByEntry.length + 1;
+    overclaimedFinish.spreadM = 1;
+    overclaimedCourse.reviewRequired = true;
+    const overclaimedFleetParsed = parsePerformanceV1(overclaimedFleet);
+    expect(overclaimedFleetParsed.status).toBe("malformed");
+    expect(overclaimedFleetParsed.issues.join(" ")).toContain("strict-majority support");
+
+    const overclaimedEvidence = cloneFixture();
+    const evidenceCourse = overclaimedEvidence.course as {
+      points: Array<Record<string, unknown>>;
+      passagesByEntry: Array<{ passages: Array<Record<string, unknown>> }>;
+      reviewRequired: boolean;
+    };
+    const evidenceFinish = evidenceCourse.points.at(-1)!;
+    Object.assign(evidenceFinish.provenance as Record<string, unknown>, {
+      source: "inferred-finish-geometry",
+      confidence: "low",
+    });
+    evidenceFinish.supportingEntryCount = evidenceCourse.passagesByEntry.length;
+    evidenceFinish.spreadM = 1;
+    evidenceCourse.reviewRequired = true;
+    for (const entry of evidenceCourse.passagesByEntry) {
+      entry.passages.at(-1)!.confidence = "low";
+    }
+    evidenceCourse.passagesByEntry.at(-1)!.passages.at(-1)!.confidence = "high";
+    const overclaimedEvidenceParsed = parsePerformanceV1(overclaimedEvidence);
+    expect(overclaimedEvidenceParsed.status).toBe("malformed");
+    expect(overclaimedEvidenceParsed.issues.join(" ")).toContain("persisted low-confidence passage evidence");
+  });
+
   it("enforces normalized bearings and exact best-interval elapsed time", () => {
     const mutations: Array<(performance: Record<string, unknown>) => void> = [
       (performance) => { ((performance.start as Record<string, unknown>).line as Record<string, unknown>).bearingDeg = 360; },

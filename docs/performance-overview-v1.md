@@ -123,7 +123,7 @@ Raw-track drilldown series are not persisted. An authorized worker may return at
 
 The corrected two-ended start-line midpoint is the authoritative course origin. A fleet centroid at gun is low-confidence course origin only and is never promoted to a start line. Mark and finish cluster rules, outlier rejection, minimum support, and warnings are implemented by #77.
 
-Course geometry uses one closest-approach candidate per entry. Component-wise local-XY medians are recomputed once after rejecting candidates beyond `max(150 m, 3 × MAD)`. At least two entries are required, clusters wider than 250 m are unavailable, mark-seed searches are capped at 300 m, and entry passages must approach within 75 m. A finish inferred only from positions at the common fleet boundary additionally requires support from a strict majority of canonical entries; otherwise the finish and final-leg geometry remain unavailable pending organizer review. These values are named exports in `constants.ts`.
+Course geometry uses one closest-approach candidate per entry. Component-wise local-XY medians are recomputed once after rejecting candidates beyond `max(150 m, 3 × MAD)`. At least two entries are required, clusters wider than 250 m are unavailable, mark-seed searches are capped at 300 m, and entry passages must approach within 75 m. Without corrected finish geometry, exactly one valid, positioned per-track `race_end` may seed a finish search. Each canonical entry then contributes at most one closest approach after its own immediately preceding passage and before its own track end. The approach must have gap-free track evidence on both sides, with at least 2 m of net movement toward and away from the closest point inside each 5-second window. This makes the rule equivalent across supported logger rates while run-boundary samples, stationary endpoints, and accumulated GPS jitter remain ineligible. The refined cluster must stay within 75 m and have strict-majority support. It is persisted as low-confidence `inferred-finish-geometry` and always requires organizer review. A common fleet boundary, raw terminal sample, or endpoint-only cluster is never sufficient because it cannot distinguish the finish from a later shared stopping location. These values are named exports in `constants.ts`.
 
 ### 4.2 Passage fields
 
@@ -137,11 +137,11 @@ Course geometry uses one closest-approach candidate per entry. Component-wise lo
 | `confidence` | support/geometry quality | unavailable with null time |
 | `warningCodes[]` | bounded stable codes | includes missing/non-monotonic passage reason |
 
-Search windows are monotonic between neighboring fleet transition midpoints. A passage cannot precede the prior entry passage. A missing passage invalidates only leg scopes that require it.
+Mark search windows are monotonic between neighboring fleet transition midpoints. A finish search runs from that entry's immediately preceding passage through its own track end, so an early finisher is not excluded by a later fleet boundary and corrected geometry remains searchable when the fleet finish time is null. A passage cannot precede the prior entry passage. A missing immediate final-mark passage prevents an inferred finish for that entry and invalidates the scopes that require it. A finite finish line uses an exact-one in-span `race_end` timer only when an eligible GPS segment cannot establish the crossing; that timer passage is not labeled as a crossing.
 
 ## 5. Results, status, ranking, and delta
 
-Finish resolution order is: organizer correction; legal corrected-finish crossing/passage; valid per-track `race_end` timer after gun; unresolved. The fleet finish boundary and final recorded point are never silently used as an entry finish.
+Finish resolution order is: organizer correction; legal corrected-finish crossing/passage; strict-majority timer-seeded inferred-geometry approach; valid per-track `race_end` timer after gun; unresolved. Inferred approaches remain low confidence and review-required. The fleet finish boundary and final recorded point are never silently used as an entry finish.
 
 | Field | Unit / formula | Eligibility / null / provenance |
 |---|---|---|

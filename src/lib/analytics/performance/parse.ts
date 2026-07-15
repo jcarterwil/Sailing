@@ -1,4 +1,7 @@
 import {
+  PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO,
+  PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES,
   PERFORMANCE_DISTRIBUTION_BIN_KTS,
   PERFORMANCE_DISTRIBUTION_MAX_KTS,
   PERFORMANCE_MAX_BINS_PER_DISTRIBUTION,
@@ -27,6 +30,7 @@ import {
   PERFORMANCE_OPPORTUNITY_MAX_SUPPRESSED,
   PERFORMANCE_OPPORTUNITY_MAX_TEXT_CHARS,
   PERFORMANCE_OPPORTUNITY_MIN_SECONDS,
+  PERFORMANCE_PASSAGE_MAX_RADIUS_M,
   PERFORMANCE_RESAMPLE_HZ,
   PERFORMANCE_START_WINDOW_MS,
 } from "@/lib/analytics/constants";
@@ -200,6 +204,7 @@ function validateProvenance(
     "processed-track",
     "corrected-analysis",
     "detected-geometry",
+    "inferred-finish-geometry",
     "organizer-override",
     "timer-event",
     "line-crossing",
@@ -272,6 +277,7 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
   const legs = arrayAt(row.legs, context, `${path}.legs`, PERFORMANCE_MAX_LEG_COUNT);
   const passages = arrayAt(row.passagesByEntry, context, `${path}.passagesByEntry`, PERFORMANCE_MAX_ENTRY_COUNT);
   if (!points || !legs || !passages) valid = false;
+  const passageEntryCount = passages?.length ?? 0;
   points?.forEach((pointValue, index) => {
     const pointPath = `${path}.points[${index}]`;
     const point = recordAt(pointValue, context, pointPath);
@@ -288,6 +294,31 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
     valid = finiteAt(point.supportingEntryCount, context, `${pointPath}.supportingEntryCount`, { integer: true, min: 0, max: PERFORMANCE_MAX_ENTRY_COUNT }) && valid;
     valid = finiteAt(point.spreadM, context, `${pointPath}.spreadM`, { nullable: true, min: 0 }) && valid;
     valid = validateProvenance(point.provenance, context, `${pointPath}.provenance`) && valid;
+    const pointProvenance = isRecord(point.provenance) ? point.provenance : null;
+    if (pointProvenance?.source === "inferred-finish-geometry") {
+      if (point.kind !== "finish" || point.position === null || point.line !== null) {
+        valid = issue(context, pointPath, "inferred finish geometry requires a positioned point finish") && valid;
+      }
+      if (pointProvenance.confidence !== "low") {
+        valid = issue(context, `${pointPath}.provenance.confidence`, "inferred finish geometry must be low confidence") && valid;
+      }
+      if (
+        typeof point.supportingEntryCount !== "number" ||
+        point.supportingEntryCount < PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES ||
+        passageEntryCount === 0 ||
+        point.supportingEntryCount > passageEntryCount ||
+        point.supportingEntryCount / passageEntryCount <=
+          PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO
+      ) {
+        valid = issue(context, `${pointPath}.supportingEntryCount`, "inferred finish geometry requires strict-majority support") && valid;
+      }
+      if (
+        typeof point.spreadM !== "number" ||
+        point.spreadM > PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M
+      ) {
+        valid = issue(context, `${pointPath}.spreadM`, "inferred finish geometry exceeds its maximum spread") && valid;
+      }
+    }
   });
   legs?.forEach((legValue, index) => {
     const legPath = `${path}.legs[${index}]`;
@@ -334,8 +365,55 @@ function validateCourse(value: unknown, context: ValidationContext, path: string
       }
     });
   });
+  const inferredFinishPoint = points
+    ?.map((point) => isRecord(point) ? point : null)
+    .findLast((point) => point?.kind === "finish" &&
+      isRecord(point.provenance) &&
+      point.provenance.source === "inferred-finish-geometry") ?? null;
+  if (
+    inferredFinishPoint &&
+    typeof inferredFinishPoint.index === "number" &&
+    typeof inferredFinishPoint.supportingEntryCount === "number"
+  ) {
+    const inferredFinishPointIndex = inferredFinishPoint.index;
+    const supportedPassageCount = passages?.filter((entryValue) => {
+      const entry = isRecord(entryValue) ? entryValue : null;
+      const entryPassages = (Array.isArray(entry?.passages) ? entry.passages : [])
+        .map((passage) => isRecord(passage) ? passage : null);
+      const priorPassage = entryPassages
+        .findLast((passage) => passage?.pointIndex === inferredFinishPointIndex - 1);
+      const finishPassage = entryPassages
+        .findLast((passage) => passage?.pointIndex === inferredFinishPointIndex);
+      return (
+        (finishPassage?.source === "segment-approach" || finishPassage?.source === "timer-event") &&
+        finishPassage.confidence === "low" &&
+        typeof priorPassage?.timeMs === "number" &&
+        Number.isFinite(priorPassage.timeMs) &&
+        typeof finishPassage.timeMs === "number" &&
+        Number.isFinite(finishPassage.timeMs) &&
+        finishPassage.timeMs > priorPassage.timeMs &&
+        typeof finishPassage.minDistanceM === "number" &&
+        Number.isFinite(finishPassage.minDistanceM) &&
+        finishPassage.minDistanceM <= PERFORMANCE_PASSAGE_MAX_RADIUS_M
+      );
+    }).length ?? 0;
+    if (supportedPassageCount < inferredFinishPoint.supportingEntryCount) {
+      valid = issue(
+        context,
+        `${path}.passagesByEntry`,
+        "inferred finish support exceeds its persisted low-confidence passage evidence",
+      ) && valid;
+    }
+  }
   valid = finiteAt(row.courseDistanceM, context, `${path}.courseDistanceM`, { nullable: true, min: 0 }) && valid;
   valid = booleanAt(row.reviewRequired, context, `${path}.reviewRequired`) && valid;
+  if (
+    points?.some((point) => isRecord(point) && isRecord(point.provenance) &&
+      point.provenance.source === "inferred-finish-geometry") &&
+    row.reviewRequired !== true
+  ) {
+    valid = issue(context, `${path}.reviewRequired`, "inferred finish geometry requires review") && valid;
+  }
   valid = validateProvenance(row.provenance, context, `${path}.provenance`) && valid;
   return valid;
 }
@@ -365,6 +443,23 @@ function validateResult(value: unknown, context: ValidationContext, path: string
   valid = booleanAt(row.reviewRequired, context, `${path}.reviewRequired`) && valid;
   valid = validateWarningCodes(row.warningCodes, context, `${path}.warningCodes`) && valid;
   valid = validateProvenance(row.provenance, context, `${path}.provenance`) && valid;
+  const resultProvenance = isRecord(row.provenance) ? row.provenance : null;
+  if (resultProvenance?.source === "inferred-finish-geometry") {
+    const finish = isRecord(row.finish) ? row.finish : null;
+    if (
+      row.status !== "finished" ||
+      finish?.source !== "passage-approach" ||
+      finish.crossing !== false ||
+      finish.confidence !== "low" ||
+      typeof finish.distanceM !== "number" ||
+      !Number.isFinite(finish.distanceM) ||
+      finish.distanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M ||
+      resultProvenance.confidence !== "low" ||
+      row.reviewRequired !== true
+    ) {
+      valid = issue(context, path, "inferred finish result requires a low-confidence reviewable passage approach") && valid;
+    }
+  }
   if (row.status === "finished") {
     if (row.finish === null) valid = issue(context, `${path}.finish`, "finished result requires finish evidence") && valid;
     if (row.elapsedMs === null || row.rank === null || row.deltaMs === null) {
@@ -812,6 +907,85 @@ function validatePerformance(value: unknown, context: ValidationContext): value 
   const results = arrayAt(row.results, context, "performance.results", PERFORMANCE_MAX_ENTRY_COUNT);
   if (!results) valid = false;
   results?.forEach((result, index) => { valid = validateResult(result, context, `performance.results[${index}]`) && valid; });
+  const finishPoint = coursePoints
+    ?.map((point) => isRecord(point) ? point : null)
+    .findLast((point) => point?.kind === "finish") ?? null;
+  const finishPointProvenance = isRecord(finishPoint?.provenance)
+    ? finishPoint.provenance
+    : null;
+  const finishPointIndex = typeof finishPoint?.index === "number" ? finishPoint.index : null;
+  const passageEntries = Array.isArray(courseRecord?.passagesByEntry)
+    ? courseRecord.passagesByEntry
+    : [];
+  results?.forEach((resultValue, index) => {
+    const result = isRecord(resultValue) ? resultValue : null;
+    const resultProvenance = isRecord(result?.provenance) ? result.provenance : null;
+    const finish = isRecord(result?.finish) ? result.finish : null;
+    const entryPassages = passageEntries.find((entryValue) => {
+      const entry = isRecord(entryValue) ? entryValue : null;
+      return entry?.entryId === result?.entryId;
+    });
+    const entryPassageRecord = isRecord(entryPassages) ? entryPassages : null;
+    const entryPassageRows = (Array.isArray(entryPassageRecord?.passages)
+      ? entryPassageRecord.passages
+      : [])
+      .map((passage) => isRecord(passage) ? passage : null);
+    const priorPassage = entryPassageRows
+      .findLast((passage) => finishPointIndex !== null && passage?.pointIndex === finishPointIndex - 1) ?? null;
+    const finishPassage = entryPassageRows
+      .findLast((passage) => passage?.pointIndex === finishPointIndex) ?? null;
+    const inferredPassageSource = finishPassage?.source === "segment-approach"
+      ? { finish: "passage-approach", provenance: "inferred-finish-geometry" } as const
+      : finishPassage?.source === "timer-event"
+        ? { finish: "timer-event", provenance: "timer-event" } as const
+        : null;
+    const mustUsePersistedInferredEvidence =
+      finishPointProvenance?.source === "inferred-finish-geometry" &&
+      result?.status === "finished" &&
+      inferredPassageSource !== null &&
+      finish?.source !== "organizer-override";
+    if (
+      mustUsePersistedInferredEvidence &&
+      (
+        finish?.source !== inferredPassageSource.finish ||
+        finish?.confidence !== finishPassage?.confidence ||
+        finish?.crossing !== false ||
+        resultProvenance?.source !== inferredPassageSource.provenance ||
+        resultProvenance?.confidence !== finishPassage?.confidence ||
+        result?.reviewRequired !== true ||
+        typeof priorPassage?.timeMs !== "number" ||
+        !Number.isFinite(priorPassage.timeMs) ||
+        typeof finishPassage?.timeMs !== "number" ||
+        finishPassage.timeMs <= priorPassage.timeMs ||
+        finishPassage?.timeMs !== finish?.timeMs ||
+        finishPassage?.minDistanceM !== finish?.distanceM
+      )
+    ) {
+      valid = issue(
+        context,
+        `performance.results[${index}]`,
+        "a result backed by an inferred finish passage must retain its exact source, evidence, and provenance",
+      ) && valid;
+    }
+    if (resultProvenance?.source !== "inferred-finish-geometry") return;
+    if (
+      finishPointProvenance?.source !== "inferred-finish-geometry" ||
+      finishPassage?.source !== "segment-approach" ||
+      finishPassage.confidence !== "low" ||
+      typeof priorPassage?.timeMs !== "number" ||
+      !Number.isFinite(priorPassage.timeMs) ||
+      typeof finishPassage.timeMs !== "number" ||
+      finishPassage.timeMs <= priorPassage.timeMs ||
+      finishPassage.timeMs !== finish?.timeMs ||
+      finishPassage.minDistanceM !== finish?.distanceM
+    ) {
+      valid = issue(
+        context,
+        `performance.results[${index}]`,
+        "inferred finish result must match the course finish geometry and its entry passage evidence",
+      ) && valid;
+    }
+  });
   valid = validateFleetDeltas(results, context, "performance.results") && valid;
   valid = validateStart(row.start, context, "performance.start") && valid;
   const startRecord = isRecord(row.start) ? row.start : null;

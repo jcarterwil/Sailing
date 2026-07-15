@@ -7,6 +7,9 @@ import {
   PERFORMANCE_COURSE_MAD_MULTIPLIER,
   PERFORMANCE_COURSE_MARK_SEARCH_RADIUS_M,
   PERFORMANCE_COURSE_MAX_CLUSTER_SPREAD_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MIN_MOVEMENT_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MOVEMENT_WINDOW_MS,
   PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO,
   PERFORMANCE_COURSE_MIN_OUTLIER_RADIUS_M,
   PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES,
@@ -60,11 +63,16 @@ interface TimedCoordinate {
   position: PerformanceCoordinateV1;
 }
 
-interface ApproachResult {
+interface PassageResult {
   timeMs: number;
+  minDistanceM: number | null;
+  gapSkipped: boolean;
+  segmentSupported: boolean;
+}
+
+interface ApproachResult extends PassageResult {
   minDistanceM: number;
   position: PerformanceCoordinateV1;
-  gapSkipped: boolean;
 }
 
 interface ClusterResult {
@@ -73,6 +81,17 @@ interface ClusterResult {
   rejectedCount: number;
   spreadM: number | null;
   dispersed: boolean;
+}
+
+interface InferredFinishAttempt {
+  cluster: ClusterResult;
+  seed: TimedCoordinate;
+  valid: boolean;
+}
+
+interface InferredFinishMovementSupport {
+  continuousStartMs: number[];
+  continuousEndMs: number[];
 }
 
 interface SearchWindow {
@@ -224,25 +243,86 @@ function robustCluster(
   };
 }
 
+function inferredFinishMovingSegmentSupport(
+  track: ProcessedTrack,
+  window: SearchWindow,
+): InferredFinishMovementSupport {
+  const segmentCount = Math.max(0, columnLength(track) - 1);
+  const continuousStartMs = Array<number>(segmentCount).fill(Number.NaN);
+  const continuousEndMs = Array<number>(segmentCount).fill(Number.NaN);
+  const eligible = Array<boolean>(segmentCount).fill(false);
+  for (let index = 0; index < segmentCount; index++) {
+    const startMs = epochAt(track, index);
+    const endMs = epochAt(track, index + 1);
+    const start = validTrackCoordinate(track, index);
+    const end = validTrackCoordinate(track, index + 1);
+    const durationMs = endMs - startMs;
+    if (
+      !start ||
+      !end ||
+      !finite(durationMs) ||
+      durationMs <= 0 ||
+      durationMs > PERFORMANCE_MAX_SOURCE_GAP_MS
+    ) continue;
+    const clippedStartMs = Math.max(startMs, window.startMs);
+    const clippedEndMs = Math.min(endMs, window.endMs);
+    if (clippedEndMs <= clippedStartMs) continue;
+    eligible[index] = true;
+  }
+
+  for (let runStart = 0; runStart < segmentCount;) {
+    while (runStart < segmentCount && !eligible[runStart]) runStart++;
+    if (runStart >= segmentCount) break;
+    let runEnd = runStart;
+    while (runEnd + 1 < segmentCount && eligible[runEnd + 1]) runEnd++;
+    const runStartMs = Math.max(epochAt(track, runStart), window.startMs);
+    const runEndMs = Math.min(epochAt(track, runEnd + 1), window.endMs);
+    for (let index = runStart; index <= runEnd; index++) {
+      continuousStartMs[index] = runStartMs;
+      continuousEndMs[index] = runEndMs;
+    }
+    runStart = runEnd + 1;
+  }
+  return { continuousStartMs, continuousEndMs };
+}
+
 function closestPointApproach(
   track: ProcessedTrack,
   target: PerformanceCoordinateV1,
   window: SearchWindow,
+  requireSupportedSegment = false,
 ): ApproachResult | null {
   const length = columnLength(track);
+  const movingSegments = requireSupportedSegment
+    ? inferredFinishMovingSegmentSupport(track, window)
+    : null;
   let best: ApproachResult | null = null;
   let gapSkipped = false;
-  const consider = (timeMs: number, point: PerformanceCoordinateV1) => {
+  const consider = (
+    timeMs: number,
+    point: PerformanceCoordinateV1,
+    segmentSupported: boolean,
+  ) => {
     const distance = haversineM(target.lat, target.lon, point.lat, point.lon);
-    if (!best || distance < best.minDistanceM || (distance === best.minDistanceM && timeMs < best.timeMs)) {
-      best = { timeMs, minDistanceM: distance, position: point, gapSkipped };
+    if (
+      !best ||
+      distance < best.minDistanceM ||
+      (distance === best.minDistanceM && segmentSupported && !best.segmentSupported) ||
+      (distance === best.minDistanceM && segmentSupported === best.segmentSupported && timeMs < best.timeMs)
+    ) {
+      best = { timeMs, minDistanceM: distance, position: point, gapSkipped, segmentSupported };
     }
   };
 
   for (let index = 0; index < length; index++) {
     const timeMs = epochAt(track, index);
     const point = validTrackCoordinate(track, index);
-    if (point && timeMs >= window.startMs && timeMs <= window.endMs) consider(timeMs, point);
+    if (
+      !requireSupportedSegment &&
+      point &&
+      timeMs >= window.startMs &&
+      timeMs <= window.endMs
+    ) consider(timeMs, point, false);
     if (index + 1 >= length) continue;
     const nextTimeMs = epochAt(track, index + 1);
     if (!finite(timeMs) || !finite(nextTimeMs) || nextTimeMs <= timeMs) continue;
@@ -268,7 +348,50 @@ function closestPointApproach(
       ? Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / lengthSquared))
       : 0;
     const time = clippedStartMs + (clippedEndMs - clippedStartMs) * fraction;
-    consider(time, fromLocalXY(target.lat, target.lon, a.x + dx * fraction, a.y + dy * fraction));
+    const approachPosition = fromLocalXY(
+      target.lat,
+      target.lon,
+      a.x + dx * fraction,
+      a.y + dy * fraction,
+    );
+    const approachStartMs = movingSegments === null
+      ? time
+      : Math.max(
+          time - PERFORMANCE_COURSE_INFERRED_FINISH_MOVEMENT_WINDOW_MS,
+          movingSegments.continuousStartMs[index],
+        );
+    const continuationEndMs = movingSegments === null
+      ? time
+      : Math.min(
+          time + PERFORMANCE_COURSE_INFERRED_FINISH_MOVEMENT_WINDOW_MS,
+          movingSegments.continuousEndMs[index],
+        );
+    const approachStart = approachStartMs < time
+      ? positionAtTime(track, approachStartMs)
+      : null;
+    const continuation = continuationEndMs > time
+      ? positionAtTime(track, continuationEndMs)
+      : null;
+    const segmentSupported = movingSegments === null || (
+      approachStart !== null &&
+      continuation !== null &&
+      haversineM(
+        approachStart.lat,
+        approachStart.lon,
+        approachPosition.lat,
+        approachPosition.lon,
+      ) >= PERFORMANCE_COURSE_INFERRED_FINISH_MIN_MOVEMENT_M &&
+      haversineM(
+        approachPosition.lat,
+        approachPosition.lon,
+        continuation.lat,
+        continuation.lon,
+      ) >=
+        PERFORMANCE_COURSE_INFERRED_FINISH_MIN_MOVEMENT_M
+    );
+    if (!requireSupportedSegment || segmentSupported) {
+      consider(time, approachPosition, segmentSupported);
+    }
   }
   const result = best as ApproachResult | null;
   return result ? { ...result, gapSkipped } : null;
@@ -308,6 +431,7 @@ function finiteLineCrossing(
         minDistanceM: 0,
         position: intersection.position,
         gapSkipped,
+        segmentSupported: true,
       };
     }
   }
@@ -315,21 +439,63 @@ function finiteLineCrossing(
   return best;
 }
 
-function raceEndEvent(track: ProcessedTrack, gunTimeMs: number | null, referenceMs: number | null): TimedCoordinate | null {
-  const values = (track.extras?.timerEvents ?? [])
-    .filter((event) => event.event === "race_end" && finite(event.t) && (gunTimeMs === null || event.t > gunTimeMs))
-    .sort((left, right) => {
-      if (referenceMs !== null) {
-        const difference = Math.abs(left.t - referenceMs) - Math.abs(right.t - referenceMs);
-        if (difference !== 0) return difference;
-      }
-      return left.t - right.t;
-    });
-  for (const event of values) {
-    const position = positionAtTime(track, event.t);
-    if (position) return { entryId: track.entryId, timeMs: event.t, position };
+function trackTimeSpan(track: ProcessedTrack): SearchWindow | null {
+  let startMs = Number.POSITIVE_INFINITY;
+  let endMs = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < columnLength(track); index++) {
+    const timeMs = epochAt(track, index);
+    if (!finite(timeMs)) continue;
+    startMs = Math.min(startMs, timeMs);
+    endMs = Math.max(endMs, timeMs);
   }
-  return null;
+  return finite(startMs) && finite(endMs) ? { startMs, endMs } : null;
+}
+
+function uniqueRaceEndTime(
+  track: ProcessedTrack,
+  gunTimeMs: number | null,
+  window: SearchWindow,
+): number | null {
+  const span = trackTimeSpan(track);
+  if (!span) return null;
+  const times = [...new Set((track.extras?.timerEvents ?? [])
+    .filter((event) =>
+      event.event === "race_end" &&
+      finite(event.t) &&
+      (gunTimeMs === null || event.t > gunTimeMs) &&
+      event.t >= span.startMs &&
+      event.t <= span.endMs &&
+      event.t >= window.startMs &&
+      event.t <= window.endMs)
+    .map((event) => event.t))].sort((left, right) => left - right);
+  return times.length === 1 ? times[0] : null;
+}
+
+function timerBracketsFiniteLine(
+  track: ProcessedTrack,
+  line: PerformanceLineV1,
+  timerTimeMs: number,
+  window: SearchWindow,
+): boolean {
+  for (let index = 0; index + 1 < columnLength(track); index++) {
+    const startMs = epochAt(track, index);
+    const endMs = epochAt(track, index + 1);
+    if (
+      !finite(startMs) ||
+      !finite(endMs) ||
+      endMs <= startMs ||
+      timerTimeMs < startMs ||
+      timerTimeMs > endMs
+    ) continue;
+    const start = validTrackCoordinate(track, index);
+    const end = validTrackCoordinate(track, index + 1);
+    if (!start || !end) continue;
+    const intersection = intersectFiniteLineSegment(start, end, line);
+    if (!intersection) continue;
+    const estimatedCrossingMs = startMs + (endMs - startMs) * intersection.trackFraction;
+    if (estimatedCrossingMs >= window.startMs && estimatedCrossingMs <= window.endMs) return true;
+  }
+  return false;
 }
 
 function canonicalTracks(input: readonly ProcessedTrack[]): {
@@ -349,7 +515,9 @@ function canonicalTracks(input: readonly ProcessedTrack[]): {
     if (
       !current ||
       validRows > current.validRows ||
-      (validRows === current.validRows && track.t0 < current.track.t0)
+      (validRows === current.validRows && track.t0 < current.track.t0) ||
+      (validRows === current.validRows && track.t0 === current.track.t0 &&
+        JSON.stringify(track) < JSON.stringify(current.track))
     ) selected.set(track.entryId, { track, validRows });
   }
   const all = [...selected.values()].map((value) => value.track).sort((a, b) => a.entryId.localeCompare(b.entryId));
@@ -379,16 +547,21 @@ function passageWindow(
 ): SearchWindow | null {
   const current = pointTimes[pointIndex];
   const prior = pointTimes[pointIndex - 1];
+  const ends = tracks.map((track) => trackTimeSpan(track)?.endMs ?? NaN).filter(finite);
+  const finalPoint = pointIndex === pointTimes.length - 1;
+  if (finalPoint) {
+    if (!finite(prior)) return null;
+    const candidates = [...ends, ...(finite(current) ? [current] : [])];
+    if (candidates.length === 0) return null;
+    const endMs = Math.max(...candidates);
+    return endMs >= prior ? { startMs: prior, endMs } : null;
+  }
   if (!finite(current) || !finite(prior) || current <= prior) return null;
   const startMs = (prior + current) / 2;
   const next = pointTimes[pointIndex + 1];
-  if (finite(next) && next > current) return { startMs, endMs: (current + next) / 2 };
-  const ends = tracks.map((track) => {
-    const length = columnLength(track);
-    return length > 0 ? epochAt(track, length - 1) : NaN;
-  }).filter(finite);
-  const endMs = Math.max(current, ...ends);
-  return endMs >= startMs ? { startMs, endMs } : null;
+  const nextReferenceMs = finite(next) ? next : ends.length > 0 ? median(ends) : null;
+  if (!finite(nextReferenceMs) || nextReferenceMs <= current) return null;
+  return { startMs, endMs: (current + nextReferenceMs) / 2 };
 }
 
 function pointConfidence(cluster: ClusterResult, entryCount: number): PerformanceConfidence {
@@ -399,6 +572,107 @@ function pointConfidence(cluster: ClusterResult, entryCount: number): Performanc
 function hasInferredFinishSupport(supportingEntries: number, entryCount: number): boolean {
   return entryCount > 0 &&
     supportingEntries / entryCount > PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO;
+}
+
+function lastPreFinishPassageTimes(
+  tracks: readonly ProcessedTrack[],
+  points: readonly PerformanceCoursePointV1[],
+  gunTimeMs: number | null,
+  finishReferenceMs: number | null,
+): Map<string, number> {
+  const passages = new Map<string, number>();
+  if (!finite(gunTimeMs)) return passages;
+  const pointTimes = [...points.map((point) => point.atMs), finishReferenceMs];
+  for (const track of tracks) {
+    let priorTimeMs = gunTimeMs;
+    let supported = true;
+    for (let pointIndex = 1; pointIndex < points.length; pointIndex++) {
+      const point = points[pointIndex];
+      const baseWindow = passageWindow(pointIndex, pointTimes, tracks);
+      if (!baseWindow || !point.position) {
+        supported = false;
+        break;
+      }
+      const window = {
+        startMs: Math.max(baseWindow.startMs, priorTimeMs),
+        endMs: baseWindow.endMs,
+      };
+      const approach = window.startMs <= window.endMs
+        ? closestPointApproach(track, point.position, window)
+        : null;
+      if (!approach || approach.minDistanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M) {
+        supported = false;
+        break;
+      }
+      priorTimeMs = approach.timeMs;
+    }
+    if (supported) passages.set(track.entryId, priorTimeMs);
+  }
+  return passages;
+}
+
+function inferFinishFromTimerSeeds(
+  tracks: readonly ProcessedTrack[],
+  timerSeeds: readonly TimedCoordinate[],
+  priorPassageTimes: ReadonlyMap<string, number>,
+): InferredFinishAttempt | null {
+  let best: InferredFinishAttempt | null = null;
+  for (const seed of timerSeeds) {
+    const candidates: TimedCoordinate[] = [];
+    for (const track of tracks) {
+      const priorTimeMs = priorPassageTimes.get(track.entryId);
+      const span = trackTimeSpan(track);
+      if (priorTimeMs === undefined || !span || span.endMs < priorTimeMs) continue;
+      const approach = closestPointApproach(track, seed.position, {
+        startMs: priorTimeMs,
+        endMs: span.endMs,
+      }, true);
+      if (
+        !approach ||
+        !approach.segmentSupported ||
+        approach.timeMs <= priorTimeMs ||
+        approach.minDistanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M
+      ) continue;
+      candidates.push({
+        entryId: track.entryId,
+        timeMs: approach.timeMs,
+        position: approach.position,
+      });
+    }
+    const cluster = robustCluster(candidates, seed.position);
+    const attempt: InferredFinishAttempt = {
+      cluster,
+      seed,
+      valid:
+        cluster.position !== null &&
+        cluster.accepted.length >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
+        hasInferredFinishSupport(cluster.accepted.length, tracks.length) &&
+        !cluster.dispersed &&
+        cluster.spreadM !== null &&
+        cluster.spreadM <= PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M,
+    };
+    const attemptMedianMs = median(cluster.accepted.map((candidate) => candidate.timeMs));
+    const bestMedianMs = best === null
+      ? Number.POSITIVE_INFINITY
+      : median(best.cluster.accepted.map((candidate) => candidate.timeMs));
+    const comparison = best === null ||
+      (attempt.valid && !best.valid) ||
+      (attempt.valid === best.valid && (
+        cluster.accepted.length > best.cluster.accepted.length ||
+        (cluster.accepted.length === best.cluster.accepted.length &&
+          (cluster.spreadM ?? Number.POSITIVE_INFINITY) < (best.cluster.spreadM ?? Number.POSITIVE_INFINITY)) ||
+        (cluster.accepted.length === best.cluster.accepted.length &&
+          (cluster.spreadM ?? Number.POSITIVE_INFINITY) === (best.cluster.spreadM ?? Number.POSITIVE_INFINITY) &&
+          attemptMedianMs < bestMedianMs) ||
+        (cluster.accepted.length === best.cluster.accepted.length &&
+          (cluster.spreadM ?? Number.POSITIVE_INFINITY) === (best.cluster.spreadM ?? Number.POSITIVE_INFINITY) &&
+          attemptMedianMs === bestMedianMs &&
+          (seed.entryId.localeCompare(best.seed.entryId) < 0 ||
+            (seed.entryId === best.seed.entryId && seed.timeMs < best.seed.timeMs)))
+      ));
+    if (comparison) best = attempt;
+  }
+  return best;
 }
 
 function approachConfidence(point: PerformanceCoursePointV1, distanceM: number): PerformanceConfidence {
@@ -567,15 +841,61 @@ export function buildPerformanceCourse(
     finishSupport = 1;
     finishProvenance = provenance("organizer-override", "high", ["correctedFinish.point"], 100);
   } else {
-    const timerCandidates = tracks
-      .map((track) => raceEndEvent(track, gunTimeMs, race.finish.timeMs))
-      .filter((value): value is TimedCoordinate => value !== null);
-    const timerCluster = robustCluster(timerCandidates);
-    if (
+    const rawTimerSeeds = tracks.map((track): TimedCoordinate | null => {
+      const span = trackTimeSpan(track);
+      if (!span) return null;
+      const timeMs = uniqueRaceEndTime(track, gunTimeMs, span);
+      if (timeMs === null) return null;
+      const position = positionAtTime(track, timeMs);
+      return position ? { entryId: track.entryId, timeMs, position } : null;
+    }).filter((value): value is TimedCoordinate => value !== null);
+    const timerCluster = robustCluster(rawTimerSeeds);
+    const supportedTimerCluster =
       timerCluster.accepted.length >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
       !timerCluster.dispersed &&
-      timerCluster.position
-    ) {
+      timerCluster.position !== null;
+    let inferredAttempt: InferredFinishAttempt | null = null;
+    if (!supportedTimerCluster || rawTimerSeeds.length < tracks.length) {
+      const finishReferenceMs = race.finish.timeMs ?? (
+        rawTimerSeeds.length > 0 ? Math.max(...rawTimerSeeds.map((seed) => seed.timeMs)) : null
+      );
+      const priorPassageTimes = lastPreFinishPassageTimes(
+        tracks,
+        points,
+        gunTimeMs,
+        finishReferenceMs,
+      );
+      const finalCoursePointTimeMs = points.at(-1)?.atMs ?? gunTimeMs;
+      const inferenceTimerSeeds = rawTimerSeeds.filter((seed) => {
+        const ownPriorPassageMs = priorPassageTimes.get(seed.entryId);
+        return ownPriorPassageMs !== undefined
+          ? seed.timeMs > ownPriorPassageMs
+          : !finite(finalCoursePointTimeMs) || seed.timeMs > finalCoursePointTimeMs;
+      });
+      inferredAttempt = inferFinishFromTimerSeeds(
+        tracks,
+        inferenceTimerSeeds,
+        priorPassageTimes,
+      );
+    }
+    const inferredGeometry =
+      inferredAttempt?.valid === true &&
+      inferredAttempt.cluster.position !== null &&
+      (!supportedTimerCluster || rawTimerSeeds.length < tracks.length)
+        ? inferredAttempt
+        : null;
+    if (inferredGeometry) {
+      finishPosition = inferredGeometry.cluster.position;
+      finishSupport = inferredGeometry.cluster.accepted.length;
+      finishSpreadM = inferredGeometry.cluster.spreadM;
+      finishProvenance = provenance(
+        "inferred-finish-geometry",
+        "low",
+        ["tracks.extras.timerEvents.race_end", "tracks.postFinalMarkApproach"],
+        tracks.length > 0 ? inferredGeometry.cluster.accepted.length / tracks.length * 100 : null,
+        `Finish geometry was inferred from a race-end timer seed corroborated by ${inferredGeometry.cluster.accepted.length} of ${tracks.length} post-final-mark trajectories; organizer review is required.`,
+      );
+    } else if (supportedTimerCluster) {
       finishPosition = timerCluster.position;
       finishSupport = timerCluster.accepted.length;
       finishSpreadM = timerCluster.spreadM;
@@ -587,58 +907,32 @@ export function buildPerformanceCourse(
         timerCluster.rejectedCount > 0 ? `${timerCluster.rejectedCount} spatial outlier candidate(s) rejected.` : null,
       );
     } else {
-      const endpointCandidates: TimedCoordinate[] = [];
-      if (race.finish.timeMs !== null) {
-        for (const track of tracks) {
-          const position = positionAtTime(track, race.finish.timeMs);
-          if (position) endpointCandidates.push({ entryId: track.entryId, timeMs: race.finish.timeMs, position });
-        }
-      }
-      const endpointCluster = robustCluster(endpointCandidates);
-      if (
-        endpointCluster.accepted.length >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
-        hasInferredFinishSupport(endpointCluster.accepted.length, tracks.length) &&
-        !endpointCluster.dispersed &&
-        endpointCluster.position
-      ) {
-        finishPosition = endpointCluster.position;
-        finishSupport = endpointCluster.accepted.length;
-        finishSpreadM = endpointCluster.spreadM;
-        finishProvenance = provenance(
-          "detected-geometry",
-          "low",
-          ["race.finish.timeMs", "tracks.positionAtFinishBoundary"],
-          tracks.length > 0 ? endpointCluster.accepted.length / tracks.length * 100 : null,
-          "Finish geometry was inferred from the corrected fleet finish boundary.",
-        );
-      } else {
-        const rejectedEndpointSupport = endpointCluster.accepted.length;
-        const endpointNeedsReview =
-          rejectedEndpointSupport >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
-          !hasInferredFinishSupport(rejectedEndpointSupport, tracks.length) &&
-          !endpointCluster.dispersed &&
-          endpointCluster.position !== null;
-        const strongestCluster = endpointCluster.accepted.length >= timerCluster.accepted.length
-          ? endpointCluster
-          : timerCluster;
-        finishSupport = strongestCluster.accepted.length;
-        finishSpreadM = strongestCluster.spreadM;
-        finishProvenance = provenance(
-          "unavailable",
-          "unavailable",
-          ["race.finish", "tracks.extras.timerEvents.race_end"],
-          tracks.length > 0 ? Math.max(timerCluster.accepted.length, endpointCluster.accepted.length) / tracks.length * 100 : null,
-          endpointNeedsReview
-            ? `Inferred finish boundary supported by ${rejectedEndpointSupport} of ${tracks.length} entries; organizer review is required.`
-            : "Fewer than two usable finish positions or excessive spatial spread.",
-        );
-        warn(
-          "unavailable-finish-geometry",
-          endpointNeedsReview
-            ? `Inferred finish boundary has support from only ${rejectedEndpointSupport} of ${tracks.length} entries; confirm the finish geometry before final-leg analysis.`
-            : "Finish geometry is unavailable from corrected geometry, timer events, and the fleet boundary.",
-        );
-      }
+      const inferredCluster = inferredAttempt?.cluster ?? null;
+      const inferredSupport = inferredCluster?.accepted.length ?? 0;
+      const strongestCluster = inferredCluster && inferredSupport >= timerCluster.accepted.length
+        ? inferredCluster
+        : timerCluster;
+      const inferredNeedsReview =
+        inferredSupport >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
+        !hasInferredFinishSupport(inferredSupport, tracks.length) &&
+        inferredCluster?.position !== null;
+      finishSupport = strongestCluster.accepted.length;
+      finishSpreadM = strongestCluster.spreadM;
+      finishProvenance = provenance(
+        "unavailable",
+        "unavailable",
+        ["race.finish", "tracks.extras.timerEvents.race_end"],
+        tracks.length > 0 ? Math.max(timerCluster.accepted.length, inferredSupport) / tracks.length * 100 : null,
+        inferredNeedsReview
+          ? `Timer-seeded finish geometry was corroborated by only ${inferredSupport} of ${tracks.length} entries; organizer review is required.`
+          : "No unique positioned race-end timer seed had strict-majority post-final-mark trajectory support within 75 m.",
+      );
+      warn(
+        "unavailable-finish-geometry",
+        inferredNeedsReview
+          ? `Timer-seeded finish geometry has support from only ${inferredSupport} of ${tracks.length} entries; confirm the finish geometry before final-leg analysis.`
+          : "Finish geometry is unavailable from corrected geometry or a strict-majority timer-seeded trajectory cluster.",
+      );
     }
   }
   points.push({
@@ -701,37 +995,72 @@ export function buildPerformanceCourse(
       const point = points[pointIndex];
       const baseWindow = passageWindow(pointIndex, pointTimes, tracks);
       const warningCodes: string[] = [];
-      let passage: ApproachResult | null = null;
+      let passage: PassageResult | null = null;
       let source: PerformancePassageV1["source"] = "unavailable";
       let unconstrained: ApproachResult | null = null;
-      if (baseWindow && (point.position || point.line)) {
+      const immediatePriorTimeMs = passages.at(-1)?.timeMs ?? null;
+      const requiresImmediatePriorPassage =
+        point.kind === "finish" &&
+        point.provenance.source === "inferred-finish-geometry" &&
+        immediatePriorTimeMs === null;
+      const requiresSupportedSegment =
+        point.kind === "finish" &&
+        point.provenance.source === "inferred-finish-geometry";
+      if (baseWindow && (point.position || point.line) && !requiresImmediatePriorPassage) {
         unconstrained = point.line
           ? finiteLineCrossing(track, point.line, baseWindow)
-          : point.position ? closestPointApproach(track, point.position, baseWindow) : null;
-        const monotonicWindow = priorTimeMs === null
-          ? baseWindow
-          : { startMs: Math.max(baseWindow.startMs, priorTimeMs), endMs: baseWindow.endMs };
+          : point.position
+            ? closestPointApproach(track, point.position, baseWindow, requiresSupportedSegment)
+            : null;
+        const ownSpan = point.kind === "finish" ? trackTimeSpan(track) : null;
+        const monotonicWindow = point.kind === "finish" && immediatePriorTimeMs !== null && ownSpan
+          ? { startMs: immediatePriorTimeMs, endMs: ownSpan.endMs }
+          : priorTimeMs === null
+            ? baseWindow
+            : { startMs: Math.max(baseWindow.startMs, priorTimeMs), endMs: baseWindow.endMs };
         if (monotonicWindow.startMs <= monotonicWindow.endMs) {
           if (point.line) {
             passage = finiteLineCrossing(track, point.line, monotonicWindow);
-            source = passage ? "finite-line-crossing" : "unavailable";
+            if (passage) {
+              source = "finite-line-crossing";
+            } else if (point.kind === "finish") {
+              const timerTimeMs = uniqueRaceEndTime(track, gunTimeMs, monotonicWindow);
+              if (
+                timerTimeMs !== null &&
+                timerTimeMs > monotonicWindow.startMs &&
+                timerBracketsFiniteLine(track, point.line, timerTimeMs, monotonicWindow)
+              ) {
+                passage = {
+                  timeMs: timerTimeMs,
+                  minDistanceM: null,
+                  gapSkipped: false,
+                  segmentSupported: false,
+                };
+                source = "timer-event";
+              }
+            }
           } else if (point.kind === "finish" && point.position) {
-            const timer = raceEndEvent(track, gunTimeMs, race.finish.timeMs);
+            const timerTimeMs = uniqueRaceEndTime(track, gunTimeMs, monotonicWindow);
+            const timerPosition = timerTimeMs === null ? null : positionAtTime(track, timerTimeMs);
             if (
-              timer &&
-              timer.timeMs >= monotonicWindow.startMs &&
-              timer.timeMs <= monotonicWindow.endMs &&
-              haversineM(point.position.lat, point.position.lon, timer.position.lat, timer.position.lon) <= PERFORMANCE_PASSAGE_MAX_RADIUS_M
+              timerTimeMs !== null &&
+              timerPosition &&
+              haversineM(point.position.lat, point.position.lon, timerPosition.lat, timerPosition.lon) <= PERFORMANCE_PASSAGE_MAX_RADIUS_M
             ) {
               passage = {
-                timeMs: timer.timeMs,
-                minDistanceM: haversineM(point.position.lat, point.position.lon, timer.position.lat, timer.position.lon),
-                position: timer.position,
+                timeMs: timerTimeMs,
+                minDistanceM: haversineM(point.position.lat, point.position.lon, timerPosition.lat, timerPosition.lon),
                 gapSkipped: false,
+                segmentSupported: false,
               };
               source = "timer-event";
             } else {
-              passage = closestPointApproach(track, point.position, monotonicWindow);
+              passage = closestPointApproach(
+                track,
+                point.position,
+                monotonicWindow,
+                requiresSupportedSegment,
+              );
               source = passage ? "segment-approach" : "unavailable";
             }
           } else if (point.position) {
@@ -740,7 +1069,15 @@ export function buildPerformanceCourse(
           }
         }
       }
-      if (passage && source === "segment-approach" && passage.minDistanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M) {
+      if (
+        passage &&
+        source === "segment-approach" &&
+        (
+          passage.minDistanceM === null ||
+          passage.minDistanceM > PERFORMANCE_PASSAGE_MAX_RADIUS_M ||
+          (point.provenance.source === "inferred-finish-geometry" && !passage.segmentSupported)
+        )
+      ) {
         passage = null;
         source = "unavailable";
       }
@@ -767,9 +1104,13 @@ export function buildPerformanceCourse(
         });
         continue;
       }
-      const confidence = source === "timer-event" || source === "finite-line-crossing"
-        ? point.provenance.confidence === "low" ? "low" : "high"
-        : approachConfidence(point, passage.minDistanceM);
+      const confidence = source === "timer-event"
+        ? point.provenance.confidence === "low" ? "low" : "medium"
+        : source === "finite-line-crossing"
+          ? point.provenance.confidence === "low" ? "low" : "high"
+          : passage.minDistanceM === null
+            ? "unavailable"
+            : approachConfidence(point, passage.minDistanceM);
       passages.push({
         pointIndex,
         timeMs: passage.timeMs,

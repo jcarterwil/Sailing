@@ -192,9 +192,21 @@ export function buildPerformanceOverviewModel(input: {
   const finishTimes = performance.results.flatMap((result) =>
     result.finish ? [result.finish.timeMs] : []);
   const startTimeMs = analysis.race.start.timeMs ?? performance.start.gunTimeMs;
-  const finishTimeMs = analysis.race.finish.timeMs ??
-    (finishTimes.length > 0 ? Math.max(...finishTimes) : null);
-  const durationMs = analysis.race.durationMs ?? (
+  const latestResolvedFinishMs = finishTimes.length > 0 ? Math.max(...finishTimes) : null;
+  const inferredFinishGeometry = performance.course.points.findLast((point) => point.kind === "finish")
+    ?.provenance.source === "inferred-finish-geometry";
+  const preferResolvedFinish =
+    inferredFinishGeometry &&
+    analysis.race.finish.source !== "organizer-override" &&
+    latestResolvedFinishMs !== null;
+  const finishTimeMs = preferResolvedFinish
+    ? latestResolvedFinishMs
+    : analysis.race.finish.timeMs ?? latestResolvedFinishMs;
+  const durationMs = preferResolvedFinish ? (
+    startTimeMs !== null && finishTimeMs !== null && finishTimeMs >= startTimeMs
+      ? finishTimeMs - startTimeMs
+      : null
+  ) : analysis.race.durationMs ?? (
     startTimeMs !== null && finishTimeMs !== null && finishTimeMs >= startTimeMs
       ? finishTimeMs - startTimeMs
       : null
@@ -212,7 +224,9 @@ export function buildPerformanceOverviewModel(input: {
       elapsedMs: result.elapsedMs,
       deltaMs: result.deltaMs,
       reason: resultReason(result),
-      source: result.finish?.source ?? result.provenance.source,
+      source: result.provenance.source === "inferred-finish-geometry"
+        ? result.provenance.source
+        : result.finish?.source ?? result.provenance.source,
       confidence: result.finish?.confidence ?? result.provenance.confidence,
     };
   }).sort((left, right) =>
