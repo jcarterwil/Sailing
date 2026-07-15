@@ -82,6 +82,9 @@ describe("boat session observation compaction", () => {
 
     expect(payload.cohort.eligible).toBe(false);
     expect(payload.cohort.reason).toBe("practice-session");
+    // Cohort counts stay factual from Performance results; eligibility is gated separately.
+    expect(payload.cohort.cohortSize).toBe(6);
+    expect(payload.cohort.finishedCount).toBe(6);
 
     const parsed = parseBoatSessionObservationPayload(payload);
     expect(parsed.status).toBe("valid");
@@ -167,5 +170,37 @@ describe("boat session observation parse", () => {
       },
     });
     expect(result.status).toBe("malformed");
+  });
+
+  it("rejects out-of-range coverage and negative sample counts", () => {
+    const payload = compactBoatSessionObservationPayload(
+      VALID_PERFORMANCE_V1_FIXTURE,
+      ENTRY_ID,
+      "race",
+    );
+    expect(
+      parseBoatSessionObservationPayload({
+        ...payload,
+        coverage: { ...payload.coverage, coveragePct: 150 },
+      }).status,
+    ).toBe("malformed");
+    expect(
+      parseBoatSessionObservationPayload({
+        ...payload,
+        coverage: { ...payload.coverage, sampleCount: -1 },
+      }).status,
+    ).toBe("malformed");
+    expect(
+      parseBoatSessionObservationPayload({
+        ...payload,
+        absolute: {
+          ...payload.absolute,
+          avgSogKts: {
+            ...payload.absolute.avgSogKts,
+            coveragePct: -5,
+          },
+        },
+      }).status,
+    ).toBe("malformed");
   });
 });

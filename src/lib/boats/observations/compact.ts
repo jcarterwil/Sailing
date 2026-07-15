@@ -230,8 +230,8 @@ function buildCohort(
     return {
       eligible: false,
       reason: "practice-session",
-      cohortSize: 1,
-      finishedCount: 0,
+      cohortSize,
+      finishedCount,
     };
   }
 

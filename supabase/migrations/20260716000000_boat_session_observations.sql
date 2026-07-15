@@ -48,6 +48,7 @@ revoke all on table public.boat_session_observations from anon;
 -- Authenticated SELECT only. Writes go through the service-role admin client
 -- after analyze/persist authorization checks.
 grant select on table public.boat_session_observations to authenticated;
+revoke insert, update, delete on table public.boat_session_observations from authenticated;
 
 create policy "Boat viewers read session observations"
 on public.boat_session_observations

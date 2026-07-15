@@ -51,6 +51,11 @@ function isUnit(value: unknown): value is ObservationUnit {
   return typeof value === "string" && (OBSERVATION_UNITS as readonly string[]).includes(value);
 }
 
+function isCoveragePct(value: unknown): value is number | null {
+  if (value === null) return true;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 function parseMetric(
   value: unknown,
   context: ValidationContext,
@@ -85,21 +90,15 @@ function parseMetric(
     ), null;
   }
 
-  const coveragePct =
-    value.coveragePct === null
-      ? null
-      : typeof value.coveragePct === "number" && Number.isFinite(value.coveragePct)
-        ? value.coveragePct
-        : undefined;
-  if (coveragePct === undefined) {
-    return issue(context, `${path}.coveragePct`, "expected finite number or null"), null;
+  if (!isCoveragePct(value.coveragePct)) {
+    return issue(context, `${path}.coveragePct`, "expected null or 0..100"), null;
   }
 
   return {
     value: numeric,
     unit: value.unit,
     exclusionReason: numeric === null ? value.exclusionReason : null,
-    coveragePct,
+    coveragePct: value.coveragePct,
   };
 }
 
@@ -172,32 +171,51 @@ function parseCoverage(
   const contributingDurationSec = value.contributingDurationSec;
   const sampleCount = value.sampleCount;
   const excludedDurationSec = value.excludedDurationSec;
-  if (typeof contributingDurationSec !== "number" || !Number.isFinite(contributingDurationSec)) {
-    return issue(context, `${path}.contributingDurationSec`, "expected finite number"), null;
+  if (
+    typeof contributingDurationSec !== "number" ||
+    !Number.isFinite(contributingDurationSec) ||
+    contributingDurationSec < 0
+  ) {
+    return issue(
+      context,
+      `${path}.contributingDurationSec`,
+      "expected non-negative finite number",
+    ), null;
   }
-  if (typeof sampleCount !== "number" || !Number.isFinite(sampleCount)) {
-    return issue(context, `${path}.sampleCount`, "expected finite number"), null;
+  if (
+    typeof sampleCount !== "number" ||
+    !Number.isFinite(sampleCount) ||
+    !Number.isInteger(sampleCount) ||
+    sampleCount < 0
+  ) {
+    return issue(
+      context,
+      `${path}.sampleCount`,
+      "expected non-negative integer",
+    ), null;
   }
-  if (typeof excludedDurationSec !== "number" || !Number.isFinite(excludedDurationSec)) {
-    return issue(context, `${path}.excludedDurationSec`, "expected finite number"), null;
+  if (
+    typeof excludedDurationSec !== "number" ||
+    !Number.isFinite(excludedDurationSec) ||
+    excludedDurationSec < 0
+  ) {
+    return issue(
+      context,
+      `${path}.excludedDurationSec`,
+      "expected non-negative finite number",
+    ), null;
   }
   if (typeof value.partial !== "boolean") {
     return issue(context, `${path}.partial`, "expected boolean"), null;
   }
-  const coveragePct =
-    value.coveragePct === null
-      ? null
-      : typeof value.coveragePct === "number" && Number.isFinite(value.coveragePct)
-        ? value.coveragePct
-        : undefined;
-  if (coveragePct === undefined) {
-    return issue(context, `${path}.coveragePct`, "expected finite number or null"), null;
+  if (!isCoveragePct(value.coveragePct)) {
+    return issue(context, `${path}.coveragePct`, "expected null or 0..100"), null;
   }
   return {
     contributingDurationSec,
     sampleCount,
     excludedDurationSec,
-    coveragePct,
+    coveragePct: value.coveragePct,
     partial: value.partial,
   };
 }
@@ -217,11 +235,11 @@ function parseCohort(
   ) {
     return issue(context, `${path}.reason`, "invalid exclusion reason"), null;
   }
-  if (typeof value.cohortSize !== "number" || !Number.isFinite(value.cohortSize)) {
-    return issue(context, `${path}.cohortSize`, "expected finite number"), null;
+  if (typeof value.cohortSize !== "number" || !Number.isFinite(value.cohortSize) || !Number.isInteger(value.cohortSize) || value.cohortSize < 0) {
+    return issue(context, `${path}.cohortSize`, "expected non-negative integer"), null;
   }
-  if (typeof value.finishedCount !== "number" || !Number.isFinite(value.finishedCount)) {
-    return issue(context, `${path}.finishedCount`, "expected finite number"), null;
+  if (typeof value.finishedCount !== "number" || !Number.isFinite(value.finishedCount) || !Number.isInteger(value.finishedCount) || value.finishedCount < 0) {
+    return issue(context, `${path}.finishedCount`, "expected non-negative integer"), null;
   }
   if (!value.eligible && value.reason === null) {
     return issue(context, `${path}.reason`, "required when not eligible"), null;

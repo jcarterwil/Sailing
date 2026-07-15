@@ -23,6 +23,9 @@ describe("boat session observations migration", () => {
     expect(migration).toContain(
       "grant select on table public.boat_session_observations to authenticated",
     );
+    expect(migration).toContain(
+      "revoke insert, update, delete on table public.boat_session_observations from authenticated",
+    );
     expect(migration).not.toMatch(
       /grant (?:insert|update|delete)[^;]*boat_session_observations[^;]*authenticated/,
     );
