@@ -9,6 +9,7 @@ import type {
   BroadcastTelemetry,
 } from "@/components/replay/broadcast-3d-renderer";
 import type { BroadcastQualityPreference } from "@/components/replay/broadcast-quality";
+import { runBroadcastRendererActionSafely } from "@/components/replay/broadcast-runtime-boundary";
 import type { BroadcastCamera } from "@/components/replay/replay-display-preferences";
 import type { ReplayRenderFrameSource } from "@/components/replay/replay-render-source";
 
@@ -40,6 +41,9 @@ export function Broadcast3d({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const metricRef = useRef<HTMLSpanElement>(null);
   const rendererRef = useRef<BroadcastRenderer | null>(null);
+  const rendererActionRef = useRef<
+    ((action: () => void) => boolean) | null
+  >(null);
   const onFailureRef = useRef(onFailure);
   const onTelemetryRef = useRef(onTelemetry);
   const cameraModeRef = useRef(cameraMode);
@@ -70,20 +74,48 @@ export function Broadcast3d({
     let normalizeFailure:
       | ((cause: unknown) => BroadcastRendererFailure)
       | null = null;
+    let runtimeAction:
+      | ((action: () => void) => boolean)
+      | null = null;
+
+    const ignoreCleanupError = (cleanup: () => void) => {
+      try {
+        cleanup();
+      } catch {
+        // Cleanup must not obscure the renderer failure that triggered it.
+      }
+    };
 
     const teardown = () => {
       const activeRenderer = renderer;
       renderer = null;
-      unsubscribeSource();
+
+      const activeUnsubscribe = unsubscribeSource;
       unsubscribeSource = () => {};
-      resizeObserver?.disconnect();
+      ignoreCleanupError(activeUnsubscribe);
+
+      const activeResizeObserver = resizeObserver;
       resizeObserver = null;
-      removeVisibilityListener();
+      if (activeResizeObserver) {
+        ignoreCleanupError(() => activeResizeObserver.disconnect());
+      }
+
+      const activeVisibilityListener = removeVisibilityListener;
       removeVisibilityListener = () => {};
+      ignoreCleanupError(activeVisibilityListener);
+
       if (rendererRef.current === activeRenderer) {
         rendererRef.current = null;
       }
-      activeRenderer?.dispose();
+      if (
+        runtimeAction &&
+        rendererActionRef.current === runtimeAction
+      ) {
+        rendererActionRef.current = null;
+      }
+      if (activeRenderer) {
+        ignoreCleanupError(() => activeRenderer.dispose());
+      }
     };
 
     const reportFailure = (failure: BroadcastRendererFailure) => {
@@ -92,8 +124,20 @@ export function Broadcast3d({
       setFailureMessage(failure.message);
       setStatus("failed");
       teardown();
-      onFailureRef.current(failure);
+      try {
+        onFailureRef.current(failure);
+      } catch {
+        // A consumer callback cannot be allowed into the replay clock.
+      }
     };
+
+    runtimeAction = (action) =>
+      runBroadcastRendererActionSafely(
+        action,
+        normalizeFailure,
+        reportFailure,
+      );
+    rendererActionRef.current = runtimeAction;
 
     void Promise.all([
       import("three"),
@@ -124,33 +168,51 @@ export function Broadcast3d({
         });
         rendererRef.current = renderer;
 
-        const resize = () => {
-          if (!renderer || cancelled) return;
-          renderer.resize(
-            Math.max(1, root.clientWidth),
-            Math.max(1, root.clientHeight),
-            window.devicePixelRatio,
-          );
-          renderer.renderFrame(source.frameRef.current, {
-            force: true,
+        const resize = (): boolean => {
+          const activeRenderer = renderer;
+          if (!activeRenderer || cancelled || !runtimeAction) {
+            return false;
+          }
+          return runtimeAction(() => {
+            activeRenderer.resize(
+              Math.max(1, root.clientWidth),
+              Math.max(1, root.clientHeight),
+              window.devicePixelRatio,
+            );
+            activeRenderer.renderFrame(source.frameRef.current, {
+              force: true,
+            });
           });
         };
 
         unsubscribeSource = source.subscribe((frame) => {
-          renderer?.renderFrame(frame);
+          const activeRenderer = renderer;
+          if (!activeRenderer || cancelled || !runtimeAction) return;
+          runtimeAction(() => {
+            activeRenderer.renderFrame(frame);
+          });
         });
         resizeObserver = new ResizeObserver(resize);
         resizeObserver.observe(root);
 
-        const applyVisibility = () => {
-          if (!renderer || cancelled) return;
-          const isVisible = document.visibilityState !== "hidden";
-          renderer.setVisible(isVisible);
-          if (isVisible) {
-            renderer.renderFrame(source.frameRef.current, {
-              force: true,
-            });
+        const applyVisibility = (): boolean => {
+          const activeRenderer = renderer;
+          if (!activeRenderer || cancelled || !runtimeAction) {
+            return false;
           }
+          const isVisible =
+            document.visibilityState !== "hidden";
+          return runtimeAction(() => {
+            activeRenderer.setVisible(isVisible);
+            if (isVisible) {
+              activeRenderer.renderFrame(
+                source.frameRef.current,
+                {
+                  force: true,
+                },
+              );
+            }
+          });
         };
         document.addEventListener(
           "visibilitychange",
@@ -163,21 +225,15 @@ export function Broadcast3d({
           );
         };
 
-        resize();
-        applyVisibility();
+        if (!resize() || failureReported) return;
+        if (!applyVisibility() || failureReported) return;
+        if (cancelled || !renderer) return;
         setStatus("ready");
       })
       .catch((cause: unknown) => {
-        const failure =
-          normalizeFailure?.(cause) ?? {
-            code: "initialization-failed" as const,
-            message:
-              cause instanceof Error
-                ? cause.message
-                : "Could not initialize Broadcast 3D.",
-            cause,
-          };
-        reportFailure(failure);
+        runtimeAction?.(() => {
+          throw cause;
+        });
       });
 
     return () => {
@@ -189,17 +245,27 @@ export function Broadcast3d({
   useEffect(() => {
     cameraModeRef.current = cameraMode;
     const renderer = rendererRef.current;
-    if (!renderer) return;
-    renderer.setCameraMode(cameraMode);
-    renderer.renderFrame(source.frameRef.current, { force: true });
+    const runtimeAction = rendererActionRef.current;
+    if (!renderer || !runtimeAction) return;
+    runtimeAction(() => {
+      renderer.setCameraMode(cameraMode);
+      renderer.renderFrame(source.frameRef.current, {
+        force: true,
+      });
+    });
   }, [cameraMode, source]);
 
   useEffect(() => {
     qualityRef.current = quality;
     const renderer = rendererRef.current;
-    if (!renderer) return;
-    renderer.setQualityPreference(quality);
-    renderer.renderFrame(source.frameRef.current, { force: true });
+    const runtimeAction = rendererActionRef.current;
+    if (!renderer || !runtimeAction) return;
+    runtimeAction(() => {
+      renderer.setQualityPreference(quality);
+      renderer.renderFrame(source.frameRef.current, {
+        force: true,
+      });
+    });
   }, [quality, source]);
 
   return (
