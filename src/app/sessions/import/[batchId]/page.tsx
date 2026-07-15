@@ -5,10 +5,40 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { isUuid } from "@/lib/imports/auth";
 import { toPublicBatch } from "@/lib/imports/serialize";
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+type RpcBatchPayload = {
+  id: string;
+  boat_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  committed_at: string | null;
+  last_error: string | null;
+  items: Array<{
+    id: string;
+    original_filename: string;
+    byte_size: number;
+    content_sha256: string | null;
+    format: string | null;
+    status: string;
+    inspection: Json | null;
+    mapping: Json | null;
+    duplicate_track_id: string | null;
+    committed_track_id: string | null;
+  }>;
+};
+
+function asRpcBatchPayload(value: Json | null): RpcBatchPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string" || typeof row.boat_id !== "string") return null;
+  if (!Array.isArray(row.items)) return null;
+  return row as unknown as RpcBatchPayload;
+}
 
 export default async function HistoricalImportBatchPage({
   params,
@@ -30,38 +60,48 @@ export default async function HistoricalImportBatchPage({
     .eq("id", user.id)
     .maybeSingle();
 
-  // Batch rows are not readable via authenticated RLS — authorize, then admin read.
-  const admin = createAdminClient();
-  const { data: batchRow, error: batchError } = await admin
-    .from("historical_import_batches")
-    .select("id, boat_id, status, created_at, updated_at, committed_at, last_error")
-    .eq("id", batchId)
-    .maybeSingle();
+  // Authorize inside the RPC before any batch/item rows are returned.
+  const { data: payloadJson, error: batchError } = await supabase.rpc(
+    "get_historical_import_batch_for_editor",
+    { target_batch_id: batchId },
+  );
   if (batchError) throw new Error("Could not load import batch.");
-  if (!batchRow) notFound();
+  const payload = asRpcBatchPayload(payloadJson);
+  if (!payload) notFound();
 
-  const { data: canEdit } = await supabase.rpc("can_edit_boat", {
-    bid: batchRow.boat_id,
-  });
-  if (!canEdit) notFound();
+  const trackIds = payload.items
+    .map((item) => item.committed_track_id)
+    .filter((id): id is string => typeof id === "string");
 
-  const [{ data: boat }, { data: itemRows }] = await Promise.all([
+  const [{ data: boat }, { data: trackRows }] = await Promise.all([
     supabase
       .from("boats")
       .select("id, name, sail_number, boat_class")
-      .eq("id", batchRow.boat_id)
+      .eq("id", payload.boat_id)
       .maybeSingle(),
-    admin
-      .from("historical_import_items")
-      .select(
-        "id, original_filename, byte_size, content_sha256, format, status, inspection, mapping, duplicate_track_id, committed_track_id",
-      )
-      .eq("batch_id", batchId)
-      .order("created_at", { ascending: true }),
+    trackIds.length > 0
+      ? supabase.from("tracks").select("id, status").in("id", trackIds)
+      : Promise.resolve({ data: [] as { id: string; status: string }[] }),
   ]);
   if (!boat) notFound();
 
-  const batch = toPublicBatch(batchRow, itemRows ?? []);
+  const batch = toPublicBatch(
+    {
+      id: payload.id,
+      boat_id: payload.boat_id,
+      status: payload.status,
+      created_at: payload.created_at,
+      updated_at: payload.updated_at,
+      committed_at: payload.committed_at,
+      last_error: payload.last_error,
+    },
+    payload.items,
+  );
+
+  const initialTrackStatuses: Record<string, string> = {};
+  for (const track of trackRows ?? []) {
+    initialTrackStatuses[track.id] = track.status;
+  }
 
   return (
     <AuthenticatedShell
@@ -84,6 +124,7 @@ export default async function HistoricalImportBatchPage({
           boatClass: boat.boat_class,
         }}
         initialBatch={batch}
+        initialTrackStatuses={initialTrackStatuses}
       />
     </AuthenticatedShell>
   );

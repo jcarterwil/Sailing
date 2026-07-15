@@ -349,4 +349,106 @@ describe("import-queue helpers", () => {
       deriveDefaultWizardStep({ batchStatus: "committed", items, queue }),
     ).toBe("complete");
   });
+
+  it("deriveDefaultWizardStep completes committed batches with zero tracks", () => {
+    expect(
+      deriveDefaultWizardStep({
+        batchStatus: "committed",
+        items: [item({ id: "s", status: "skipped" })],
+        queue: createInitialImportQueue(),
+      }),
+    ).toBe("complete");
+  });
+
+  it("deriveDefaultWizardStep returns confirm when draft mappings are ready", () => {
+    const items = [
+      item({
+        id: "a",
+        status: "ready",
+        mapping: {
+          target: "new",
+          sessionType: "practice",
+          startsAt: "2024-01-01T00:00:00.000Z",
+          timezone: "UTC",
+          venue: null,
+          importAnyway: false,
+        },
+        inspection: {
+          format: "vkx",
+          byteSize: 1,
+          contentSha256: "a".repeat(64),
+          pointCount: 1,
+          startedAt: "2024-01-01T00:00:00.000Z",
+          endedAt: "2024-01-01T01:00:00.000Z",
+          durationMs: 1,
+          bbox: [0, 0, 0, 0],
+          distanceNm: 0,
+          digest: {
+            warningCount: 0,
+            warnings: [],
+            hasWind: false,
+            timerEventCount: 0,
+            linePingCount: 0,
+          },
+          proposedSessionType: {
+            sessionType: "practice",
+            confidence: "low",
+            reason: "x",
+          },
+          candidates: [],
+          duplicate: { kind: "none", trackId: null, reason: null },
+        },
+      }),
+    ];
+    expect(
+      deriveDefaultWizardStep({
+        batchStatus: "draft",
+        items,
+        queue: createInitialImportQueue(),
+      }),
+    ).toBe("confirm");
+  });
+
+  it("keeps process step when any committed track failed", () => {
+    const items = [
+      item({ id: "a", status: "committed", committedTrackId: "t1" }),
+      item({ id: "b", status: "committed", committedTrackId: "t2" }),
+    ];
+    let queue = createInitialImportQueue();
+    queue = reduceImportQueue(queue, {
+      type: "enqueueProcessJobs",
+      jobs: processJobsFromBatchItems(items),
+    });
+    queue = reduceImportQueue(queue, { type: "processSucceeded", itemId: "a" });
+    queue = reduceImportQueue(queue, {
+      type: "processFailed",
+      itemId: "b",
+      error: "Processing failed.",
+    });
+    expect(
+      deriveDefaultWizardStep({ batchStatus: "committed", items, queue }),
+    ).toBe("process");
+  });
+
+  it("cancelFileOpsForItem drops pending and active ops for that item", () => {
+    let state = createInitialImportQueue();
+    state = reduceImportQueue(state, { type: "enqueueUpload", itemId: "a" });
+    state = reduceImportQueue(state, { type: "enqueueUpload", itemId: "b" });
+    state = reduceImportQueue(state, { type: "enqueueInspect", itemId: "c" });
+    state = reduceImportQueue(state, { type: "cancelFileOpsForItem", itemId: "c" });
+    expect(
+      [...state.activeFileOps, ...state.pendingFileOps].some((op) => op.itemId === "c"),
+    ).toBe(false);
+    expect(state.activeFileOps.map((op) => op.itemId).sort()).toEqual(["a", "b"]);
+  });
+
+  it("processJobsFromBatchItems skips already-processed tracks", () => {
+    const items = [
+      item({ id: "a", status: "committed", committedTrackId: "t1" }),
+      item({ id: "b", status: "committed", committedTrackId: "t2" }),
+    ];
+    expect(processJobsFromBatchItems(items, { t1: "processed", t2: "uploaded" })).toEqual([
+      { itemId: "b", trackId: "t2" },
+    ]);
+  });
 });

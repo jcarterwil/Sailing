@@ -54,6 +54,8 @@ export type ImportQueueAction =
       type: "hydrate";
       items: Pick<HistoricalImportItemPublic, "id" | "status" | "committedTrackId">[];
       localFileIds: string[];
+      /** Items whose committed tracks are already processed — do not re-queue. */
+      alreadyProcessedItemIds?: string[];
     }
   | { type: "registerLocalFile"; itemId: string }
   | { type: "enqueueUpload"; itemId: string }
@@ -62,6 +64,7 @@ export type ImportQueueAction =
   | { type: "fileOpSucceeded"; itemId: string; kind: FileOpKind }
   | { type: "fileOpFailed"; itemId: string; kind: FileOpKind; error: string }
   | { type: "retryFileOp"; itemId: string; kind: FileOpKind }
+  | { type: "cancelFileOpsForItem"; itemId: string }
   | { type: "clearItemError"; itemId: string }
   | { type: "enqueueProcessJobs"; jobs: ProcessJob[] }
   | { type: "processSucceeded"; itemId: string }
@@ -176,13 +179,16 @@ export function reduceImportQueue(
   switch (action.type) {
     case "hydrate": {
       const localSet = new Set(action.localFileIds);
+      const alreadyProcessed = new Set(action.alreadyProcessedItemIds ?? []);
       const items: Record<string, LocalItemState> = { ...state.items };
       for (const row of action.items) {
         const prev = items[row.id] ?? emptyLocal(row.id);
         const hasLocalFile = localSet.has(row.id) || prev.hasLocalFile;
         const needsChooseAgain = row.status === "created" && !hasLocalFile;
         let processStatus = prev.processStatus;
-        if (row.committedTrackId && processStatus === "idle") {
+        if (alreadyProcessed.has(row.id) || prev.processStatus === "done") {
+          processStatus = "done";
+        } else if (row.committedTrackId && processStatus === "idle") {
           processStatus = "queued";
         }
         items[row.id] = {
@@ -272,6 +278,24 @@ export function reduceImportQueue(
     case "retryFileOp": {
       const cleared = withItem(state, action.itemId, { fileOpError: null });
       return enqueueOp(cleared, { itemId: action.itemId, kind: action.kind });
+    }
+    case "cancelFileOpsForItem": {
+      return scheduleImportQueue({
+        ...state,
+        pendingFileOps: state.pendingFileOps.filter(
+          (op) => op.itemId !== action.itemId,
+        ),
+        activeFileOps: state.activeFileOps.filter((op) => op.itemId !== action.itemId),
+        items: {
+          ...state.items,
+          [action.itemId]: {
+            ...(state.items[action.itemId] ?? emptyLocal(action.itemId)),
+            fileOpError: null,
+            uploadPercent: null,
+            needsChooseAgain: false,
+          },
+        },
+      });
     }
     case "clearItemError":
       return withItem(state, action.itemId, { fileOpError: null, processError: null });
@@ -436,11 +460,14 @@ export function deriveDefaultWizardStep(input: {
   if (batchStatus === "cancelled") return "add";
   if (batchStatus === "committed" || batchStatus === "committing" || batchStatus === "error") {
     const committed = items.filter((item) => item.committedTrackId);
-    if (committed.length === 0) return "process";
-    const allDone = committed.every((item) => {
-      const local = queue.items[item.id];
-      return local?.processStatus === "done" || local?.processStatus === "error";
-    });
+    // Confirmed import with nothing to process (all skipped) → complete.
+    if (committed.length === 0) return "complete";
+    const anyFailed = committed.some(
+      (item) => queue.items[item.id]?.processStatus === "error",
+    );
+    const allSucceeded = committed.every(
+      (item) => queue.items[item.id]?.processStatus === "done",
+    );
     const anyQueued =
       queue.activeProcessJob != null ||
       queue.processJobs.length > 0 ||
@@ -453,13 +480,15 @@ export function deriveDefaultWizardStep(input: {
           local.processStatus === "processing"
         );
       });
-    if (allDone && !anyQueued) return "complete";
+    // Stay on process while any failure is still retryable.
+    if (anyFailed) return "process";
+    if (allSucceeded && !anyQueued) return "complete";
     return "process";
   }
   if (items.length === 0) return "add";
   if (!inspectPhaseComplete(items, queue)) return "inspect";
   if (!reviewPhaseReady(items)) return "review";
-  return "review";
+  return "confirm";
 }
 
 export function processJobsFromCommitResults(
@@ -470,8 +499,23 @@ export function processJobsFromCommitResults(
 
 export function processJobsFromBatchItems(
   items: HistoricalImportItemPublic[],
+  trackStatuses: Record<string, string> = {},
 ): ProcessJob[] {
   return items
     .filter((item) => item.committedTrackId)
+    .filter((item) => trackStatuses[item.committedTrackId!] !== "processed")
     .map((item) => ({ itemId: item.id, trackId: item.committedTrackId! }));
+}
+
+export function alreadyProcessedItemIds(
+  items: HistoricalImportItemPublic[],
+  trackStatuses: Record<string, string>,
+): string[] {
+  return items
+    .filter(
+      (item) =>
+        item.committedTrackId != null &&
+        trackStatuses[item.committedTrackId] === "processed",
+    )
+    .map((item) => item.id);
 }

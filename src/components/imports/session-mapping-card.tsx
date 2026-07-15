@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { suggestDefaultMapping } from "@/lib/imports/default-mapping";
+import { isValidIanaTimezone, normalizeIanaTimezone } from "@/lib/races/meta";
 import type {
   HistoricalImportItemPublic,
   HistoricalImportMapping,
@@ -26,6 +27,16 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
+function safeTimezone(timeZone: string | null | undefined): string {
+  const normalized = timeZone ? normalizeIanaTimezone(timeZone) : null;
+  if (normalized && isValidIanaTimezone(normalized)) return normalized;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 function isoToLocalParts(iso: string, timeZone: string): { date: string; time: string } {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) {
@@ -35,28 +46,33 @@ function isoToLocalParts(iso: string, timeZone: string): { date: string; time: s
       time: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
     };
   }
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(ms));
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
-  return {
-    date: `${get("year")}-${get("month")}-${get("day")}`,
-    time: `${get("hour")}:${get("minute")}`,
-  };
+  const zone = safeTimezone(timeZone);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(ms));
+    const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+    return {
+      date: `${get("year")}-${get("month")}-${get("day")}`,
+      time: `${get("hour")}:${get("minute")}`,
+    };
+  } catch {
+    const utc = new Date(ms);
+    return {
+      date: `${utc.getUTCFullYear()}-${pad2(utc.getUTCMonth() + 1)}-${pad2(utc.getUTCDate())}`,
+      time: `${pad2(utc.getUTCHours())}:${pad2(utc.getUTCMinutes())}`,
+    };
+  }
 }
 
 function browserTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
+  return safeTimezone(null);
 }
 
 export function SessionMappingCard({
@@ -75,6 +91,11 @@ export function SessionMappingCard({
     item.mapping ??
     (inspection ? suggestDefaultMapping(inspection) : null);
 
+  const anchorIso =
+    initial?.target === "new"
+      ? initial.startsAt
+      : inspection?.startedAt ?? new Date().toISOString();
+
   const [target, setTarget] = useState<"new" | "existing">(
     initial?.target === "existing" ? "existing" : "new",
   );
@@ -89,22 +110,14 @@ export function SessionMappingCard({
       : inspection?.proposedSessionType.sessionType ?? "practice",
   );
   const [timezone, setTimezone] = useState(
-    initial?.target === "new" ? initial.timezone : browserTimezone(),
+    safeTimezone(initial?.target === "new" ? initial.timezone : browserTimezone()),
   );
-  const [localDate, setLocalDate] = useState(() => {
-    const iso =
-      initial?.target === "new"
-        ? initial.startsAt
-        : inspection?.startedAt ?? new Date().toISOString();
-    return isoToLocalParts(iso, timezone).date;
-  });
-  const [localTime, setLocalTime] = useState(() => {
-    const iso =
-      initial?.target === "new"
-        ? initial.startsAt
-        : inspection?.startedAt ?? new Date().toISOString();
-    return isoToLocalParts(iso, timezone).time;
-  });
+  const [localDate, setLocalDate] = useState(
+    () => isoToLocalParts(anchorIso, timezone).date,
+  );
+  const [localTime, setLocalTime] = useState(
+    () => isoToLocalParts(anchorIso, timezone).time,
+  );
   const [venue, setVenue] = useState(
     initial?.target === "new" ? (initial.venue ?? "") : "",
   );
@@ -128,6 +141,13 @@ export function SessionMappingCard({
   const exactDuplicate = inspection.duplicate.kind === "exact";
   const probableDuplicate = inspection.duplicate.kind === "probable";
   const eligible = inspection.candidates.filter((row) => row.eligible && !row.hasTrack);
+
+  function changeTimezone(next: string) {
+    setTimezone(next);
+    const parts = isoToLocalParts(anchorIso, next);
+    setLocalDate(parts.date);
+    setLocalTime(parts.time);
+  }
 
   async function handleSave() {
     setError(null);
@@ -319,7 +339,7 @@ export function SessionMappingCard({
                   id={`tz-${item.id}`}
                   className="min-h-11"
                   value={timezone}
-                  onChange={(event) => setTimezone(event.target.value)}
+                  onChange={(event) => changeTimezone(event.target.value)}
                 />
               </div>
               <div className="space-y-2">

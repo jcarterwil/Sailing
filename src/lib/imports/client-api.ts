@@ -106,11 +106,28 @@ export async function inspectHistoricalImportItem(
   batchId: string,
   itemId: string,
 ): Promise<HistoricalImportItemPublic> {
-  const body = await apiFetch<{ item: HistoricalImportItemPublic }>(
+  const response = await fetch(
     `/api/boats/${boatId}/historical-imports/${batchId}/items/${itemId}/inspect`,
-    { method: "POST" },
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    },
   );
-  return body.item;
+  const json = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    item?: HistoricalImportItemPublic | null;
+  };
+  if (!response.ok) {
+    if (json.item) {
+      // Preserve server error status so Retry re-inspects the staged file.
+      const err = new Error(json.error ?? "Could not inspect file.");
+      (err as Error & { item?: HistoricalImportItemPublic }).item = json.item;
+      throw err;
+    }
+    throw new Error(json.error ?? (await readError(response)));
+  }
+  if (!json.item) throw new Error("Could not inspect file.");
+  return json.item;
 }
 
 export async function patchHistoricalImportItem(

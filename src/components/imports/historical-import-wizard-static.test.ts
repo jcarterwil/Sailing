@@ -14,11 +14,16 @@ describe("historical import wizard routes", () => {
     const start = source("src/app/sessions/import/page.tsx");
     const batch = source("src/app/sessions/import/[batchId]/page.tsx");
     const boatHub = source("src/app/boats/[boatId]/page.tsx");
+    const readerMigration = source(
+      "supabase/migrations/20260715150000_historical_import_batch_reader.sql",
+    );
 
     expect(start).toContain('.rpc("can_edit_boat"');
     expect(start).toContain("notFound()");
-    expect(batch).toContain('.rpc("can_edit_boat"');
+    expect(batch).toContain('.rpc(\n    "get_historical_import_batch_for_editor"');
+    expect(batch).not.toContain("createAdminClient");
     expect(batch).toContain("notFound()");
+    expect(readerMigration).toContain("can_edit_boat(batch_row.boat_id)");
     expect(boatHub).toContain('.rpc("can_edit_boat"');
     expect(boatHub).toContain("Add sailing data");
     expect(boatHub).toContain("/sessions/import?boatId=");

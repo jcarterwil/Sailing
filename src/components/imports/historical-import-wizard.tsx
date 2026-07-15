@@ -15,6 +15,7 @@ import { Anchor, Loader2 } from "lucide-react";
 
 import { ImportFileList } from "@/components/imports/import-file-list";
 import {
+  alreadyProcessedItemIds,
   createInitialImportQueue,
   countMappingSummary,
   deriveDefaultWizardStep,
@@ -131,7 +132,10 @@ function validateLocalFiles(
         error: `Unsupported extension for ${file.name}. Use .vkx or .csv.`,
       };
     }
-    if (file.size <= 0 || file.size > HISTORICAL_IMPORT_MAX_FILE_BYTES) {
+    if (file.size <= 0) {
+      return { ok: false, error: `File ${file.name} is empty.` };
+    }
+    if (file.size > HISTORICAL_IMPORT_MAX_FILE_BYTES) {
       return { ok: false, error: `File ${file.name} exceeds the 10MB limit.` };
     }
     incoming += file.size;
@@ -145,42 +149,62 @@ function validateLocalFiles(
 export function HistoricalImportWizard({
   boat,
   initialBatch,
+  initialTrackStatuses = {},
 }: {
   boat: BoatImportContext;
   initialBatch: HistoricalImportBatchPublic;
+  initialTrackStatuses?: Record<string, string>;
 }) {
   const router = useRouter();
   const [batch, setBatch] = useState(initialBatch);
+  const [trackStatuses] = useState(initialTrackStatuses);
   const [queue, dispatch] = useReducer(
     reduceImportQueue,
-    initialBatch,
+    { batch: initialBatch, trackStatuses: initialTrackStatuses },
     (seed) => {
+      const processedIds = alreadyProcessedItemIds(seed.batch.items, seed.trackStatuses);
       let state = createInitialImportQueue();
       state = reduceImportQueue(state, {
         type: "hydrate",
-        items: seed.items.map((item) => ({
+        items: seed.batch.items.map((item) => ({
           id: item.id,
           status: item.status,
           committedTrackId: item.committedTrackId,
         })),
         localFileIds: [],
+        alreadyProcessedItemIds: processedIds,
       });
-      if (seed.status === "committed" || seed.status === "committing") {
-        state = reduceImportQueue(state, {
-          type: "enqueueProcessJobs",
-          jobs: processJobsFromBatchItems(seed.items),
-        });
+      if (seed.batch.status === "committed" || seed.batch.status === "committing") {
+        const jobs = processJobsFromBatchItems(seed.batch.items, seed.trackStatuses);
+        if (jobs.length > 0) {
+          state = reduceImportQueue(state, {
+            type: "enqueueProcessJobs",
+            jobs,
+          });
+        }
       }
       return state;
     },
   );
-  const [step, setStep] = useState<WizardStep>(() =>
-    deriveDefaultWizardStep({
+  const [step, setStep] = useState<WizardStep>(() => {
+    const processedIds = alreadyProcessedItemIds(initialBatch.items, initialTrackStatuses);
+    let queueSeed = createInitialImportQueue();
+    queueSeed = reduceImportQueue(queueSeed, {
+      type: "hydrate",
+      items: initialBatch.items.map((item) => ({
+        id: item.id,
+        status: item.status,
+        committedTrackId: item.committedTrackId,
+      })),
+      localFileIds: [],
+      alreadyProcessedItemIds: processedIds,
+    });
+    return deriveDefaultWizardStep({
       batchStatus: initialBatch.status,
       items: initialBatch.items,
-      queue: createInitialImportQueue(),
-    }),
-  );
+      queue: queueSeed,
+    });
+  });
   const [pageError, setPageError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -195,6 +219,7 @@ export function HistoricalImportWizard({
   const runningOpsRef = useRef<Set<string>>(new Set());
   const runningProcessRef = useRef<string | null>(null);
   const autoMappedRef = useRef<Set<string>>(new Set());
+  const cancelledItemIdsRef = useRef<Set<string>>(new Set());
 
   const refreshBatch = useCallback(async () => {
     const next = await fetchHistoricalImportBatch(boat.id, batch.id);
@@ -207,9 +232,10 @@ export function HistoricalImportWizard({
         committedTrackId: item.committedTrackId,
       })),
       localFileIds: [...localFilesRef.current.keys()],
+      alreadyProcessedItemIds: alreadyProcessedItemIds(next.items, trackStatuses),
     });
     return next;
-  }, [boat.id, batch.id]);
+  }, [boat.id, batch.id, trackStatuses]);
 
   useEffect(() => {
     rememberHistoricalImportDraft(boat.id, batch.id);
@@ -218,6 +244,7 @@ export function HistoricalImportWizard({
   const runFileOp = useEffectEvent(async (itemId: string, kind: "upload" | "inspect") => {
     const key = `${itemId}:${kind}`;
     if (runningOpsRef.current.has(key)) return;
+    if (cancelledItemIdsRef.current.has(itemId)) return;
     runningOpsRef.current.add(key);
     try {
       if (kind === "upload") {
@@ -238,6 +265,7 @@ export function HistoricalImportWizard({
           onProgress: (percent) =>
             dispatch({ type: "uploadProgress", itemId, percent }),
         });
+        if (cancelledItemIdsRef.current.has(itemId)) return;
         uploadUrlsRef.current.delete(itemId);
         dispatch({ type: "fileOpSucceeded", itemId, kind: "upload" });
         dispatch({ type: "enqueueInspect", itemId });
@@ -245,6 +273,7 @@ export function HistoricalImportWizard({
       }
 
       const inspected = await inspectHistoricalImportItem(boat.id, batch.id, itemId);
+      if (cancelledItemIdsRef.current.has(itemId)) return;
       setBatch((prev) => ({
         ...prev,
         items: prev.items.map((row) => (row.id === itemId ? inspected : row)),
@@ -263,6 +292,7 @@ export function HistoricalImportWizard({
           const mapped = await patchHistoricalImportItem(boat.id, batch.id, itemId, {
             mapping,
           });
+          if (cancelledItemIdsRef.current.has(itemId)) return;
           setBatch((prev) => ({
             ...prev,
             items: prev.items.map((row) => (row.id === itemId ? mapped : row)),
@@ -272,6 +302,16 @@ export function HistoricalImportWizard({
         }
       }
     } catch (error) {
+      if (cancelledItemIdsRef.current.has(itemId)) return;
+      const withItem = error as Error & { item?: HistoricalImportItemPublic };
+      if (withItem.item) {
+        setBatch((prev) => ({
+          ...prev,
+          items: prev.items.map((row) =>
+            row.id === itemId ? withItem.item! : row,
+          ),
+        }));
+      }
       dispatch({
         type: "fileOpFailed",
         itemId,
@@ -320,19 +360,26 @@ export function HistoricalImportWizard({
   }, [queue.activeProcessJob]);
 
   const committedItems = batch.items.filter((item) => item.committedTrackId);
-  const processFinished =
-    (batch.status === "committed" || batch.status === "error") &&
+  const anyProcessFailed = committedItems.some(
+    (item) => queue.items[item.id]?.processStatus === "error",
+  );
+  const allProcessSucceeded =
     committedItems.length > 0 &&
     !queue.activeProcessJob &&
     queue.processJobs.length === 0 &&
-    committedItems.every((item) => {
-      const local = queue.items[item.id];
-      return local?.processStatus === "done" || local?.processStatus === "error";
-    });
+    committedItems.every((item) => queue.items[item.id]?.processStatus === "done");
+  const noTracksToProcess =
+    batch.status === "committed" && committedItems.length === 0;
+  const processFinished =
+    (batch.status === "committed" || batch.status === "error") &&
+    (noTracksToProcess || allProcessSucceeded) &&
+    !anyProcessFailed;
   const displayStep: WizardStep =
     processFinished && (step === "process" || step === "complete")
       ? "complete"
-      : step;
+      : anyProcessFailed && (step === "process" || step === "complete")
+        ? "process"
+        : step;
 
   useEffect(() => {
     if (!processFinished) return;
@@ -344,17 +391,25 @@ export function HistoricalImportWizard({
   async function stageFiles(fileList: FileList | File[]) {
     setPageError(null);
     const selected = [...fileList];
-    const existingBytes = batch.items.reduce((sum, item) => sum + item.byteSize, 0);
-    const validated = validateLocalFiles(selected, batch.items.length, existingBytes);
+    const replaceId = chooseAgainItemIdRef.current;
+    const countableItems = batch.items.filter((item) => item.id !== replaceId);
+    const existingBytes = countableItems.reduce((sum, item) => sum + item.byteSize, 0);
+    const validated = validateLocalFiles(
+      selected,
+      countableItems.length,
+      existingBytes,
+    );
     if (!validated.ok) {
+      chooseAgainItemIdRef.current = null;
       setPageError(validated.error);
       return;
     }
 
     setBusy(true);
     try {
-      const replaceId = chooseAgainItemIdRef.current;
       if (replaceId) {
+        cancelledItemIdsRef.current.add(replaceId);
+        dispatch({ type: "cancelFileOpsForItem", itemId: replaceId });
         await patchHistoricalImportItem(boat.id, batch.id, replaceId, { skip: true });
         chooseAgainItemIdRef.current = null;
       }
@@ -426,6 +481,8 @@ export function HistoricalImportWizard({
 
   async function skipItem(itemId: string) {
     setPageError(null);
+    cancelledItemIdsRef.current.add(itemId);
+    dispatch({ type: "cancelFileOpsForItem", itemId });
     try {
       const updated = await patchHistoricalImportItem(boat.id, batch.id, itemId, {
         skip: true,
@@ -444,11 +501,17 @@ export function HistoricalImportWizard({
     const item = batch.items.find((row) => row.id === itemId);
     const local = queue.items[itemId];
     if (!item) return;
+    cancelledItemIdsRef.current.delete(itemId);
     if (local?.processStatus === "error" && item.committedTrackId) {
       dispatch({
         type: "enqueueProcessJobs",
         jobs: [{ itemId, trackId: item.committedTrackId }],
       });
+      return;
+    }
+    // After a failed inspect the staged object remains — re-inspect, don't re-upload.
+    if (item.status === "error" || item.status === "uploaded" || item.status === "blocked") {
+      dispatch({ type: "retryFileOp", itemId, kind: "inspect" });
       return;
     }
     if (item.status === "created" || local?.fileOpError?.includes("Upload")) {
@@ -520,7 +583,10 @@ export function HistoricalImportWizard({
   }
 
   const summary = countMappingSummary(batch.items);
-  const activeItemIds = new Set(queue.activeFileOps.map((op) => op.itemId));
+  const activeItemIds = new Set([
+    ...queue.activeFileOps.map((op) => op.itemId),
+    ...queue.pendingFileOps.map((op) => op.itemId),
+  ]);
   if (queue.activeProcessJob) activeItemIds.add(queue.activeProcessJob.itemId);
 
   const inspectDone = inspectPhaseComplete(batch.items, queue);
@@ -584,7 +650,11 @@ export function HistoricalImportWizard({
         multiple
         className="sr-only"
         onChange={(event) => {
-          if (event.target.files?.length) void stageFiles(event.target.files);
+          if (event.target.files?.length) {
+            void stageFiles(event.target.files);
+          } else {
+            chooseAgainItemIdRef.current = null;
+          }
         }}
       />
 
