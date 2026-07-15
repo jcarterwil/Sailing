@@ -1,57 +1,10 @@
 import type { ExpressionSpecification } from "maplibre-gl";
 
-import { signedTwaDeg } from "@/lib/analytics/sailing";
-
 export const BOATS_3D_LAYER_ID = "boats-3d";
 export const BOATS_3D_MIN_ZOOM = 13.5;
 export const BOAT_MODEL_LENGTH_M = 7.3;
 export const BOAT_MIN_SCREEN_PX = 28;
 const BOAT_MAX_DISPLAY_SCALE = 32;
-
-export type BoomSide = -1 | 0 | 1;
-
-export interface Boat3dPose {
-  entryId: string;
-  lon: number;
-  lat: number;
-  headingDeg: number;
-  heelDeg: number;
-  trimDeg: number;
-  boomSide: BoomSide;
-  inTrack: boolean;
-}
-
-export interface Boat3dFrame {
-  poses: Boat3dPose[];
-  byEntryId: Map<string, Boat3dPose>;
-}
-
-export interface Boat3dFrameRef {
-  current: Boat3dFrame;
-}
-
-export function emptyBoat3dFrame(): Boat3dFrame {
-  return { poses: [], byEntryId: new Map() };
-}
-
-/**
- * Put the boom opposite the apparent wind when a wind direction is available.
- * Signed TWA is positive on starboard tack, so the boom is then to port (-1).
- * Heel is the data-honest fallback: positive starboard-down heel implies a
- * port tack and therefore a boom to starboard (+1).
- */
-export function resolveBoomSide(
-  twdDeg: number,
-  courseDeg: number,
-  heelDeg: number,
-): BoomSide {
-  if (Number.isFinite(twdDeg) && Number.isFinite(courseDeg)) {
-    const twaDeg = signedTwaDeg(twdDeg, courseDeg);
-    if (Math.abs(twaDeg) > 1e-6) return twaDeg > 0 ? -1 : 1;
-  }
-  if (!Number.isFinite(heelDeg) || Math.abs(heelDeg) <= 1e-6) return 0;
-  return heelDeg > 0 ? 1 : -1;
-}
 
 export function shouldDraw3dBoats(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= BOATS_3D_MIN_ZOOM;

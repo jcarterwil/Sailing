@@ -1,6 +1,12 @@
 import { lerpAngle } from "@/lib/analytics/angles";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 
+export type TrackSampleSource =
+  | "recorded"
+  | "interpolated"
+  | "held-gap"
+  | "out-of-track-clamped";
+
 export interface TrackSample {
   lat: number;
   lon: number;
@@ -10,6 +16,8 @@ export interface TrackSample {
   heelDeg: number;
   trimDeg: number;
   inTrack: boolean; // false before the first / after the last fix
+  /** How the sampled values relate to the immutable recorded fixes. */
+  sampleSource: TrackSampleSource;
 }
 
 // Rightmost index with t[i] <= timeMs, or -1.
@@ -28,34 +36,47 @@ export function indexAt(track: LoadedTrack, timeMs: number): number {
 
 const INTERP_MAX_GAP_MS = 10_000;
 
+function sampleFix(
+  track: LoadedTrack,
+  index: number,
+  inTrack: boolean,
+  sampleSource: TrackSampleSource,
+): TrackSample {
+  return {
+    lat: track.lat[index],
+    lon: track.lon[index],
+    sogKts: track.sog[index],
+    cogDeg: track.cog[index],
+    hdgDeg: track.hdg[index],
+    heelDeg: track.heel[index],
+    trimDeg: track.trim[index],
+    inTrack,
+    sampleSource,
+  };
+}
+
 export function sampleAt(track: LoadedTrack, timeMs: number): TrackSample {
   const i = indexAt(track, timeMs);
   const n = track.t.length;
   if (i < 0 || timeMs > track.t[n - 1]) {
-    const j = i < 0 ? 0 : n - 1;
-    return {
-      lat: track.lat[j],
-      lon: track.lon[j],
-      sogKts: track.sog[j],
-      cogDeg: track.cog[j],
-      hdgDeg: track.hdg[j],
-      heelDeg: track.heel[j],
-      trimDeg: track.trim[j],
-      inTrack: false,
-    };
+    return sampleFix(
+      track,
+      i < 0 ? 0 : n - 1,
+      false,
+      "out-of-track-clamped",
+    );
   }
+
+  // Exact fixes, including the final fix, remain distinguishable from values
+  // synthesized between fixes.
+  if (timeMs === track.t[i]) {
+    return sampleFix(track, i, true, "recorded");
+  }
+
   if (i === n - 1 || track.t[i + 1] - track.t[i] > INTERP_MAX_GAP_MS) {
-    return {
-      lat: track.lat[i],
-      lon: track.lon[i],
-      sogKts: track.sog[i],
-      cogDeg: track.cog[i],
-      hdgDeg: track.hdg[i],
-      heelDeg: track.heel[i],
-      trimDeg: track.trim[i],
-      inTrack: true,
-    };
+    return sampleFix(track, i, true, "held-gap");
   }
+
   const f = (timeMs - track.t[i]) / (track.t[i + 1] - track.t[i]);
   const lerp = (a: number, b: number) => a + (b - a) * f;
   return {
@@ -67,5 +88,6 @@ export function sampleAt(track: LoadedTrack, timeMs: number): TrackSample {
     heelDeg: lerp(track.heel[i], track.heel[i + 1]),
     trimDeg: lerp(track.trim[i], track.trim[i + 1]),
     inTrack: true,
+    sampleSource: "interpolated",
   };
 }
