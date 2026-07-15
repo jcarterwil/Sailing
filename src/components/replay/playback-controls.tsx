@@ -700,7 +700,7 @@ export function PlaybackControls({
         </SheetTrigger>
         <SheetContent
           side="bottom"
-          className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden"
+          className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
           <SheetHeader>
             <SheetTitle>View settings</SheetTitle>
