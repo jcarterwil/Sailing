@@ -1,9 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { SeriesWorkflowEditor } from "@/app/series/[seriesId]/edit/series-workflow-editor";
+import { SeriesEditorWorkspace } from "@/app/series/[seriesId]/edit/series-editor-workspace";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
-import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
 import { loadSeriesEditorModel } from "@/lib/series/server";
 
@@ -30,19 +28,7 @@ export default async function SeriesEditorPage({
       isAdmin={model.profile.isAdmin}
       width="wide"
     >
-      <PageHeader
-        title={model.series.name}
-        description="Organizer workflow for ordered races, canonical identity, official decisions, and immutable score snapshots."
-        backHref="/series"
-        backLabel="Race series"
-      >
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Badge variant="outline">Revision {model.series.revision}</Badge>
-          <Badge variant="secondary">{model.series.scoringVersion}</Badge>
-          {model.series.archivedAt ? <Badge variant="outline">Archived</Badge> : null}
-        </div>
-      </PageHeader>
-      <SeriesWorkflowEditor key={model.series.revision} model={model} />
+      <SeriesEditorWorkspace key={model.series.revision} model={model} />
     </AuthenticatedShell>
   );
 }

@@ -39,6 +39,7 @@ export interface SeriesEditorModelV1 {
     endsOn: string | null;
     scoringVersion: string;
     scoringConfig: unknown;
+    shareSlug: string | null;
     revision: number;
     archivedAt: string | null;
   };
@@ -137,7 +138,7 @@ export async function loadSeriesEditorModel(
       supabase
         .from("race_series")
         .select(
-          "id, name, venue, timezone, starts_on, ends_on, scoring_version, scoring_config, revision, archived_at",
+          "id, name, venue, timezone, starts_on, ends_on, scoring_version, scoring_config, share_slug, revision, archived_at",
         )
         .eq("id", seriesId)
         .maybeSingle(),
@@ -325,6 +326,7 @@ export async function loadSeriesEditorModel(
       endsOn: series.ends_on,
       scoringVersion: series.scoring_version,
       scoringConfig: series.scoring_config,
+      shareSlug: series.share_slug,
       revision: series.revision,
       archivedAt: series.archived_at,
     },

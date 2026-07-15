@@ -5,19 +5,10 @@ import {
   BOAT_MODEL_LENGTH_M,
   BOATS_3D_MIN_ZOOM,
   boatDisplayScale,
-  resolveBoomSide,
   shouldDraw3dBoats,
 } from "@/components/replay/boats-3d-state";
 
 describe("3D boat state", () => {
-  it("resolves boom side across north and falls back to signed heel", () => {
-    expect(resolveBoomSide(1, 359, Number.NaN)).toBe(-1); // starboard tack -> port boom
-    expect(resolveBoomSide(359, 1, Number.NaN)).toBe(1); // port tack -> starboard boom
-    expect(resolveBoomSide(Number.NaN, 90, 8)).toBe(1);
-    expect(resolveBoomSide(Number.NaN, 90, -8)).toBe(-1);
-    expect(resolveBoomSide(Number.NaN, Number.NaN, Number.NaN)).toBe(0);
-  });
-
   it("uses the exact LOD boundary", () => {
     expect(shouldDraw3dBoats(BOATS_3D_MIN_ZOOM - 0.001)).toBe(false);
     expect(shouldDraw3dBoats(BOATS_3D_MIN_ZOOM)).toBe(true);

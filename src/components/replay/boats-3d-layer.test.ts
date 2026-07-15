@@ -7,22 +7,85 @@ import {
   createBoats3dLayer,
   type Boat3dRendererFactory,
 } from "@/components/replay/boats-3d-layer";
-import type {
-  Boat3dFrame,
-  Boat3dPose,
-} from "@/components/replay/boats-3d-state";
+import {
+  PRESENTATION_ONLY_SYNTHETIC,
+  type ReplayRenderBoat,
+  type ReplayRenderFrame,
+} from "@/components/replay/replay-render-frame";
+import type { ReplayRenderFrameRef } from "@/components/replay/replay-render-source";
 
-function pose(overrides: Partial<Boat3dPose> = {}): Boat3dPose {
+function pose(
+  overrides: Partial<ReplayRenderBoat["pose"]> = {},
+): ReplayRenderBoat["pose"] {
   return {
-    entryId: "entry-1",
-    lon: 0,
-    lat: 0,
     headingDeg: 0,
     heelDeg: 0,
     trimDeg: 0,
-    boomSide: 0,
-    inTrack: true,
+    boomSide: "center",
     ...overrides,
+  };
+}
+
+function replayBoat(
+  poseOverrides: Partial<ReplayRenderBoat["pose"]> = {},
+): ReplayRenderBoat {
+  return {
+    entryId: "entry-1",
+    boatName: "Test Boat",
+    color: "#2563eb",
+    selected: true,
+    inTrack: true,
+    position: {
+      lat: 40,
+      lon: -70,
+      eastM: 12,
+      northM: 30,
+    },
+    recorded: {
+      sogKts: 8,
+      cogDeg: 0,
+      headingDeg: 0,
+      heelDeg: 0,
+      trimDeg: 0,
+    },
+    pose: pose(poseOverrides),
+    sailing: {
+      signedTwaDeg: 45,
+      tack: "starboard",
+    },
+    provenance: {
+      sample: "recorded",
+      pose: {
+        headingDeg: "recorded-heading",
+        heelDeg: "recorded",
+        trimDeg: "recorded",
+        boomSide: "resolved-wind",
+      },
+    },
+    presentation: {
+      heaveM: {
+        value: 0.1,
+        provenance: PRESENTATION_ONLY_SYNTHETIC,
+      },
+      wakeStrength: {
+        value: 0.7,
+        provenance: PRESENTATION_ONLY_SYNTHETIC,
+      },
+    },
+  };
+}
+
+function replayFrame(boat: ReplayRenderBoat): ReplayRenderFrame {
+  return {
+    version: 1,
+    sequence: 1,
+    timeMs: 1_000,
+    playing: true,
+    updateKind: "continuous",
+    origin: { lat: 40, lon: -70 },
+    wind: null,
+    boats: [boat],
+    course: { startLine: null, marks: [] },
   };
 }
 
@@ -64,7 +127,7 @@ describe("applyBoat3dPose", () => {
         headingDeg: Number.NaN,
         heelDeg: Number.NaN,
         trimDeg: Number.NaN,
-        boomSide: -1,
+        boomSide: "port",
       }),
       2,
     );
@@ -77,7 +140,7 @@ describe("applyBoat3dPose", () => {
 });
 
 describe("createBoats3dLayer", () => {
-  it("shares MapLibre's context, reads current frames, resets state, and disposes once", () => {
+  it("shares MapLibre's context, reads current shared frames, and disposes once", () => {
     const events: string[] = [];
     const renderedScenes: THREE.Scene[] = [];
     const renderer = {
@@ -91,12 +154,9 @@ describe("createBoats3dLayer", () => {
     };
     const rendererFactory: Boat3dRendererFactory = () => renderer;
 
-    const firstPose = pose();
-    const frame: Boat3dFrame = {
-      poses: [firstPose],
-      byEntryId: new Map([[firstPose.entryId, firstPose]]),
+    const frameRef: ReplayRenderFrameRef = {
+      current: replayFrame(replayBoat()),
     };
-    const frameRef = { current: frame };
     let zoom = 13;
     const canvas = {} as HTMLCanvasElement;
     const map = {
@@ -108,17 +168,17 @@ describe("createBoats3dLayer", () => {
     } as unknown as maplibregl.Map;
     const gl = {} as WebGLRenderingContext;
     class FakeMercatorCoordinate {
-      x: number;
-      y: number;
-      z = 0;
-
-      constructor(x: number, y: number) {
-        this.x = x;
-        this.y = y;
-      }
+      constructor(
+        readonly x: number,
+        readonly y: number,
+        readonly z = 0,
+      ) {}
 
       static fromLngLat({ lng, lat }: { lng: number; lat: number }) {
-        return new FakeMercatorCoordinate(lng / 1_000_000, lat / 1_000_000);
+        return new FakeMercatorCoordinate(
+          lng / 1_000_000,
+          lat / 1_000_000,
+        );
       }
 
       meterInMercatorCoordinateUnits() {
@@ -129,11 +189,7 @@ describe("createBoats3dLayer", () => {
     const layer = createBoats3dLayer(
       THREE,
       FakeMercatorCoordinate as unknown as typeof import("maplibre-gl").MercatorCoordinate,
-      {
-        boats: [{ entryId: "entry-1", color: "#2563eb" }],
-        frameRef,
-        rendererFactory,
-      },
+      { frameRef, rendererFactory },
     );
     layer.onAdd?.(map, gl);
     expect(renderer.autoClear).toBe(false);
@@ -144,7 +200,7 @@ describe("createBoats3dLayer", () => {
       },
     } as unknown as maplibregl.CustomRenderMethodInput;
     layer.render(gl, renderArgs);
-    expect(events).toEqual([]); // 2D fallback below the LOD boundary
+    expect(events).toEqual([]);
 
     zoom = 14;
     layer.render(gl, renderArgs);
@@ -154,17 +210,22 @@ describe("createBoats3dLayer", () => {
     );
     expect(boat?.rotation.y).toBeCloseTo(0, 8);
 
-    const nextPose = pose({ headingDeg: 90 });
-    frameRef.current = {
-      poses: [nextPose],
-      byEntryId: new Map([[nextPose.entryId, nextPose]]),
-    };
+    frameRef.current = replayFrame(
+      replayBoat({ headingDeg: 90, boomSide: "starboard" }),
+    );
     layer.render(gl, renderArgs);
     expect(boat?.rotation.y).toBeCloseTo(-Math.PI / 2, 8);
-    expect(events).toEqual(["reset", "render", "reset", "render"]);
+    expect(events).toEqual([
+      "reset",
+      "render",
+      "reset",
+      "render",
+    ]);
 
     layer.onRemove?.(map, gl);
     layer.onRemove?.(map, gl);
-    expect(events.filter((event) => event === "dispose")).toHaveLength(1);
+    expect(
+      events.filter((event) => event === "dispose"),
+    ).toHaveLength(1);
   });
 });

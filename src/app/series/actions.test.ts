@@ -12,6 +12,7 @@ describe("series organizer server boundary", () => {
       "createSeries",
       "saveSeriesSetup",
       "archiveSeries",
+      "toggleSeriesShare",
       "previewSeriesScoring",
       "applySeriesScoring",
     ]) {
