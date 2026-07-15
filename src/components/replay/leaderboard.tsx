@@ -14,9 +14,7 @@ import {
   LADDER_TREND_WINDOW_MS,
 } from "@/lib/analytics/constants";
 import {
-  applyRankHysteresis,
-  estimateAxisSign,
-  fleetMedianDmgDelta,
+  buildLadderFrameState,
   ladderRungs,
   type LadderBoat,
   type LadderRung,
@@ -37,7 +35,9 @@ function sampleBoats(tracks: LoadedTrack[], timeMs: number): LadderBoat[] {
       lat: s.lat,
       lon: s.lon,
       sogKts: s.sogKts,
-      inTrack: s.inTrack,
+      // A long telemetry gap can be held for map continuity, but it is not
+      // evidence for a live rank (or for the persisted event ledger).
+      inTrack: s.inTrack && s.sampleSource !== "held-gap",
     };
   });
 }
@@ -80,25 +80,28 @@ function computeBoard(
   origin: { lat: number; lon: number },
   prevOrder: string[],
   prevSign: 1 | -1,
+  axisSignHint: 1 | -1 | null,
 ): { rungs: RankedRung[]; axisSign: 1 | -1; order: string[] } {
   const boatsNow = sampleBoats(tracks, timeMs);
   const boatsLeg = sampleBoats(tracks, timeMs - LADDER_LEG_WINDOW_MS);
-  const rawNow = ladderRungs(boatsNow, twd, origin, 1);
-  const rawLeg = ladderRungs(boatsLeg, twd, origin, 1);
-  const axisSign = estimateAxisSign(
-    prevSign,
-    fleetMedianDmgDelta(rawNow, rawLeg),
-  );
-  const raw = ladderRungs(boatsNow, twd, origin, axisSign);
-  const rungs = applyRankHysteresis(raw, prevOrder);
+  const frame = buildLadderFrameState({
+    timeMs,
+    boatsNow,
+    boatsLegLookback: boatsLeg,
+    twdDeg: twd,
+    origin,
+    previousOrder: prevOrder,
+    previousAxisSign: prevSign,
+    ...(axisSignHint === null ? {} : { axisSignHint }),
+  });
   const boatsTrend = sampleBoats(tracks, timeMs - LADDER_TREND_WINDOW_MS);
   const pastById = new Map(
-    ladderRungs(boatsTrend, twd, origin, axisSign).map((r) => [r.entryId, r]),
+    ladderRungs(boatsTrend, twd, origin, frame.axisSign).map((r) => [r.entryId, r]),
   );
   return {
-    axisSign,
-    order: rungs.map((r) => r.entryId),
-    rungs: rungs.map((r) => ({ ...r, trend: trendFor(r, pastById) })),
+    axisSign: frame.axisSign,
+    order: frame.order,
+    rungs: frame.rungs.map((r) => ({ ...r, trend: trendFor(r, pastById) })),
   };
 }
 
@@ -106,11 +109,13 @@ function computeBoard(
 function useLadderRungs(
   tracks: LoadedTrack[],
   twdAt: ((timeMs: number) => number) | null,
+  axisSignAt: ((timeMs: number) => 1 | -1 | null) | null,
   origin: { lat: number; lon: number },
 ): RankedRung[] {
   const [rungs, setRungs] = useState<RankedRung[]>([]);
   const prevOrderRef = useRef<string[]>([]);
   const prevSignRef = useRef<1 | -1>(1);
+  const previousHintRef = useRef<1 | -1 | null>(null);
 
   useEffect(() => {
     if (!twdAt) {
@@ -131,6 +136,12 @@ function useLadderRungs(
         prevOrderRef.current = [];
         prevSignRef.current = 1;
       }
+      const axisSignHint = axisSignAt?.(timeMs) ?? null;
+      if (axisSignHint !== previousHintRef.current) {
+        prevOrderRef.current = [];
+        if (axisSignHint !== null) prevSignRef.current = axisSignHint;
+        previousHintRef.current = axisSignHint;
+      }
       lastTimeMs = timeMs;
       const next = computeBoard(
         tracks,
@@ -139,6 +150,7 @@ function useLadderRungs(
         origin,
         prevOrderRef.current,
         prevSignRef.current,
+        axisSignHint,
       );
       prevOrderRef.current = next.order;
       prevSignRef.current = next.axisSign;
@@ -162,7 +174,7 @@ function useLadderRungs(
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [origin, tracks, twdAt]);
+  }, [axisSignAt, origin, tracks, twdAt]);
 
   return rungs;
 }
@@ -170,12 +182,14 @@ function useLadderRungs(
 export function Leaderboard({
   tracks,
   twdAt,
+  axisSignAt = null,
   origin,
   raceId,
   readOnly = false,
 }: {
   tracks: LoadedTrack[];
   twdAt: ((timeMs: number) => number) | null;
+  axisSignAt?: ((timeMs: number) => 1 | -1 | null) | null;
   origin: { lat: number; lon: number };
   raceId: string;
   readOnly?: boolean;
@@ -184,7 +198,7 @@ export function Leaderboard({
   const setSelectedEntryId = usePlaybackStore((s) => s.setSelectedEntryId);
   const [expanded, setExpanded] = useState(false);
   const [rivalsOnly, setRivalsOnly] = useState(true);
-  const rungs = useLadderRungs(tracks, twdAt, origin);
+  const rungs = useLadderRungs(tracks, twdAt, axisSignAt, origin);
 
   const trackById = useMemo(
     () => new Map(tracks.map((t) => [t.entryId, t])),

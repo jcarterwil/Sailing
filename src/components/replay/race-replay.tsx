@@ -16,6 +16,10 @@ import { PanelTabs } from "@/components/replay/panels/panel-tabs";
 import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
+  ReplayCommentary,
+  type ReplayCommentaryStatus,
+} from "@/components/replay/replay-commentary";
+import {
   loadReplayDisplayPreferences,
   saveReplayDisplayPreferences,
   type ReplayDisplayPreferences,
@@ -135,6 +139,7 @@ export function RaceReplay({
   raceMeta,
   analyzeContext,
   analysis = null,
+  commentaryStatus,
   readOnly = false,
 }: {
   raceId: string;
@@ -148,6 +153,8 @@ export function RaceReplay({
   analyzeContext: RaceAnalyzeContext;
   /** Persisted fleet analysis from race_analyses, when available. */
   analysis?: RaceAnalysis | null;
+  /** Parse state for the optional replay-event sub-contract. */
+  commentaryStatus?: ReplayCommentaryStatus;
   readOnly?: boolean;
 }) {
   const [tracks, setTracks] =
@@ -176,6 +183,19 @@ export function RaceReplay({
     () => twdResolver(windAt),
     [windAt],
   );
+  const ladderAxisSignAt = useMemo(() => {
+    const legs = analysis?.race.legs ?? [];
+    if (legs.length === 0) return null;
+    return (timeMs: number): 1 | -1 | null => {
+      const leg = legs.find((candidate) =>
+        timeMs >= candidate.startTimeMs && timeMs <= candidate.endTimeMs);
+      return leg?.type === "upwind"
+        ? 1
+        : leg?.type === "downwind"
+          ? -1
+          : null;
+    };
+  }, [analysis?.race.legs]);
   const startsMs = useMemo(
     () =>
       tracks
@@ -184,9 +204,11 @@ export function RaceReplay({
     [tracks],
   );
   const eventMarkers = useMemo(
-    () => replayEventMarkers(analysis?.performance),
-    [analysis?.performance],
+    () => replayEventMarkers(analysis?.performance, analysis?.replayEvents),
+    [analysis?.performance, analysis?.replayEvents],
   );
+  const resolvedCommentaryStatus = commentaryStatus ??
+    (analysis?.replayEvents ? "valid" : "missing");
   const frameSource = useMemo(
     () =>
       tracks && origin
@@ -381,6 +403,7 @@ export function RaceReplay({
           <Leaderboard
             tracks={tracks}
             twdAt={twdAt}
+            axisSignAt={ladderAxisSignAt}
             origin={origin}
             raceId={raceId}
             readOnly={readOnly}
@@ -412,6 +435,21 @@ export function RaceReplay({
           <span className="hidden text-sm text-muted-foreground lg:inline">
             {raceName}
           </span>
+        </div>
+        <div className="mt-2 sm:mt-3">
+          <ReplayCommentary
+            timeline={analysis?.replayEvents ?? null}
+            status={resolvedCommentaryStatus}
+            tracks={tracks}
+            raceId={raceId}
+            gunTimeMs={
+              analysis?.performance?.start.gunTimeMs ??
+              analysis?.race.start.timeMs ??
+              startsMs[0] ??
+              null
+            }
+            readOnly={readOnly}
+          />
         </div>
         <div className="-mx-2 mt-2 sm:mx-0 sm:mt-3">
           <Timeline

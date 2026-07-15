@@ -12,6 +12,7 @@ The client-only race replay has two renderer views: a MapLibre Tactical view and
 - The Tactical map's optional close-zoom 3D hull layer loads Three only after **Stylized hulls** is enabled. It reads the shared frame ref inside MapLibre's custom render pass and never calls `triggerRepaint`, `setAnimationLoop`, or adds another rAF. MapLibre owns the shared canvas/context; Three must not resize, clear, or force-loss that context.
 - **Wind for ladder / wind indicator:** resolve through `createReplayWindResolver` in `wind-resolution.ts`; `resolveTwdAt` remains the direction-only adapter used by non-renderer replay consumers. Do not invent a second wind path.
 - **Start line / race clock:** `LoadedTrack.extras` carries VKX timerEvents/linePings (null for CSV). Derive `startsMs` in `race-replay.tsx` via `fleetStarts`; feed the starts into the frame source, PlaybackControls, and Timeline. The frame builder resolves the line at scrub time with `startForLine` + `startLineAt` (upcoming gun pre-start, else active), then falls back to the analyzed start line. Never fabricate a line from one end.
+- **Replay commentary:** the persisted `replayEvents` ledger is the only source of play-by-play facts. Resolve current boat names/colors from loaded track metadata at render time; never persist display names or let presentation code infer standings, causality, or skipper intent. Subscribe to the playback clock imperatively and update React state only when the active grouped event changes. Feed and timeline jumps call `seek` without changing `playing`.
 
 ## Renderer views and data honesty
 
@@ -35,6 +36,7 @@ The client-only race replay has two renderer views: a MapLibre Tactical view and
 - **Raw `maplibre-gl`, not react-map-gl.** One component owns the Tactical map lifecycle in a `useEffect`. On `setStyle` the sources/layers are wiped — re-add them in the `styledata` handler (see `map-view.tsx`). Base tiles are keyless (OpenFreeMap + Esri); no Mapbox token.
 - **The replay is loaded with `ssr: false`** through `replay-shell.tsx` because MapLibre is browser-only. Keep the dynamic-import boundary there; the RSC page (`src/app/races/[raceId]/replay/page.tsx`) only mints signed track URLs (and ready-video URLs when present) and passes them in.
 - **Tracks load from Storage, not the server.** `track-loader.ts` fetches the gzipped `ProcessedTrack` JSON via a signed URL and decompresses with the native `DecompressionStream("gzip")` into typed arrays. `track-index.ts` does binary-search + interpolation — reuse it in the frame builder; do not re-scan arrays.
+- A `held-gap` map sample is presentation continuity, not valid ranking evidence. The leaderboard and replay-event engine must exclude it, and no commentary claim may cross a source gap rejected by analytics.
 - **Video overlay (issue #9):** sync from `usePlaybackStore` via `planVideoSync` in `src/lib/videos/replay-sync.ts`. One selected `<video muted playsInline>` at a time; no second rAF loop; bounded drift correction instead of per-frame seeks. Public share (`readOnly`) does not load videos.
 
 ## Store

@@ -139,6 +139,9 @@ export default async function SharedReplayPage({
           raceMeta={raceMeta}
           analyzeContext={analyzeContext}
           analysis={replayAnalysis}
+          commentaryStatus={
+            replayAnalysis ? parsedAnalysis.replayEventsStatus : "missing"
+          }
           readOnly
         />
       </div>

@@ -4,6 +4,7 @@ import { DEG } from "@/lib/analytics/angles";
 import { LADDER_LEG_FLIP_M, RANK_HYSTERESIS_M } from "@/lib/analytics/constants";
 import {
   applyRankHysteresis,
+  buildLadderFrameState,
   estimateAxisSign,
   fleetMedianDmgDelta,
   ladderRungs,
@@ -93,6 +94,60 @@ describe("ladderRungs", () => {
     expect(rungs[1].gapAheadM).toBeCloseTo(40, 1);
     expect(rungs[2].gapAheadM).toBeCloseTo(40, 1);
     expect(rungs[2].gapToLeaderM).toBeCloseTo(80, 1);
+  });
+
+  it("is invariant to input boat order, including exact projection ties", () => {
+    const forward = ladderRungs([boat("A", 100, 0), boat("B", 100, 0)], 0, ORIGIN);
+    const reversed = ladderRungs([boat("B", 100, 0), boat("A", 100, 0)], 0, ORIGIN);
+    expect(reversed).toEqual(forward);
+    expect(forward.map((rung) => rung.entryId)).toEqual(["A", "B"]);
+  });
+});
+
+describe("buildLadderFrameState", () => {
+  it("shares deterministic order, coverage, and axis-flip state", () => {
+    const state = buildLadderFrameState({
+      timeMs: 61_000,
+      boatsNow: [boat("B", -40, 0), boat("A", -20, 0)],
+      boatsLegLookback: [boat("B", 20, 0), boat("A", 40, 0)],
+      twdDeg: 0,
+      origin: ORIGIN,
+      previousOrder: ["A", "B"],
+      previousAxisSign: 1,
+    });
+    expect(state.axisFlipped).toBe(true);
+    expect(state.axisSign).toBe(-1);
+    expect(state.coverageComplete).toBe(true);
+    expect(state.order).toEqual(["B", "A"]);
+  });
+
+  it("marks a frame incomplete when any expected boat is unavailable", () => {
+    const state = buildLadderFrameState({
+      timeMs: 1_000,
+      boatsNow: [boat("A", 10, 0), boat("B", 0, 0, { inTrack: false })],
+      boatsLegLookback: [boat("A", 0, 0), boat("B", 0, 0, { inTrack: false })],
+      twdDeg: 0,
+      origin: ORIGIN,
+    });
+    expect(state.coverageComplete).toBe(false);
+    expect(state.order).toEqual(["A"]);
+  });
+
+  it("uses a reviewed leg-axis hint before motion lookback is available", () => {
+    const state = buildLadderFrameState({
+      timeMs: 1_000,
+      boatsNow: [boat("A", 100, 0), boat("B", 0, 0)],
+      boatsLegLookback: [
+        boat("A", 0, 0, { inTrack: false }),
+        boat("B", 0, 0, { inTrack: false }),
+      ],
+      twdDeg: 0,
+      origin: ORIGIN,
+      axisSignHint: -1,
+    });
+
+    expect(state.axisSign).toBe(-1);
+    expect(state.order).toEqual(["B", "A"]);
   });
 });
 

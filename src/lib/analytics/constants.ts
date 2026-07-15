@@ -121,3 +121,18 @@ export const RANK_HYSTERESIS_M = 8; // suppress rank flicker between overlapped 
 export const LADDER_TREND_WINDOW_MS = 45_000; // lookback for gaining/losing glyph
 export const LADDER_LEG_WINDOW_MS = 60_000; // lookback for upwind/downwind axis flip
 export const LADDER_LEG_FLIP_M = 25; // median raw-DMG delta that flips axisSign
+
+/** Deterministic replay play-by-play contract (#148). */
+export const REPLAY_EVENTS_CALCULATION_VERSION = "replay-events-v1.0.0";
+export const REPLAY_EVENTS_SAMPLE_HZ = 1;
+export const REPLAY_EVENTS_SAMPLE_MS = 1_000;
+export const REPLAY_EVENTS_CONFIRMATION_MS = 8_000;
+export const REPLAY_EVENTS_MAX_SOURCE_GAP_MS = 10_000;
+export const REPLAY_EVENTS_GROUPING_WINDOW_MS = 5_000;
+export const REPLAY_EVENTS_MANEUVER_ASSOCIATION_MS = 20_000;
+export const REPLAY_EVENTS_MAX_EVENTS = 250;
+export const REPLAY_EVENTS_MAX_WARNINGS = 64;
+export const REPLAY_EVENTS_MAX_PAYLOAD_BYTES = 512 * 1_024;
+export const REPLAY_EVENTS_MAX_TEXT_CHARS = 240;
+export const REPLAY_EVENTS_MAX_ID_CHARS = 240;
+export const REPLAY_EVENTS_MAX_ENTRY_IDS = PERFORMANCE_MAX_ENTRY_COUNT;
