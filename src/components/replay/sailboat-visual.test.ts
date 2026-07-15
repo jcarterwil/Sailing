@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 
 import {
   boomRotationForSide,
+  createSailboatVisual,
   formatSailIdentity,
+  SAILBOAT_BOOM_NAME,
+  SAILBOAT_RIG_NAME,
   sailboatHullProfile,
 } from "@/components/replay/sailboat-visual";
 
@@ -50,5 +54,35 @@ describe("stylized sailboat visual", () => {
     expect(starboard).toBeGreaterThan(0);
     expect(port).toBeCloseTo(-starboard, 12);
     expect(boomRotationForSide("center")).toBe(0);
+  });
+
+  it("pivots the boom and sails around the mast instead of the hull origin", () => {
+    const visual = createSailboatVisual(THREE, {
+      hullColor: "#2563eb",
+    });
+    const rig = visual.getObjectByName(SAILBOAT_RIG_NAME);
+    const boom = visual.getObjectByName(SAILBOAT_BOOM_NAME);
+
+    expect(rig).toBeInstanceOf(THREE.Group);
+    expect(boom).toBeInstanceOf(THREE.Mesh);
+    if (!(rig instanceof THREE.Group) || !(boom instanceof THREE.Mesh)) return;
+
+    for (const side of ["port", "starboard"] as const) {
+      rig.rotation.y = boomRotationForSide(side);
+      visual.updateMatrixWorld(true);
+
+      const pivot = rig.getWorldPosition(new THREE.Vector3());
+      const boomForwardEnd = new THREE.Vector3(
+        0,
+        -1.375,
+        0,
+      ).applyMatrix4(boom.matrixWorld);
+      const pivotDistance = Math.hypot(
+        boomForwardEnd.x - pivot.x,
+        boomForwardEnd.z - pivot.z,
+      );
+
+      expect(pivotDistance).toBeLessThan(0.1);
+    }
   });
 });

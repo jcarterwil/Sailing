@@ -24,6 +24,7 @@ import {
 import {
   NAUTICAL_CHART_NOTICE,
   addNauticalChartLayer,
+  removeNauticalChartLayer,
   setNauticalChartOpacity,
   setNauticalChartVisibility,
 } from "@/components/replay/nautical-chart";
@@ -594,6 +595,22 @@ export function MapView({
       }
     };
 
+    const restoreNauticalChart = () => {
+      // A setStyle diff can briefly retain the chart, then discard it after an
+      // intermediate styledata event. Recreate it once style.load confirms the
+      // replacement style is stable, and insert it immediately below trails.
+      removeNauticalChartLayer(
+        map,
+        (error) => onChartErrorRef.current?.(error),
+      );
+      addNauticalChartLayer(map, {
+        beforeLayerId: "trails",
+        opacity: chartOpacityRef.current,
+        visible: nauticalChartRef.current,
+        onError: (error) => onChartErrorRef.current?.(error),
+      });
+    };
+
     map.on("load", addLayers);
     map.on("styledata", () => {
       if (
@@ -606,6 +623,20 @@ export function MapView({
         readyRef.current = false;
         addLayers();
       }
+    });
+    map.on("style.load", () => {
+      if (
+        shouldAddReplayMapLayers({
+          isAdding: addingLayersRef.current,
+          map,
+        })
+      ) {
+        readyRef.current = false;
+        addLayers();
+      }
+      restoreNauticalChart();
+      readyRef.current = true;
+      refreshPlaybackRef.current?.();
     });
 
     map.on("click", "boats", (event) => {
@@ -658,6 +689,14 @@ export function MapView({
     if (!map || appliedStyleRef.current === styleId) return;
     readyRef.current = false;
     appliedStyleRef.current = styleId;
+    // MapLibre can preserve a custom raster layer while diffing styles. If it
+    // does, the incoming base-style layers may be inserted above the chart and
+    // hide it. Remove the chart before setStyle so addReplayLayers restores it
+    // above the new base style and below the replay layers.
+    removeNauticalChartLayer(
+      map,
+      (error) => onChartErrorRef.current?.(error),
+    );
     map.setStyle(
       styleId === "satellite"
         ? SATELLITE_STYLE

@@ -19,10 +19,12 @@ export interface SailboatHullStation {
 }
 
 export const SAILBOAT_RIG_NAME = "boat-sail-rig";
+export const SAILBOAT_BOOM_NAME = "boat-boom";
 export const SAILBOAT_WAKE_ANCHOR_NAME = "boat-wake-anchor";
 export const SAILBOAT_SELECTION_NAME = "boat-selection-halo";
 
 const BOOM_SWING_RAD = (38 * Math.PI) / 180;
+const MAST_Z_M = -0.65;
 
 const LOW_HULL_PROFILE: readonly SailboatHullStation[] = Object.freeze([
   { zM: -3.65, halfBeamM: 0.04, deckHeightM: 0.46, keelHeightM: -0.12 },
@@ -197,7 +199,11 @@ function createIdentityDecal(
         transparent: true,
       }),
     );
-    decal.position.set(side * 0.018, 4.25, 0.55);
+    decal.position.set(
+      side * 0.018,
+      4.25,
+      0.55 - MAST_Z_M,
+    );
     decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     decal.renderOrder = 2;
     decals.add(decal);
@@ -302,12 +308,16 @@ export function createSailboatVisual(
     ),
     sparMaterial,
   );
-  mast.position.set(0, 4.28, -0.65);
+  mast.position.set(0, 4.28, MAST_Z_M);
   mast.castShadow = true;
   group.add(mast);
 
   const rig = new THREE.Group();
   rig.name = SAILBOAT_RIG_NAME;
+  // Keep the mast/luff fixed while the boom and sails change sides. Child
+  // geometry is expressed relative to this pivot so the neutral pose remains
+  // identical to the original renderer coordinates.
+  rig.position.z = MAST_Z_M;
 
   const boom = new THREE.Mesh(
     new THREE.CylinderGeometry(
@@ -318,8 +328,9 @@ export function createSailboatVisual(
     ),
     sparMaterial,
   );
+  boom.name = SAILBOAT_BOOM_NAME;
   boom.rotation.x = Math.PI / 2;
-  boom.position.set(0, 1.28, 0.68);
+  boom.position.set(0, 1.28, 0.68 - MAST_Z_M);
   boom.castShadow = true;
   rig.add(boom);
 
@@ -333,7 +344,17 @@ export function createSailboatVisual(
   const main = new THREE.Mesh(
     createSailGeometry(
       THREE,
-      [0, 1.26, -0.62, 0, 7.88, -0.62, 0, 1.26, 2.55],
+      [
+        0,
+        1.26,
+        -0.62 - MAST_Z_M,
+        0,
+        7.88,
+        -0.62 - MAST_Z_M,
+        0,
+        1.26,
+        2.55 - MAST_Z_M,
+      ],
     ),
     sailMaterial,
   );
@@ -347,7 +368,17 @@ export function createSailboatVisual(
   const jib = new THREE.Mesh(
     createSailGeometry(
       THREE,
-      [0, 1.12, -0.82, 0, 6.05, -0.75, 0, 1.12, -3.02],
+      [
+        0,
+        1.12,
+        -0.82 - MAST_Z_M,
+        0,
+        6.05,
+        -0.75 - MAST_Z_M,
+        0,
+        1.12,
+        -3.02 - MAST_Z_M,
+      ],
     ),
     sailMaterial.clone(),
   );

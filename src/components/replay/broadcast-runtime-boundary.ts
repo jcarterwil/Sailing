@@ -4,7 +4,7 @@ export type BroadcastFailureNormalizer = (
   cause: unknown,
 ) => BroadcastRendererFailure;
 
-function fallbackBroadcastFailure(
+export function broadcastFailureFromCause(
   cause: unknown,
 ): BroadcastRendererFailure {
   return {
@@ -31,7 +31,7 @@ export function runBroadcastRendererActionSafely(
     action();
     return true;
   } catch (cause) {
-    let failure = fallbackBroadcastFailure(cause);
+    let failure = broadcastFailureFromCause(cause);
     if (normalizeFailure) {
       try {
         failure = normalizeFailure(cause);

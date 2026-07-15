@@ -143,6 +143,72 @@
   }
 }
 
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Preserve renderer space when width breakpoints would expose desktop UI. */
+  [data-replay-desktop-settings] {
+    display: none !important;
+  }
+  [data-replay-mobile-settings] {
+    display: inline-flex !important;
+  }
+  [data-replay-controls] {
+    padding-block: 0.5rem !important;
+  }
+  [data-replay-commentary] {
+    max-height: 2.75rem;
+    margin-top: 0 !important;
+    position: relative;
+    z-index: 30;
+    overflow: visible;
+  }
+  [data-replay-commentary-panel] {
+    position: relative;
+  }
+  [data-replay-commentary-panel][data-replay-commentary-expanded="true"] {
+    overflow: visible;
+  }
+  [data-replay-commentary-feed] {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.25rem);
+    left: 0;
+    max-height: min(60dvh, 18rem);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
+  }
+  [data-replay-data-panel] {
+    position: absolute !important;
+    inset: auto 0 0 !important;
+    z-index: 20 !important;
+    width: auto !important;
+    height: min(55dvh, 28rem) !important;
+    transform: translateY(calc(100% - 3.25rem + var(--sheet-drag-y))) !important;
+    border-width: 1px 0 0 !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 18%) !important;
+    will-change: transform !important;
+  }
+  [data-replay-data-panel][data-replay-panel-open="true"] {
+    transform: translateY(var(--sheet-drag-y)) !important;
+  }
+  [data-replay-data-handle] {
+    display: flex !important;
+  }
+  [data-replay-data-content] {
+    border-top-width: 1px !important;
+  }
+  [data-replay-data-content][data-replay-panel-open="false"] {
+    display: none !important;
+  }
+  [data-replay-timeline] {
+    height: 2.75rem !important;
+    overflow: hidden;
+  }
+}
+
 @layer components {
   .performance-print-report {
     display: none;

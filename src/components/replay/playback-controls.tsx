@@ -368,7 +368,7 @@ function ViewSettingsFields({
                 type="range"
                 min="0"
                 max="1"
-                step="0.05"
+                step="0.01"
                 value={preferences.chartOpacity}
                 onChange={(event) =>
                   onPreferencesChange({
@@ -670,7 +670,10 @@ export function PlaybackControls({
         </SelectContent>
       </Select>
 
-      <div className="hidden min-w-0 sm:block">
+      <div
+        className="hidden min-w-0 sm:block"
+        data-replay-desktop-settings
+      >
         {renderViewSettings()}
       </div>
 
@@ -696,6 +699,7 @@ export function PlaybackControls({
             variant="outline"
             size="icon"
             className="ml-auto size-11 shrink-0 sm:hidden"
+            data-replay-mobile-settings
             aria-label="Open View settings"
           >
             <Settings2 className="size-4" />

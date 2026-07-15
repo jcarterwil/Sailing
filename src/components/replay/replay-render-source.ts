@@ -18,6 +18,10 @@ export type ReplayRenderFrameListener = (
   previousFrame: ReplayRenderFrame,
 ) => void;
 
+export type ReplayRenderFrameListenerErrorHandler = (
+  cause: unknown,
+) => void;
+
 export interface ReplayRenderPlaybackStore {
   getState: () => ReplayRenderPlaybackState;
   subscribe: (
@@ -33,8 +37,19 @@ export interface ReplayRenderFrameSource {
   /**
    * Lazily attaches to the playback store. All renderer listeners share one
    * store subscription, which is removed when the final listener leaves.
+   * Listener failures are isolated so one renderer cannot escape into the
+   * playback store and stop the sole replay clock.
    */
-  subscribe: (listener: ReplayRenderFrameListener) => () => void;
+  subscribe: (
+    listener: ReplayRenderFrameListener,
+    onError?: ReplayRenderFrameListenerErrorHandler,
+  ) => () => void;
+}
+
+interface ReplayRenderFrameListenerRegistration {
+  listener: ReplayRenderFrameListener;
+  onError?: ReplayRenderFrameListenerErrorHandler;
+  failureReported: boolean;
 }
 
 function sameRenderState(
@@ -91,7 +106,7 @@ export function createReplayRenderFrameSource(
       updateKind: "initial",
     }),
   };
-  const listeners = new Set<{ listener: ReplayRenderFrameListener }>();
+  const listeners = new Set<ReplayRenderFrameListenerRegistration>();
   let unsubscribeStore: (() => void) | null = null;
 
   const publish = (
@@ -114,7 +129,22 @@ export function createReplayRenderFrameSource(
     frameRef.current = nextFrame;
     if (notifyListeners) {
       for (const registration of Array.from(listeners)) {
-        registration.listener(nextFrame, previousFrame);
+        try {
+          registration.listener(nextFrame, previousFrame);
+          registration.failureReported = false;
+        } catch (cause) {
+          if (registration.failureReported) continue;
+          registration.failureReported = true;
+          try {
+            if (registration.onError) {
+              registration.onError(cause);
+            } else {
+              console.error("Replay render listener failed", cause);
+            }
+          } catch {
+            // Error reporting must not rethrow into the playback clock either.
+          }
+        }
       }
     }
   };
@@ -130,8 +160,12 @@ export function createReplayRenderFrameSource(
 
   return {
     frameRef,
-    subscribe(listener) {
-      const registration = { listener };
+    subscribe(listener, onError) {
+      const registration: ReplayRenderFrameListenerRegistration = {
+        listener,
+        onError,
+        failureReported: false,
+      };
       const wasEmpty = listeners.size === 0;
       listeners.add(registration);
       if (wasEmpty) attach();

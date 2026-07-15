@@ -11,10 +11,17 @@ function replaySource(fileName: string): string {
 
 const raceReplaySource = replaySource("race-replay.tsx");
 const mapViewSource = replaySource("map-view.tsx");
+const panelSource = replaySource("panels/panel-tabs.tsx");
 const broadcastSource = replaySource("broadcast-3d.tsx");
 const helmSource = replaySource("helm-pov.tsx");
 const controlsSource = replaySource("playback-controls.tsx");
+const commentarySource = replaySource("replay-commentary.tsx");
+const timelineSource = replaySource("timeline.tsx");
 const nauticalChartSource = replaySource("nautical-chart.ts");
+const globalStylesSource = readFileSync(
+  new URL("../../app/globals.css", import.meta.url),
+  "utf8",
+);
 
 describe("replay visualization v2 boundaries", () => {
   it("creates one renderer-neutral source and lazy Broadcast boundary", () => {
@@ -27,10 +34,26 @@ describe("replay visualization v2 boundaries", () => {
       'import("@/components/replay/broadcast-3d")',
     );
     expect(raceReplaySource).toContain(
+      "<BroadcastComponentErrorBoundary",
+    );
+    expect(raceReplaySource).toContain(
+      "loading: Broadcast3dLoading",
+    );
+    expect(raceReplaySource).toContain(
+      "BroadcastLoadFailureContext.Provider",
+    );
+    expect(raceReplaySource).toContain(
+      "broadcastRetryRef.current = retry",
+    );
+    expect(raceReplaySource).toContain("retry?.()");
+    expect(raceReplaySource).toContain(
       "loadReplayDisplayPreferences",
     );
     expect(raceReplaySource).toContain(
       "saveReplayDisplayPreferences",
+    );
+    expect(raceReplaySource).toContain(
+      "data-replay-commentary",
     );
   });
 
@@ -58,7 +81,7 @@ describe("replay visualization v2 boundaries", () => {
   });
 
   it("restores the chart below replay layers with the safety notice", () => {
-    const restoreIndex = mapViewSource.lastIndexOf(
+    const restoreIndex = mapViewSource.indexOf(
       "addNauticalChartLayer(map",
     );
     const trailIndex = mapViewSource.indexOf(
@@ -69,6 +92,19 @@ describe("replay visualization v2 boundaries", () => {
     expect(restoreIndex).toBeGreaterThan(-1);
     expect(trailIndex).toBeGreaterThan(restoreIndex);
     expect(mapViewSource).toContain('map.on("styledata"');
+    expect(mapViewSource).toContain('map.on("style.load"');
+    expect(mapViewSource).toContain(
+      "replacement style is stable",
+    );
+    const removeIndex = mapViewSource.lastIndexOf(
+      "removeNauticalChartLayer(\n      map,",
+    );
+    const setStyleIndex = mapViewSource.indexOf(
+      "map.setStyle(",
+      removeIndex,
+    );
+    expect(removeIndex).toBeGreaterThan(-1);
+    expect(setStyleIndex).toBeGreaterThan(removeIndex);
     expect(mapViewSource).toContain(
       "{NAUTICAL_CHART_NOTICE}",
     );
@@ -96,6 +132,37 @@ describe("replay visualization v2 boundaries", () => {
     );
     expect(controlsSource).toContain(
       'aria-label="Nautical chart opacity"',
+    );
+    expect(controlsSource).toContain('step="0.01"');
+    expect(controlsSource).toContain(
+      "data-replay-desktop-settings",
+    );
+    expect(controlsSource).toContain(
+      "data-replay-mobile-settings",
+    );
+    expect(panelSource).toContain(
+      "data-replay-data-panel",
+    );
+    expect(timelineSource).toContain(
+      "data-replay-timeline",
+    );
+    expect(globalStylesSource).toContain(
+      "@media (orientation: landscape) and (max-height: 500px)",
+    );
+    expect(globalStylesSource).toContain(
+      "[data-replay-timeline]",
+    );
+    expect(globalStylesSource).toContain(
+      "[data-replay-commentary]",
+    );
+    expect(commentarySource).toContain(
+      "data-replay-commentary-expanded",
+    );
+    expect(commentarySource).toContain(
+      "data-replay-commentary-feed",
+    );
+    expect(globalStylesSource).toContain(
+      "[data-replay-commentary-feed]",
     );
   });
 
