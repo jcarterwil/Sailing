@@ -302,10 +302,11 @@ export function PlaybackControls({
         value={cameraMode}
         onValueChange={(v) => setCameraMode(v as CameraMode)}
       >
-        <SelectTrigger className="w-28" aria-label="Camera mode">
+        <SelectTrigger className="w-28 sm:w-32" aria-label="Camera mode">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value="fleet">Fleet auto</SelectItem>
           <SelectItem value="north">North-up</SelectItem>
           <SelectItem value="follow" disabled={!hasSelection}>
             Follow

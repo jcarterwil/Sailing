@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export type TrailMode = "tail" | "full" | "speed";
-export type CameraMode = "north" | "follow" | "chase";
+export type CameraMode = "fleet" | "north" | "follow" | "chase";
 
 interface PlaybackState {
   // Fleet time bounds, epoch ms.
@@ -38,8 +38,8 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   trailMode: "tail",
   rangeSel: null,
   selectedEntryId: null,
-  cameraMode: "north",
-  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0, cameraMode: "north" }),
+  cameraMode: "fleet",
+  setBounds: (t0, t1) => set({ t0, t1, timeMs: t0, cameraMode: "fleet" }),
   seek: (timeMs) => {
     const { t0, t1 } = get();
     set({ timeMs: Math.min(t1, Math.max(t0, timeMs)) });
@@ -49,11 +49,14 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   setTrailMode: (trailMode) => set({ trailMode }),
   setRange: (rangeSel) => set({ rangeSel }),
   setSelectedEntryId: (selectedEntryId) =>
-    set(
-      selectedEntryId === null
-        ? { selectedEntryId: null, cameraMode: "north" }
-        : { selectedEntryId },
-    ),
+    set((state) => {
+      if (selectedEntryId !== null) return { selectedEntryId };
+      const cameraMode =
+        state.cameraMode === "follow" || state.cameraMode === "chase"
+          ? "fleet"
+          : state.cameraMode;
+      return { selectedEntryId: null, cameraMode };
+    }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   tick: (dtMs) => {
     const { timeMs, t1, speed, playing } = get();

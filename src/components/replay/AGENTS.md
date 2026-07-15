@@ -22,4 +22,4 @@ The client-only race replay: a MapLibre map, a zustand playback clock, and a can
 
 ## Store
 
-`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"north"` | `"follow"` | `"chase"`). Deselecting a boat or calling `setBounds` (new race load) resets `cameraMode` to `"north"`. Keep it minimal; derived values are computed by consumers from the track arrays + `track-index.ts`, not stored.
+`playback-store.ts` (zustand) holds `timeMs`, `playing`, `speed`, `trailMode`, `rangeSel` (the brush selection), `selectedEntryId` (the tapped/owned boat), and `cameraMode` (`"fleet"` | `"north"` | `"follow"` | `"chase"`). A new race defaults to the hysteretic `"fleet"` auto-frame; manual map gestures switch to `"north"`, and deselecting a followed/chased boat returns to `"fleet"`. Keep it minimal; derived values are computed by consumers from the track arrays + `track-index.ts`, not stored.

@@ -9,6 +9,7 @@ import { Leaderboard } from "@/components/replay/leaderboard";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
 import { PlaybackControls } from "@/components/replay/playback-controls";
 import { usePlaybackStore } from "@/components/replay/playback-store";
+import { replayEventMarkers } from "@/components/replay/replay-events";
 import { Timeline } from "@/components/replay/timeline";
 import { loadTrack, type LoadedTrack, type TrackMeta } from "@/components/replay/track-loader";
 import type { VideoMeta } from "@/components/replay/video-meta";
@@ -110,6 +111,10 @@ export function RaceReplay({
   const startsMs = useMemo(
     () => (tracks ? fleetStarts(tracks.map((t) => t.extras)) : []),
     [tracks],
+  );
+  const eventMarkers = useMemo(
+    () => replayEventMarkers(analysis?.performance),
+    [analysis],
   );
 
   useEffect(() => {
@@ -223,7 +228,11 @@ export function RaceReplay({
           <span className="hidden text-sm text-muted-foreground lg:inline">{raceName}</span>
         </div>
         <div className="-mx-2 mt-2 sm:mx-0 sm:mt-3">
-          <Timeline tracks={tracks} startsMs={startsMs} />
+          <Timeline
+            tracks={tracks}
+            startsMs={startsMs}
+            eventMarkers={eventMarkers}
+          />
         </div>
       </div>
     </div>
