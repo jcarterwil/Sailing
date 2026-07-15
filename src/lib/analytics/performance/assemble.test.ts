@@ -11,6 +11,11 @@ import { parsePerformanceV1 } from "@/lib/analytics/performance/parse";
 import {
   SIX_BOAT_FIVE_LEG_FIXTURE,
 } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
+import {
+  MIXED_SOURCE_TERMINAL_FINISH_RACE,
+  MIXED_SOURCE_TERMINAL_FINISH_TRACKS,
+  MIXED_SOURCE_TERMINAL_FINISH_WIND,
+} from "@/lib/analytics/performance/__fixtures__/mixed-source-terminal-finish";
 import type { PerformanceAnalysisV1 } from "@/lib/analytics/performance/types";
 import type { ProcessedTrack } from "@/lib/analytics/types";
 
@@ -24,6 +29,80 @@ function expectParserValid(performance: PerformanceAnalysisV1): void {
 }
 
 describe("buildPerformanceAnalysis", () => {
+  it("propagates recovered mixed-source finishes into race-wide and final-leg metrics", () => {
+    const source = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS);
+    const base = analyzeRace(source);
+    base.race = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_RACE);
+    base.wind = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_WIND);
+    const performance = buildPerformanceAnalysis(source, base, null);
+    expect(performance.results.every((result) => result.status === "finished")).toBe(true);
+    expect(performance.course.points.at(-1)?.provenance.source).toBe("inferred-finish-geometry");
+    for (const result of performance.results) {
+      const wholeRace = performance.wholeRace.find((metric) => metric.entryId === result.entryId)!;
+      const finalLeg = performance.legs.at(-1)!.metrics.find((metric) => metric.entryId === result.entryId)!;
+      expect(wholeRace).toMatchObject({
+        elapsedMs: result.elapsedMs,
+        rank: result.rank,
+        deltaMs: result.deltaMs,
+      });
+      expect(finalLeg.elapsedMs).not.toBeNull();
+      expect(finalLeg.sampleCount).toBeGreaterThan(0);
+    }
+    expectParserValid(performance);
+
+    const missingPriorPassage = structuredClone(performance);
+    const inferredFinishPoint = missingPriorPassage.course.points.at(-1)!;
+    inferredFinishPoint.supportingEntryCount -= 1;
+    const alphaPassages = missingPriorPassage.course.passagesByEntry
+      .find((entry) => entry.entryId === "alpha")!.passages;
+    alphaPassages.find((passage) => passage.pointIndex === inferredFinishPoint.index - 1)!.timeMs = null;
+    const missingPriorParsed = parsePerformanceV1(missingPriorPassage);
+    expect(missingPriorParsed.status).toBe("malformed");
+    expect(missingPriorParsed.issues.join(" ")).toContain("course finish geometry and its entry passage evidence");
+
+    const erasedInference = structuredClone(performance);
+    erasedInference.results.find((result) => result.entryId === "alpha")!.provenance.source =
+      "passage-approach";
+    const erasedInferenceParsed = parsePerformanceV1(erasedInference);
+    expect(erasedInferenceParsed.status).toBe("malformed");
+    expect(erasedInferenceParsed.issues.join(" ")).toContain("exact source, evidence, and provenance");
+
+    const disguisedInference = structuredClone(performance);
+    const disguisedAlpha = disguisedInference.results.find((result) => result.entryId === "alpha")!;
+    disguisedAlpha.finish!.source = "timer-event";
+    disguisedAlpha.provenance.source = "timer-event";
+    disguisedAlpha.reviewRequired = false;
+    const disguisedInferenceParsed = parsePerformanceV1(disguisedInference);
+    expect(disguisedInferenceParsed.status).toBe("malformed");
+    expect(disguisedInferenceParsed.issues.join(" ")).toContain("exact source, evidence, and provenance");
+
+    const overstatedTimer = structuredClone(performance);
+    const overstatedEcho = overstatedTimer.results.find((result) => result.entryId === "echo")!;
+    overstatedEcho.finish!.confidence = "high";
+    overstatedEcho.provenance.confidence = "high";
+    overstatedEcho.reviewRequired = false;
+    const overstatedTimerParsed = parsePerformanceV1(overstatedTimer);
+    expect(overstatedTimerParsed.status).toBe("malformed");
+    expect(overstatedTimerParsed.issues.join(" ")).toContain("exact source, evidence, and provenance");
+
+    const placeCorrection = normalizeCorrections({
+      entryResults: [{
+        entryId: "alpha",
+        status: "finished",
+        finishTimeMs: null,
+        placeOverride: 2,
+        note: "Organizer-confirmed place",
+      }],
+    });
+    const correctedPerformance = buildPerformanceAnalysis(source, base, placeCorrection);
+    expect(correctedPerformance.results.find((result) => result.entryId === "alpha")).toMatchObject({
+      finish: { source: "passage-approach", confidence: "low" },
+      officialPlaceOverride: 2,
+      provenance: { source: "inferred-finish-geometry", confidence: "low" },
+    });
+    expectParserValid(correctedPerformance);
+  });
+
   it("assembles one complete deterministic parser-valid fixture snapshot", () => {
     const source = tracks();
     const analysis = analyzeRace(source);

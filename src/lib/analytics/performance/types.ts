@@ -6,6 +6,7 @@ export type PerformanceProvenanceSource =
   | "processed-track"
   | "corrected-analysis"
   | "detected-geometry"
+  | "inferred-finish-geometry"
   | "organizer-override"
   | "timer-event"
   | "line-crossing"

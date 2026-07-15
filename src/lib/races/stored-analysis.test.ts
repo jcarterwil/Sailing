@@ -122,8 +122,8 @@ describe("parseStoredRaceAnalysis", () => {
   it("requires reanalysis when a valid payload uses an older calculation version", () => {
     const outdated = analysis();
     outdated.performance = currentPerformance();
-    outdated.performance.calculationVersion = "performance-v1.1.0";
-    outdated.performance.provenance.calculationVersion = "performance-v1.1.0";
+    outdated.performance.calculationVersion = "performance-v1.2.0";
+    outdated.performance.provenance.calculationVersion = "performance-v1.2.0";
     const parsed = parse(outdated);
     expect(parsed).toMatchObject({
       status: "upgrade-required",

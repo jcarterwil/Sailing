@@ -12,6 +12,14 @@ import {
   FIXTURE_TWD_DEG,
   SIX_BOAT_FIVE_LEG_FIXTURE,
 } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
+import {
+  MIXED_FINISH_ENTRY_IDS,
+  MIXED_FINISH_EXPECTED_TIMES,
+  MIXED_FINISH_GUN_MS,
+  MIXED_SOURCE_TERMINAL_FINISH_RACE,
+  MIXED_SOURCE_TERMINAL_FINISH_TRACKS,
+  MIXED_SOURCE_TERMINAL_FINISH_WIND,
+} from "@/lib/analytics/performance/__fixtures__/mixed-source-terminal-finish";
 import type {
   ProcessedTrack,
   RaceCoordinate,
@@ -167,6 +175,183 @@ function simpleRace(
 }
 
 describe("buildPerformanceCourse", () => {
+  it("recovers distinct mixed VKX/CSV finishes from one timer-seeded fleet trajectory cluster", () => {
+    const tracks = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS);
+    const forward = buildPerformanceCourse(
+      tracks,
+      MIXED_SOURCE_TERMINAL_FINISH_RACE,
+      MIXED_SOURCE_TERMINAL_FINISH_WIND,
+    );
+    const finish = forward.course.points.at(-1)!;
+    expect(tracks.filter((track) => {
+      const endMs = track.t0 + track.t.at(-1)!;
+      return endMs >= MIXED_SOURCE_TERMINAL_FINISH_RACE.finish.timeMs!;
+    })).toHaveLength(2);
+    expect(finish.provenance).toMatchObject({
+      source: "inferred-finish-geometry",
+      confidence: "low",
+      coveragePct: 100,
+    });
+    expect(finish.supportingEntryCount).toBe(6);
+    expect(finish.spreadM).toBeLessThan(1);
+    expect(forward.course.reviewRequired).toBe(true);
+
+    const finishPassages = forward.course.passagesByEntry.map((entry) => entry.passages.at(-1)!);
+    expect(new Set(finishPassages.map((passage) => passage.timeMs))).toHaveLength(6);
+    for (const entry of forward.course.passagesByEntry) {
+      const passage = entry.passages.at(-1)!;
+      expect(passage.timeMs).toBeCloseTo(
+        MIXED_FINISH_EXPECTED_TIMES[entry.entryId as keyof typeof MIXED_FINISH_EXPECTED_TIMES],
+        -2,
+      );
+      expect(passage.source).toBe(entry.entryId === "echo" ? "timer-event" : "segment-approach");
+    }
+
+    const results = analyzeRaceResults({
+      entryIds: MIXED_FINISH_ENTRY_IDS,
+      tracks,
+      course: forward.course,
+      gunTimeMs: MIXED_SOURCE_TERMINAL_FINISH_RACE.start.timeMs,
+    }).results;
+    expect(results.every((result) => result.status === "finished")).toBe(true);
+    expect(results.find((result) => result.entryId === "echo")?.provenance.source).toBe("timer-event");
+    expect(results.filter((result) => result.entryId !== "echo").every((result) =>
+      result.finish?.source === "passage-approach" &&
+      result.provenance.source === "inferred-finish-geometry" &&
+      result.reviewRequired)).toBe(true);
+
+    const reverseTracks = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS).reverse();
+    const reverse = buildPerformanceCourse(
+      reverseTracks,
+      MIXED_SOURCE_TERMINAL_FINISH_RACE,
+      MIXED_SOURCE_TERMINAL_FINISH_WIND,
+    );
+    const reverseResults = analyzeRaceResults({
+      entryIds: [...MIXED_FINISH_ENTRY_IDS].reverse(),
+      tracks: reverseTracks,
+      course: reverse.course,
+      gunTimeMs: MIXED_SOURCE_TERMINAL_FINISH_RACE.start.timeMs,
+    }).results;
+    expect(JSON.stringify(reverse.course)).toBe(JSON.stringify(forward.course));
+    expect(JSON.stringify(reverseResults)).toBe(JSON.stringify(results));
+  });
+
+  it("uses fleet-corroborated inference when a minority of mixed-source tracks have timers", () => {
+    const tracks = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS);
+    const secondTimer = tracks.find((track) => track.entryId === "foxtrot")!;
+    secondTimer.source = "vkx";
+    secondTimer.extras = {
+      formatVersion: 5,
+      loggingRateHz: 0.2,
+      timerEvents: [{
+        t: MIXED_FINISH_EXPECTED_TIMES.foxtrot,
+        event: "race_end",
+        timerSec: 0,
+      }],
+      linePings: [],
+      windSamples: [],
+      declinationDeg: 0,
+    };
+    const course = buildPerformanceCourse(
+      tracks,
+      MIXED_SOURCE_TERMINAL_FINISH_RACE,
+      MIXED_SOURCE_TERMINAL_FINISH_WIND,
+    ).course;
+    expect(course.points.at(-1)).toMatchObject({
+      supportingEntryCount: 6,
+      provenance: { source: "inferred-finish-geometry", confidence: "low" },
+    });
+    expect(analyzeRaceResults({
+      entryIds: MIXED_FINISH_ENTRY_IDS,
+      tracks,
+      course,
+      gunTimeMs: MIXED_FINISH_GUN_MS,
+    }).results.every((result) => result.status === "finished")).toBe(true);
+  });
+
+  it("uses an early timer seed when it follows that boat's own final-mark passage", () => {
+    const origin = { lat: 45, lon: -85 };
+    const mark = fromLocalXY(origin.lat, origin.lon, 0, 100);
+    const entryIds = ["one", "two", "three", "four", "five", "six"];
+    const tracks = entryIds.map((entryId, index) => {
+      const markMs = FIXTURE_GUN_MS + (index === 0 ? 16_000 : 30_000 + index * 1_000);
+      const finishMs = FIXTURE_GUN_MS + (index === 0 ? 20_000 : 40_000 + index * 1_000);
+      return localTrack(entryId, origin, [
+        { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+        { timeMs: markMs, x: 0, y: 100 },
+        { timeMs: finishMs, x: 0, y: 200 },
+        { timeMs: finishMs + 1_000, x: 0, y: 205 },
+      ], index === 0 ? finishMs : null);
+    });
+    const race = simpleRace(
+      origin,
+      [mark],
+      [FIXTURE_GUN_MS + 30_000, FIXTURE_GUN_MS + 50_000],
+      FIXTURE_GUN_MS + 50_000,
+    );
+    const course = buildPerformanceCourse(tracks, race, fixtureWind()).course;
+    expect(course.points.at(-1)).toMatchObject({
+      supportingEntryCount: 6,
+      provenance: { source: "inferred-finish-geometry", confidence: "low" },
+    });
+    expect(course.passagesByEntry.find((entry) => entry.entryId === "one")?.passages)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ pointIndex: 1, timeMs: FIXTURE_GUN_MS + 16_000 }),
+        expect.objectContaining({
+          pointIndex: 2,
+          timeMs: FIXTURE_GUN_MS + 20_000,
+          source: "timer-event",
+        }),
+      ]));
+  });
+
+  it("prefers a valid strict finish cluster over a higher-support over-wide timer seed", () => {
+    const origin = { lat: 45, lon: -85 };
+    const raceEndMs = FIXTURE_GUN_MS + 120_000;
+    const race = simpleRace(origin, [], [raceEndMs], raceEndMs);
+    const badOffsets = [
+      { x: 35, y: -65 },
+      { x: 0, y: 70 },
+      { x: -13, y: 70 },
+      { x: -18, y: 70 },
+      { x: 23, y: 66 },
+      { x: 0, y: 0 },
+    ];
+    const tracks = Array.from({ length: 6 }, (_, index) => {
+      const bad = badOffsets[index];
+      const supportsRealFinish = index < 5;
+      const routeY = bad.y < 0 ? 400 : 800;
+      const samples = supportsRealFinish
+        ? [
+            { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+            { timeMs: FIXTURE_GUN_MS + 30_000, x: 0, y: 150 },
+            { timeMs: FIXTURE_GUN_MS + 40_000, x: 0, y: 200 },
+            { timeMs: FIXTURE_GUN_MS + 50_000, x: 0, y: 250 },
+            { timeMs: FIXTURE_GUN_MS + 80_000, x: 300, y: routeY },
+            { timeMs: FIXTURE_GUN_MS + 90_000, x: bad.x, y: 600 + bad.y + (bad.y < 0 ? -50 : 50) },
+            { timeMs: FIXTURE_GUN_MS + 100_000, x: bad.x, y: 600 + bad.y },
+          ]
+        : [
+            { timeMs: FIXTURE_GUN_MS, x: 300, y: 0 },
+            { timeMs: FIXTURE_GUN_MS + 30_000, x: 200, y: 150 },
+            { timeMs: FIXTURE_GUN_MS + 40_000, x: 200, y: 200 },
+            { timeMs: FIXTURE_GUN_MS + 50_000, x: 200, y: 250 },
+            { timeMs: FIXTURE_GUN_MS + 80_000, x: 200, y: 500 },
+            { timeMs: FIXTURE_GUN_MS + 90_000, x: 0, y: 550 },
+            { timeMs: FIXTURE_GUN_MS + 100_000, x: 0, y: 600 },
+          ];
+      const timerMs = index === 0
+        ? FIXTURE_GUN_MS + 40_000
+        : index === 5 ? FIXTURE_GUN_MS + 100_000 : null;
+      return localTrack(`entry-${index}`, origin, samples, timerMs);
+    });
+    const finish = buildPerformanceCourse(tracks, race, fixtureWind()).course.points.at(-1)!;
+    expect(finish.provenance.source).toBe("inferred-finish-geometry");
+    expect(finish.supportingEntryCount).toBe(5);
+    expect(haversineM(finish.position!.lat, finish.position!.lon, origin.lat, origin.lon))
+      .toBeCloseTo(200, 0);
+  });
+
   it("resolves the six-boat five-leg fixture into ordered geometry and monotonic passages", () => {
     const result = buildPerformanceCourse(
       SIX_BOAT_FIVE_LEG_FIXTURE.tracks,
@@ -275,7 +460,7 @@ describe("buildPerformanceCourse", () => {
     expect(result.warnings.some((warning) => warning.code === "unavailable-finish-geometry")).toBe(true);
   });
 
-  it("rejects a fleet-boundary finish that lacks majority entry support", () => {
+  it("rejects timer-seeded finish geometry that lacks majority entry support", () => {
     const origin = { lat: 45, lon: -85 };
     const finishMs = FIXTURE_GUN_MS + 60_000;
     const race = simpleRace(origin, [], [finishMs], finishMs);
@@ -285,12 +470,15 @@ describe("buildPerformanceCourse", () => {
       index < 2
         ? [
             { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+            { timeMs: finishMs - 10_000, x: 0, y: 150 },
             { timeMs: finishMs, x: 0, y: 200 },
+            { timeMs: finishMs + 1_000, x: 0, y: 205 },
           ]
         : [
             { timeMs: FIXTURE_GUN_MS, x: index * 10, y: 0 },
             { timeMs: finishMs - 30_000, x: index * 10, y: 100 },
           ],
+      index === 0 ? finishMs : null,
     ));
 
     const result = buildPerformanceCourse(tracks, race, fixtureWind());
@@ -303,7 +491,7 @@ describe("buildPerformanceCourse", () => {
       .toContain("only 2 of 6 entries");
   });
 
-  it("retains a fleet-boundary finish when a strict majority supports it", () => {
+  it("retains timer-seeded finish geometry when a strict majority supports it", () => {
     const origin = { lat: 45, lon: -85 };
     const finishMs = FIXTURE_GUN_MS + 60_000;
     const race = simpleRace(origin, [], [finishMs], finishMs);
@@ -313,20 +501,191 @@ describe("buildPerformanceCourse", () => {
       index < 4
         ? [
             { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+            { timeMs: finishMs - 10_000, x: index, y: 150 },
             { timeMs: finishMs, x: index, y: 200 },
+            { timeMs: finishMs + 1_000, x: index, y: 205 },
           ]
         : [
             { timeMs: FIXTURE_GUN_MS, x: index * 10, y: 0 },
             { timeMs: finishMs - 30_000, x: index * 10, y: 100 },
           ],
+      index === 0 ? finishMs : null,
     ));
 
     const result = buildPerformanceCourse(tracks, race, fixtureWind());
     const finish = result.course.points.at(-1)!;
     expect(finish.position).not.toBeNull();
     expect(finish.supportingEntryCount).toBe(4);
-    expect(finish.provenance).toMatchObject({ source: "detected-geometry", confidence: "low" });
+    expect(finish.provenance).toMatchObject({ source: "inferred-finish-geometry", confidence: "low" });
     expect(result.course.legs.at(-1)?.distanceM).not.toBeNull();
+  });
+
+  it.each([1, 2, 10])(
+    "keeps timer-seeded moving-approach inference equivalent at %s Hz",
+    (loggingRateHz) => {
+      const origin = { lat: 45, lon: -85 };
+      const finishMs = FIXTURE_GUN_MS + 60_000;
+      const stepMs = 1_000 / loggingRateHz;
+      const race = simpleRace(origin, [], [finishMs], finishMs);
+      const tracks = Array.from({ length: 6 }, (_, entryIndex) => {
+        const samples = Array.from(
+          { length: 61 * loggingRateHz + 1 },
+          (_, sampleIndex) => {
+            const elapsedMs = sampleIndex * stepMs;
+            return {
+              timeMs: FIXTURE_GUN_MS + elapsedMs,
+              x: entryIndex * 2,
+              y: elapsedMs <= 60_000 ? elapsedMs / 300 : 200 + (elapsedMs - 60_000) / 200,
+            };
+          },
+        );
+        return localTrack(
+          `entry-${entryIndex}`,
+          origin,
+          samples,
+          entryIndex === 0 ? finishMs : null,
+        );
+      });
+      const finish = buildPerformanceCourse(tracks, race, fixtureWind()).course.points.at(-1)!;
+      expect(finish).toMatchObject({
+        supportingEntryCount: 6,
+        provenance: { source: "inferred-finish-geometry", confidence: "low" },
+      });
+      expect(finish.position).not.toBeNull();
+    },
+  );
+
+  it("does not infer a finish from fleet endpoints without a positioned timer seed", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishMs = FIXTURE_GUN_MS + 60_000;
+    const race = simpleRace(origin, [], [finishMs], finishMs);
+    const tracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+        { timeMs: finishMs, x: index, y: 200 },
+      ],
+    ));
+    const finish = buildPerformanceCourse(tracks, race, fixtureWind()).course.points.at(-1)!;
+    expect(finish.position).toBeNull();
+    expect(finish.supportingEntryCount).toBe(0);
+  });
+
+  it("does not treat gap-isolated terminal samples as timer-corroborating trajectories", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishMs = FIXTURE_GUN_MS + 60_000;
+    const race = simpleRace(origin, [], [finishMs], finishMs);
+    const tracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+        { timeMs: finishMs, x: index, y: 200 },
+      ],
+      index === 0 ? finishMs : null,
+    ));
+    const finish = buildPerformanceCourse(tracks, race, fixtureWind()).course.points.at(-1)!;
+    expect(finish.position).toBeNull();
+    expect(finish.provenance.source).toBe("unavailable");
+
+    const stationaryTracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+        { timeMs: finishMs - 10_000, x: index, y: 200 },
+        { timeMs: finishMs - 5_000, x: index, y: 200 },
+        { timeMs: finishMs, x: index, y: 200 },
+      ],
+      index === 0 ? finishMs : null,
+    ));
+    const stationaryFinish = buildPerformanceCourse(
+      stationaryTracks,
+      race,
+      fixtureWind(),
+    ).course.points.at(-1)!;
+    expect(stationaryFinish.position).toBeNull();
+    expect(stationaryFinish.provenance.source).toBe("unavailable");
+
+    const jitteredTracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+        ...Array.from({ length: 6 }, (__, jitterIndex) => ({
+          timeMs: finishMs - 5_000 + jitterIndex * 1_000,
+          x: jitterIndex % 2 === 0 ? -0.4 : 0.4,
+          y: 200,
+        })),
+      ],
+      index === 0 ? finishMs : null,
+    ));
+    const jitteredFinish = buildPerformanceCourse(
+      jitteredTracks,
+      race,
+      fixtureWind(),
+    ).course.points.at(-1)!;
+    expect(jitteredFinish.position).toBeNull();
+    expect(jitteredFinish.provenance.source).toBe("unavailable");
+
+    const movingEndpointTracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+        { timeMs: finishMs - 5_000, x: index, y: 180 },
+        { timeMs: finishMs, x: index, y: 200 },
+      ],
+      index === 0 ? finishMs : null,
+    ));
+    const movingEndpointFinish = buildPerformanceCourse(
+      movingEndpointTracks,
+      race,
+      fixtureWind(),
+    ).course.points.at(-1)!;
+    expect(movingEndpointFinish.position).toBeNull();
+    expect(movingEndpointFinish.provenance.source).toBe("unavailable");
+
+    const stoppedEndpointTracks = movingEndpointTracks.map((track) => {
+      const stopped = cloneTrack(track);
+      const endpointLat = stopped.lat.at(-1)!;
+      const endpointLon = stopped.lon.at(-1)!;
+      stopped.t.push(finishMs + 5_000 - stopped.t0);
+      stopped.lat.push(endpointLat);
+      stopped.lon.push(endpointLon);
+      stopped.sog.push(0);
+      stopped.cog.push(0);
+      stopped.hdg.push(0);
+      stopped.heel.push(0);
+      stopped.trim.push(0);
+      return stopped;
+    });
+    const stoppedEndpointFinish = buildPerformanceCourse(
+      stoppedEndpointTracks,
+      race,
+      fixtureWind(),
+    ).course.points.at(-1)!;
+    expect(stoppedEndpointFinish.position).toBeNull();
+    expect(stoppedEndpointFinish.provenance.source).toBe("unavailable");
+
+    const departureOnlyTracks = Array.from({ length: 6 }, (_, index) => localTrack(
+      `entry-${index}`,
+      origin,
+      [
+        { timeMs: FIXTURE_GUN_MS, x: index, y: 0 },
+        { timeMs: finishMs, x: index, y: 200 },
+        { timeMs: finishMs + 5_000, x: index, y: 220 },
+      ],
+      index === 0 ? finishMs : null,
+    ));
+    const departureOnlyFinish = buildPerformanceCourse(
+      departureOnlyTracks,
+      race,
+      fixtureWind(),
+    ).course.points.at(-1)!;
+    expect(departureOnlyFinish.position).toBeNull();
+    expect(departureOnlyFinish.provenance.source).toBe("unavailable");
   });
 
   it("uses a low-confidence fleet centroid when the two-ended start line is missing", () => {
@@ -364,6 +723,288 @@ describe("buildPerformanceCourse", () => {
         -3,
       );
     }
+  });
+
+  it.each(["point", "line"] as const)(
+    "searches corrected %s finish geometry when the fleet finish time is unavailable",
+    (kind) => {
+      const origin = { lat: 45, lon: -85 };
+      const finish = fromLocalXY(origin.lat, origin.lon, 0, 200);
+      const finishLine = {
+        pin: fromLocalXY(origin.lat, origin.lon, -50, 200),
+        boat: fromLocalXY(origin.lat, origin.lon, 50, 200),
+      };
+      const mark = fromLocalXY(origin.lat, origin.lon, 0, 100);
+      const race = simpleRace(
+        origin,
+        [mark],
+        [FIXTURE_GUN_MS + 20_000, FIXTURE_GUN_MS + 40_000],
+        FIXTURE_GUN_MS + 40_000,
+      );
+      race.finish = { timeMs: null, source: "unavailable", confidence: "unavailable" };
+      race.durationMs = null;
+      const track = localTrack("one", origin, [
+        { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+        { timeMs: FIXTURE_GUN_MS + 20_000, x: 0, y: 100 },
+        { timeMs: FIXTURE_GUN_MS + 30_000, x: 0, y: 150 },
+        { timeMs: FIXTURE_GUN_MS + 40_000, x: 0, y: 250 },
+      ]);
+      const course = buildPerformanceCourse(
+        [track],
+        race,
+        fixtureWind(),
+        kind === "point" ? { point: finish } : { line: finishLine },
+      ).course;
+      const passage = course.passagesByEntry[0].passages.at(-1)!;
+      expect(course.passagesByEntry[0].passages.at(-2)?.timeMs).toBe(FIXTURE_GUN_MS + 20_000);
+      expect(passage.timeMs).toBe(FIXTURE_GUN_MS + 35_000);
+      expect(passage.source).toBe(kind === "point" ? "segment-approach" : "finite-line-crossing");
+      expect(analyzeRaceResults({
+        entryIds: ["one"],
+        tracks: [track],
+        course,
+        gunTimeMs: FIXTURE_GUN_MS,
+      }).results[0].status).toBe("finished");
+    },
+  );
+
+  it("finds an early corrected-line finisher before the fleet finish midpoint", () => {
+    const origin = { lat: 45, lon: -85 };
+    const mark = fromLocalXY(origin.lat, origin.lon, 0, 100);
+    const finishLine = {
+      pin: fromLocalXY(origin.lat, origin.lon, -50, 200),
+      boat: fromLocalXY(origin.lat, origin.lon, 50, 200),
+    };
+    const race = simpleRace(
+      origin,
+      [mark],
+      [FIXTURE_GUN_MS + 20_000, FIXTURE_GUN_MS + 60_000],
+      FIXTURE_GUN_MS + 60_000,
+    );
+    const track = localTrack("one", origin, [
+      { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+      { timeMs: FIXTURE_GUN_MS + 20_000, x: 0, y: 100 },
+      { timeMs: FIXTURE_GUN_MS + 30_000, x: 0, y: 200 },
+      { timeMs: FIXTURE_GUN_MS + 31_000, x: 0, y: 210 },
+    ]);
+    const course = buildPerformanceCourse(
+      [track],
+      race,
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    expect(course.passagesByEntry[0].passages.at(-1)).toMatchObject({
+      timeMs: FIXTURE_GUN_MS + 30_000,
+      source: "finite-line-crossing",
+    });
+  });
+
+  it("uses one scoped race-end timer when a source gap hides a corrected-line crossing", () => {
+    const origin = { lat: 45, lon: -85 };
+    const finishLine = {
+      pin: fromLocalXY(origin.lat, origin.lon, -50, 100),
+      boat: fromLocalXY(origin.lat, origin.lon, 50, 100),
+    };
+    const finishMs = FIXTURE_GUN_MS + 10_000;
+    const race = simpleRace(
+      origin,
+      [],
+      [FIXTURE_GUN_MS + 20_000],
+      FIXTURE_GUN_MS + 20_000,
+    );
+    const track = localTrack("one", origin, [
+      { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+      { timeMs: FIXTURE_GUN_MS + 20_000, x: 0, y: 200 },
+    ], finishMs);
+    const course = buildPerformanceCourse(
+      [track],
+      race,
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    expect(course.passagesByEntry[0].passages.at(-1)).toMatchObject({
+      timeMs: finishMs,
+      minDistanceM: null,
+      source: "timer-event",
+      confidence: "medium",
+    });
+    expect(analyzeRaceResults({
+      entryIds: ["one"],
+      tracks: [track],
+      course,
+      gunTimeMs: FIXTURE_GUN_MS,
+    }).results[0]).toMatchObject({
+      status: "finished",
+      finish: { timeMs: finishMs, source: "timer-event", crossing: false },
+    });
+
+    const ambiguous = cloneTrack(track);
+    ambiguous.extras!.timerEvents.push({
+      t: finishMs + 1_000,
+      event: "race_end",
+      timerSec: 0,
+    });
+    const ambiguousCourse = buildPerformanceCourse(
+      [ambiguous],
+      race,
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    expect(ambiguousCourse.passagesByEntry[0].passages.at(-1)?.timeMs).toBeNull();
+    expect(analyzeRaceResults({
+      entryIds: ["one"],
+      tracks: [ambiguous],
+      course: ambiguousCourse,
+      gunTimeMs: FIXTURE_GUN_MS,
+    }).results[0].status).toBe("unresolved");
+
+    const farTrack = localTrack("one", origin, [
+      { timeMs: FIXTURE_GUN_MS, x: 0, y: 300 },
+      { timeMs: FIXTURE_GUN_MS + 20_000, x: 0, y: 400 },
+    ], finishMs);
+    const farCourse = buildPerformanceCourse(
+      [farTrack],
+      race,
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    expect(farCourse.passagesByEntry[0].passages.at(-1)).toMatchObject({
+      timeMs: null,
+      source: "unavailable",
+    });
+  });
+
+  it("ignores an earlier race-end event outside the final-leg timer scope", () => {
+    const origin = { lat: 45, lon: -85 };
+    const mark = fromLocalXY(origin.lat, origin.lon, 0, 50);
+    const finishLine = {
+      pin: fromLocalXY(origin.lat, origin.lon, -50, 100),
+      boat: fromLocalXY(origin.lat, origin.lon, 50, 100),
+    };
+    const finishMs = FIXTURE_GUN_MS + 15_000;
+    const race = simpleRace(
+      origin,
+      [mark],
+      [FIXTURE_GUN_MS + 10_000, FIXTURE_GUN_MS + 20_000],
+      FIXTURE_GUN_MS + 20_000,
+    );
+    const track = localTrack("one", origin, [
+      { timeMs: FIXTURE_GUN_MS, x: 0, y: 0 },
+      { timeMs: FIXTURE_GUN_MS + 8_000, x: 0, y: 50 },
+      { timeMs: FIXTURE_GUN_MS + 20_000, x: 0, y: 150 },
+    ], finishMs);
+    track.extras!.timerEvents.unshift({
+      t: FIXTURE_GUN_MS + 4_000,
+      event: "race_end",
+      timerSec: 0,
+    });
+    const course = buildPerformanceCourse(
+      [track],
+      race,
+      fixtureWind(),
+      { line: finishLine },
+    ).course;
+    expect(course.passagesByEntry[0].passages.at(-1)).toMatchObject({
+      timeMs: finishMs,
+      source: "timer-event",
+    });
+    expect(analyzeRaceResults({
+      entryIds: ["one"],
+      tracks: [track],
+      course,
+      gunTimeMs: FIXTURE_GUN_MS,
+    }).results[0]).toMatchObject({
+      status: "finished",
+      finish: { timeMs: finishMs, source: "timer-event" },
+      provenance: { source: "timer-event" },
+    });
+  });
+
+  it("does not skip a missing final-mark passage when resolving an inferred finish", () => {
+    const tracks = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS);
+    const deficientIndex = tracks.findIndex((track) => track.entryId === "alpha");
+    tracks[deficientIndex] = shiftTrack(
+      tracks[deficientIndex],
+      MIXED_FINISH_GUN_MS + 900_000,
+      MIXED_FINISH_GUN_MS + 2_820_000,
+      200,
+    );
+    const course = buildPerformanceCourse(
+      tracks,
+      MIXED_SOURCE_TERMINAL_FINISH_RACE,
+      MIXED_SOURCE_TERMINAL_FINISH_WIND,
+    ).course;
+    expect(course.points.at(-1)).toMatchObject({
+      supportingEntryCount: 5,
+      provenance: { source: "inferred-finish-geometry" },
+    });
+    const deficientPassages = course.passagesByEntry.find((entry) => entry.entryId === "alpha")!.passages;
+    expect(deficientPassages.at(-2)?.timeMs).toBeNull();
+    expect(deficientPassages.at(-1)?.timeMs).toBeNull();
+    expect(analyzeRaceResults({
+      entryIds: MIXED_FINISH_ENTRY_IDS,
+      tracks,
+      course,
+      gunTimeMs: MIXED_FINISH_GUN_MS,
+    }).results.find((result) => result.entryId === "alpha")?.status).toBe("unresolved");
+  });
+
+  it("can seed fleet inference from an explicit timer boat with a missing final-mark passage", () => {
+    const tracks = structuredClone(MIXED_SOURCE_TERMINAL_FINISH_TRACKS);
+    const seedIndex = tracks.findIndex((track) => track.entryId === "echo");
+    tracks[seedIndex] = shiftTrack(
+      tracks[seedIndex],
+      MIXED_FINISH_GUN_MS + 900_000,
+      MIXED_FINISH_GUN_MS + 2_820_000,
+      200,
+    );
+    const course = buildPerformanceCourse(
+      tracks,
+      MIXED_SOURCE_TERMINAL_FINISH_RACE,
+      MIXED_SOURCE_TERMINAL_FINISH_WIND,
+    ).course;
+    expect(course.points.at(-1)).toMatchObject({
+      supportingEntryCount: 5,
+      provenance: { source: "inferred-finish-geometry" },
+    });
+    expect(course.passagesByEntry.find((entry) => entry.entryId === "echo")
+      ?.passages.at(-2)?.timeMs).toBeNull();
+    const results = analyzeRaceResults({
+      entryIds: MIXED_FINISH_ENTRY_IDS,
+      tracks,
+      course,
+      gunTimeMs: MIXED_FINISH_GUN_MS,
+    }).results;
+    expect(results.find((result) => result.entryId === "echo")).toMatchObject({
+      status: "finished",
+      finish: { source: "timer-event" },
+    });
+    expect(results.filter((result) => result.entryId !== "echo").every((result) =>
+      result.status === "finished" && result.provenance.source === "inferred-finish-geometry"))
+      .toBe(true);
+  });
+
+  it("keeps direct multi-timer geometry independent of mark-passage eligibility", () => {
+    const race = fixtureRace();
+    const finalMarkMs = race.legs[3].endTimeMs;
+    const priorMarkMs = race.legs[2].endTimeMs;
+    const tracks = SIX_BOAT_FIVE_LEG_FIXTURE.tracks
+      .filter((track) => track.entryId === "alpha" || track.entryId === "bravo")
+      .map((track) => track.entryId === "alpha"
+        ? shiftTrack(
+            track,
+            (priorMarkMs + finalMarkMs) / 2,
+            (finalMarkMs + race.finish.timeMs!) / 2,
+            500,
+          )
+        : cloneTrack(track));
+    const course = buildPerformanceCourse(tracks, race, fixtureWind()).course;
+    expect(course.passagesByEntry.find((entry) => entry.entryId === "alpha")
+      ?.passages.at(-2)?.timeMs).toBeNull();
+    expect(course.points.at(-1)).toMatchObject({
+      supportingEntryCount: 2,
+      provenance: { source: "timer-event" },
+    });
   });
 
   it("uses the earliest legal crossing when a track crosses the finish line multiple times", () => {

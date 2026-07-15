@@ -5,9 +5,13 @@ import {
   type StoredRaceCorrections,
 } from "@/lib/analytics/corrections";
 import {
+  PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M,
+  PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO,
+  PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES,
   PERFORMANCE_MAX_ENTRY_COUNT,
   PERFORMANCE_MAX_WARNING_MESSAGE_CHARS,
   PERFORMANCE_MAX_WARNINGS,
+  PERFORMANCE_PASSAGE_MAX_RADIUS_M,
   PERFORMANCE_TIE_MS,
 } from "@/lib/analytics/constants";
 import { columnLength, epochAt, finite } from "@/lib/analytics/internal";
@@ -133,12 +137,34 @@ function courseGeometryFinish(
   if (!finite(gunTimeMs)) return null;
   const finishPoint = course.points.findLast((point) => point.kind === "finish");
   if (!finishPoint?.line && !finishPoint?.position) return null;
-  const passage = course.passagesByEntry
-    .find((entry) => entry.entryId === entryId)
-    ?.passages.findLast((candidate) => candidate.pointIndex === finishPoint.index);
+  const entryPassages = course.passagesByEntry.find((entry) => entry.entryId === entryId)?.passages;
+  const passage = entryPassages
+    ?.findLast((candidate) => candidate.pointIndex === finishPoint.index);
+  const priorPassage = entryPassages
+    ?.findLast((candidate) => candidate.pointIndex === finishPoint.index - 1);
+  const passageDistanceM = passage?.minDistanceM;
+  const passageTimeMs = passage?.timeMs;
+  const priorPassageTimeMs = priorPassage?.timeMs;
+  const inferredGeometry =
+    finishPoint.provenance.source === "inferred-finish-geometry" &&
+    finishPoint.line === null &&
+    finishPoint.position !== null &&
+    finishPoint.supportingEntryCount >= PERFORMANCE_COURSE_MIN_SUPPORTING_ENTRIES &&
+    course.passagesByEntry.length > 0 &&
+    finishPoint.supportingEntryCount / course.passagesByEntry.length >
+      PERFORMANCE_COURSE_INFERRED_FINISH_MIN_SUPPORT_RATIO &&
+    finishPoint.spreadM !== null &&
+    finishPoint.spreadM <= PERFORMANCE_COURSE_INFERRED_FINISH_MAX_SPREAD_M &&
+    finite(passageDistanceM) &&
+    passageDistanceM <= PERFORMANCE_PASSAGE_MAX_RADIUS_M &&
+    finite(priorPassageTimeMs) &&
+    finite(passageTimeMs) &&
+    passageTimeMs > priorPassageTimeMs;
   const supportedGeometryPassage = passage?.source === "finite-line-crossing" ||
+    passage?.source === "timer-event" ||
     (passage?.source === "segment-approach" &&
-      finishPoint.provenance.source === "organizer-override");
+      (finishPoint.provenance.source === "organizer-override" ||
+        inferredGeometry));
   if (
     !passage ||
     !supportedGeometryPassage ||
@@ -146,11 +172,15 @@ function courseGeometryFinish(
     passage.timeMs <= gunTimeMs ||
     passage.confidence === "unavailable"
   ) return null;
+  const source: PerformanceFinishEvidenceV1["source"] =
+    passage.source === "finite-line-crossing"
+      ? "finite-line-crossing"
+      : passage.source === "timer-event"
+        ? "timer-event"
+        : "passage-approach";
   return {
     timeMs: passage.timeMs,
-    source: passage.source === "finite-line-crossing"
-      ? "finite-line-crossing"
-      : "passage-approach",
+    source,
     confidence: passage.confidence,
     distanceM: passage.minDistanceM,
     crossing: passage.source === "finite-line-crossing",
@@ -197,14 +227,18 @@ function resolveFinish(
 
   const geometryFinish = courseGeometryFinish(entryId, course, gunTimeMs);
   if (geometryFinish) {
+    const inferredFinish = course.points.findLast((point) => point.kind === "finish")
+      ?.provenance.source === "inferred-finish-geometry";
     return {
       finish: geometryFinish,
       warningCodes,
-      source: correction
-        ? "organizer-override"
-        : geometryFinish.source === "finite-line-crossing"
-          ? "line-crossing"
-          : "passage-approach",
+      source: geometryFinish.source === "finite-line-crossing"
+        ? "line-crossing"
+        : geometryFinish.source === "timer-event"
+          ? "timer-event"
+          : inferredFinish
+            ? "inferred-finish-geometry"
+            : "passage-approach",
       confidence: geometryFinish.confidence,
       inputs: correction
         ? ["course.passagesByEntry", "raceCorrections.entryResults"]
@@ -220,7 +254,7 @@ function resolveFinish(
     return {
       finish: timer.finish,
       warningCodes,
-      source: correction ? "organizer-override" : "timer-event",
+      source: "timer-event",
       confidence: timer.finish.confidence,
       inputs: correction
         ? ["tracks.extras.timerEvents.race_end", "raceCorrections.entryResults"]
@@ -332,7 +366,7 @@ export function analyzeRaceResults(input: AnalyzeRaceResultsInput): PerformanceR
       reviewRequired:
         input.course.reviewRequired ||
         resolution.warningCodes.length > 0 ||
-        (correction?.placeOverride !== null && officialPlaceOverride === null),
+        (correction?.placeOverride != null && officialPlaceOverride === null),
       warningCodes: [...new Set(resolution.warningCodes)],
       provenance: provenance(
         resolution.source,
