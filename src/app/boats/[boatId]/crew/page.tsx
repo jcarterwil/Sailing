@@ -30,6 +30,14 @@ export default async function BoatCrewPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: boatMeta } = await supabase
+    .from("boats")
+    .select("id, merged_into_id")
+    .eq("id", boatId)
+    .maybeSingle();
+  if (!boatMeta) notFound();
+  if (boatMeta.merged_into_id) redirect(`/boats/${boatMeta.merged_into_id}/crew`);
+
   const [{ data: profile }, { data: canManage, error: accessError }] = await Promise.all([
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     supabase.rpc("can_manage_boat", { bid: boatId }),

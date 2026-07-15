@@ -319,10 +319,11 @@ export async function claimBoat(boatId: string) {
   const admin = createAdminClient();
   const { data: boat } = await admin
     .from("boats")
-    .select("id, claim_email, claim_code, owner_id")
+    .select("id, claim_email, claim_code, owner_id, merged_into_id")
     .eq("id", boatId)
     .maybeSingle();
   if (!boat) throw new Error("Boat not found.");
+  if (boat.merged_into_id) throw new Error("This boat was merged into another boat.");
   if (boat.owner_id) throw new Error("Boat already claimed.");
   // Admin-pre-registered boats are reserved. UUID claim only works for boats
   // with no claim_email AND no claim_code (legacy/organic boats).

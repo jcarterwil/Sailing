@@ -140,6 +140,9 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          merged_at: string | null
+          merged_by: string | null
+          merged_into_id: string | null
           name: string
           owner_id: string | null
           sail_number: string | null
@@ -152,6 +155,9 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_id?: string | null
           name: string
           owner_id?: string | null
           sail_number?: string | null
@@ -164,6 +170,9 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          merged_at?: string | null
+          merged_by?: string | null
+          merged_into_id?: string | null
           name?: string
           owner_id?: string | null
           sail_number?: string | null
@@ -178,10 +187,94 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "boats_merged_by_fkey"
+            columns: ["merged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boats_merged_into_id_fkey"
+            columns: ["merged_into_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "boats_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boat_merge_events: {
+        Row: {
+          affected_race_ids: string[]
+          analyses_invalidated: number
+          entries_moved: number
+          id: string
+          memberships_moved: number
+          memberships_upgraded: number
+          merged_at: string
+          merged_by: string
+          owner_inherited: boolean
+          reports_invalidated: number
+          source_boat_id: string
+          summary: Json
+          target_boat_id: string
+        }
+        Insert: {
+          affected_race_ids?: string[]
+          analyses_invalidated?: number
+          entries_moved?: number
+          id?: string
+          memberships_moved?: number
+          memberships_upgraded?: number
+          merged_at?: string
+          merged_by: string
+          owner_inherited?: boolean
+          reports_invalidated?: number
+          source_boat_id: string
+          summary?: Json
+          target_boat_id: string
+        }
+        Update: {
+          affected_race_ids?: string[]
+          analyses_invalidated?: number
+          entries_moved?: number
+          id?: string
+          memberships_moved?: number
+          memberships_upgraded?: number
+          merged_at?: string
+          merged_by?: string
+          owner_inherited?: boolean
+          reports_invalidated?: number
+          source_boat_id?: string
+          summary?: Json
+          target_boat_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_merge_events_merged_by_fkey"
+            columns: ["merged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_merge_events_source_boat_id_fkey"
+            columns: ["source_boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_merge_events_target_boat_id_fkey"
+            columns: ["target_boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
             referencedColumns: ["id"]
           },
         ]
@@ -1141,6 +1234,10 @@ export type Database = {
           entry_id: string
           race_id: string
         }[]
+      }
+      merge_boats: {
+        Args: { p_source_boat_id: string; p_target_boat_id: string }
+        Returns: Json
       }
       save_race_series_setup: {
         Args: {

@@ -134,6 +134,7 @@ export async function includeRequestedViewableBoat(
       .from("boats")
       .select("id, name, sail_number, boat_class, owner_id")
       .eq("id", requestedBoatId)
+      .is("merged_into_id", null)
       .maybeSingle(),
     supabase
       .from("boat_memberships")
@@ -175,6 +176,7 @@ export async function listViewableBoats(
         .from("boats")
         .select("id, name, sail_number, boat_class")
         .eq("owner_id", userId)
+        .is("merged_into_id", null)
         .order("name", { ascending: true })
         .order("id", { ascending: true })
         .limit(boundedLimit),
@@ -205,6 +207,7 @@ export async function listViewableBoats(
       .from("boats")
       .select("id, name, sail_number, boat_class")
       .in("id", crewIds)
+      .is("merged_into_id", null)
       .order("name", { ascending: true })
       .order("id", { ascending: true })
       .limit(boundedLimit);
