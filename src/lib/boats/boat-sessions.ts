@@ -7,7 +7,6 @@ export interface BoatSessionListItem {
   name: string;
   sessionType: SessionType | string | null;
   startsAt: string;
-  createdAt: string | null;
   timezone: string | null;
   startsAtSource: string | null;
   venue: string | null;

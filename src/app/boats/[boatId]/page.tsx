@@ -43,12 +43,15 @@ async function resolveBoatAccess(
   isAdmin: boolean,
 ): Promise<ViewableBoatAccess> {
   if (ownerId === userId) return "owner";
-  const { data: membership } = await supabase
+  const { data: membership, error } = await supabase
     .from("boat_memberships")
     .select("role")
     .eq("boat_id", boatId)
     .eq("user_id", userId)
     .maybeSingle();
+  if (error) {
+    throw new Error(`Could not resolve boat access: ${error.message}`);
+  }
   if (membership?.role === "editor") return "editor";
   if (membership?.role === "viewer") return "viewer";
   // Admins inherit manage/edit without membership; label that clearly.

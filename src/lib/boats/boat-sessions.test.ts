@@ -17,7 +17,6 @@ function session(
     name: overrides.name ?? "Session",
     sessionType: overrides.sessionType ?? "race",
     startsAt: overrides.startsAt ?? "2024-01-01T00:00:00.000Z",
-    createdAt: overrides.createdAt ?? "2024-01-02T00:00:00.000Z",
     timezone: overrides.timezone ?? "UTC",
     startsAtSource: overrides.startsAtSource ?? "manual",
     venue: overrides.venue ?? null,

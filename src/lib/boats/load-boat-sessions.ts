@@ -6,6 +6,9 @@ import {
 } from "@/lib/boats/boat-sessions";
 import type { Database } from "@/lib/supabase/database.types";
 
+/** Safety bound for My Sailing / Boat Hub lists (in-memory page after fetch). */
+export const BOAT_SESSION_QUERY_LIMIT = 500;
+
 /** Load Sessions for one boat without raw GPS payloads. */
 export async function loadBoatSessions(
   supabase: SupabaseClient<Database>,
@@ -13,8 +16,12 @@ export async function loadBoatSessions(
 ): Promise<BoatSessionListItem[]> {
   const { data: entries, error } = await supabase
     .from("race_entries")
-    .select("id, races(*), tracks(status)")
-    .eq("boat_id", boatId);
+    .select(
+      "id, races(id, name, session_type, starts_at, starts_at_source, timezone, venue), tracks(status)",
+    )
+    .eq("boat_id", boatId)
+    .order("id", { ascending: false })
+    .limit(BOAT_SESSION_QUERY_LIMIT);
 
   if (error) throw new Error(`Could not load boat sessions: ${error.message}`);
 
@@ -26,12 +33,11 @@ export async function loadBoatSessions(
       entryId: entry.id,
       sessionId: race.id,
       name: race.name,
-      sessionType: "session_type" in race ? race.session_type : "race",
-      startsAt: race.starts_at ?? race.created_at,
-      createdAt: race.created_at,
+      sessionType: race.session_type ?? "race",
+      // Never fall back to created_at/upload time as the sailed date.
+      startsAt: race.starts_at,
       timezone: race.timezone,
-      startsAtSource:
-        "starts_at_source" in race ? (race.starts_at_source as string | null) : null,
+      startsAtSource: race.starts_at_source ?? null,
       venue: race.venue,
       trackStatus: entry.tracks?.status ?? null,
     });

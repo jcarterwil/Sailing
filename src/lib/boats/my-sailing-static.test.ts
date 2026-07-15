@@ -45,8 +45,13 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
   it("surfaces Date needs review instead of upload-time as sailed date", () => {
     const list = source("src/components/boats/boat-session-list.tsx");
     const helpers = source("src/lib/boats/boat-sessions.ts");
+    const loader = source("src/lib/boats/load-boat-sessions.ts");
     expect(list).toContain("dateNeedsReviewLabel");
-    expect(helpers).toContain('return "Date needs review"');
+    expect(list).toContain("sessionNeedsDateReview(session.startsAtSource)");
     expect(list).not.toContain("legacyDateWarning");
+    expect(helpers).toContain('return "Date needs review"');
+    expect(loader).toContain("BOAT_SESSION_QUERY_LIMIT");
+    expect(loader).toContain(".limit(BOAT_SESSION_QUERY_LIMIT)");
+    expect(loader).not.toContain("race.created_at");
   });
 });

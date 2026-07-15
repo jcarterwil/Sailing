@@ -41,16 +41,19 @@ export function BoatSessionList({
               </Link>
               <Badge variant="outline">{sessionBadgeLabel(session.sessionType)}</Badge>
             </div>
-            <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <p
+              className={
+                sessionNeedsDateReview(session.startsAtSource)
+                  ? "flex flex-wrap items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400"
+                  : "flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+              }
+            >
               <CalendarDays className="size-3.5" aria-hidden="true" />
-              {formatSessionDateTime(session.startsAt, session.timezone)}
+              {sessionNeedsDateReview(session.startsAtSource)
+                ? dateNeedsReviewLabel()
+                : formatSessionDateTime(session.startsAt, session.timezone)}
               {session.venue ? ` · ${session.venue}` : ""}
             </p>
-            {sessionNeedsDateReview(session.startsAtSource) ? (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                {dateNeedsReviewLabel()}
-              </p>
-            ) : null}
           </div>
           <Badge
             variant={session.trackStatus === "processed" ? "secondary" : "outline"}
