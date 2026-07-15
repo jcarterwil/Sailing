@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
+import type { SessionType } from "@/lib/sessions/types";
 
 export const SESSION_WORKSPACE_TABS = [
   "overview",
@@ -58,20 +59,32 @@ export function sessionWorkspaceHref(
   return `/races/${raceId}/report`;
 }
 
+export function sessionWorkspaceTabsForType(
+  sessionType: SessionType,
+): readonly SessionWorkspaceTab[] {
+  if (sessionType === "practice") {
+    return SESSION_WORKSPACE_TABS.filter((tab) => tab !== "report");
+  }
+  return SESSION_WORKSPACE_TABS;
+}
+
 /** Locked Overview → Data → Replay → Performance → Report navigation. */
 export function SessionWorkspaceNav({
   raceId,
   activeTab,
+  sessionType = "race",
 }: {
   raceId: string;
   activeTab: SessionWorkspaceTab;
+  sessionType?: SessionType;
 }) {
+  const tabs = sessionWorkspaceTabsForType(sessionType);
   return (
     <nav
       aria-label="Session sections"
       className="-mx-1 flex gap-2 overflow-x-auto border-b border-border/70 px-1 pb-3"
     >
-      {SESSION_WORKSPACE_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const selected = tab === activeTab;
         return (
           <Link

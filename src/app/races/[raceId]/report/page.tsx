@@ -27,6 +27,7 @@ export default async function RaceReportPage({
 
   const chrome = await loadSessionWorkspaceChrome(supabase, raceId, user.id);
   if (!chrome) notFound();
+  if (chrome.isPractice) redirect(`/races/${raceId}`);
 
   await expireStaleReportGenerations(raceId);
   const [{ data: profile }, initialSnapshot] = await Promise.all([
@@ -55,7 +56,11 @@ export default async function RaceReportPage({
         primaryAction={chrome.primaryAction}
       />
       <div className="space-y-6 py-6">
-        <SessionWorkspaceNav raceId={chrome.raceId} activeTab="report" />
+        <SessionWorkspaceNav
+          raceId={chrome.raceId}
+          activeTab="report"
+          sessionType={chrome.sessionType}
+        />
         <ReportPageClient
           raceId={raceId}
           raceName={chrome.name}

@@ -12,8 +12,10 @@ const base: ResolveSessionPrimaryActionInput = {
   canUpload: true,
   canEdit: true,
   hasAnyTrack: false,
+  hasMissingTrack: false,
   hasProcessingTrack: false,
   hasErrorTrack: false,
+  allTracksProcessed: false,
   analysisCurrent: false,
   replayAvailable: false,
 };
@@ -21,6 +23,22 @@ const base: ResolveSessionPrimaryActionInput = {
 describe("resolveSessionPrimaryAction", () => {
   it("prioritizes Add data when there is no track and the caller can upload", () => {
     expect(resolveSessionPrimaryAction(base)).toEqual({
+      kind: "add-data",
+      label: "Add data",
+      href: `/races/${base.raceId}?tab=data`,
+      disabled: false,
+    });
+  });
+
+  it("sends incomplete fleets back to Data before review", () => {
+    expect(
+      resolveSessionPrimaryAction({
+        ...base,
+        hasAnyTrack: true,
+        hasMissingTrack: true,
+        replayAvailable: true,
+      }),
+    ).toEqual({
       kind: "add-data",
       label: "Add data",
       href: `/races/${base.raceId}?tab=data`,
@@ -44,6 +62,7 @@ describe("resolveSessionPrimaryAction", () => {
         ...base,
         hasAnyTrack: true,
         hasProcessingTrack: true,
+        allTracksProcessed: false,
       }),
     ).toEqual({
       kind: "processing",
@@ -53,10 +72,12 @@ describe("resolveSessionPrimaryAction", () => {
     });
   });
 
-  it("offers Fix data issue for editors when a track failed", () => {
+  it("offers Fix data issue for uploaders when a track failed", () => {
     expect(
       resolveSessionPrimaryAction({
         ...base,
+        canEdit: false,
+        canUpload: true,
         hasAnyTrack: true,
         hasErrorTrack: true,
       }),
@@ -80,11 +101,12 @@ describe("resolveSessionPrimaryAction", () => {
     ).toBeNull();
   });
 
-  it("offers Review & analyze when analysis is missing or stale", () => {
+  it("offers Review & analyze only when the full fleet is processed", () => {
     expect(
       resolveSessionPrimaryAction({
         ...base,
         hasAnyTrack: true,
+        allTracksProcessed: true,
         replayAvailable: true,
         analysisCurrent: false,
       }),
@@ -102,6 +124,7 @@ describe("resolveSessionPrimaryAction", () => {
         ...base,
         sessionType: "practice",
         hasAnyTrack: true,
+        allTracksProcessed: true,
         replayAvailable: true,
         analysisCurrent: false,
       })?.href,
@@ -113,6 +136,7 @@ describe("resolveSessionPrimaryAction", () => {
       resolveSessionPrimaryAction({
         ...base,
         hasAnyTrack: true,
+        allTracksProcessed: true,
         replayAvailable: true,
         analysisCurrent: true,
       }),
@@ -131,6 +155,7 @@ describe("resolveSessionPrimaryAction", () => {
         canUpload: false,
         canEdit: false,
         hasAnyTrack: true,
+        allTracksProcessed: true,
         replayAvailable: true,
         analysisCurrent: false,
       }),
@@ -161,22 +186,28 @@ describe("summarizeSessionTrackStatuses", () => {
       ]),
     ).toEqual({
       hasAnyTrack: true,
+      hasMissingTrack: true,
       hasProcessingTrack: true,
       hasErrorTrack: true,
+      allTracksProcessed: false,
       replayAvailable: true,
     });
     expect(
       summarizeSessionTrackStatuses([{ status: "processed", processedPath: null }]),
     ).toEqual({
       hasAnyTrack: true,
+      hasMissingTrack: false,
       hasProcessingTrack: false,
       hasErrorTrack: false,
+      allTracksProcessed: true,
       replayAvailable: false,
     });
     expect(summarizeSessionTrackStatuses([null, null])).toEqual({
       hasAnyTrack: false,
+      hasMissingTrack: true,
       hasProcessingTrack: false,
       hasErrorTrack: false,
+      allTracksProcessed: false,
       replayAvailable: false,
     });
   });

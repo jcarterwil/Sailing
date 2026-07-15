@@ -207,7 +207,11 @@ export default async function ReplayPage({
           primaryAction={chrome.primaryAction}
         />
         <div className="space-y-6 py-6">
-          <SessionWorkspaceNav raceId={chrome.raceId} activeTab="replay" />
+          <SessionWorkspaceNav
+            raceId={chrome.raceId}
+            activeTab="replay"
+            sessionType={chrome.sessionType}
+          />
           <section
             className="rounded-xl border bg-card/70 p-6"
             aria-labelledby="session-replay-heading"
@@ -251,7 +255,11 @@ export default async function ReplayPage({
             {trackMetas.length} boat{trackMetas.length === 1 ? "" : "s"}
           </span>
         </div>
-        <SessionWorkspaceNav raceId={race.id} activeTab="replay" />
+        <SessionWorkspaceNav
+          raceId={race.id}
+          activeTab="replay"
+          sessionType={chrome.sessionType}
+        />
       </header>
       <div className="min-h-0 flex-1">
         <ReplayShell

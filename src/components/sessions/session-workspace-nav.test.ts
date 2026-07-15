@@ -4,6 +4,7 @@ import {
   parseSessionWorkspaceTab,
   resolveSessionWorkspaceTab,
   sessionWorkspaceHref,
+  sessionWorkspaceTabsForType,
   SESSION_WORKSPACE_TABS,
 } from "@/components/sessions/session-workspace-nav";
 
@@ -15,6 +16,12 @@ describe("session workspace navigation", () => {
       "replay",
       "performance",
       "report",
+    ]);
+    expect([...sessionWorkspaceTabsForType("practice")]).toEqual([
+      "overview",
+      "data",
+      "replay",
+      "performance",
     ]);
   });
 

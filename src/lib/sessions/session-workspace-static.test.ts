@@ -35,5 +35,6 @@ describe("Session workspace contracts", () => {
     expect(replay).toContain("SessionWorkspaceNav");
     expect(performance).toContain("SessionWorkspaceNav");
     expect(report).toContain("SessionWorkspaceNav");
+    expect(report).toContain("chrome.isPractice");
   });
 });

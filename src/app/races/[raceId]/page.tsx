@@ -277,7 +277,11 @@ export default async function RaceManagePage({
       />
 
       <div className="space-y-6 py-6">
-        <SessionWorkspaceNav raceId={race.id} activeTab={hubTab} />
+        <SessionWorkspaceNav
+          raceId={race.id}
+          activeTab={hubTab}
+          sessionType={sessionType}
+        />
 
         {hubTab === "overview" ? (
           <section className="space-y-6" aria-labelledby="session-overview-heading">

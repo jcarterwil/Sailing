@@ -69,7 +69,11 @@ export default async function RacePerformancePage({
           primaryAction={chrome.primaryAction}
         />
         <div className="space-y-6 py-6">
-          <SessionWorkspaceNav raceId={chrome.raceId} activeTab="performance" />
+          <SessionWorkspaceNav
+            raceId={chrome.raceId}
+            activeTab="performance"
+            sessionType={chrome.sessionType}
+          />
           <section
             className="rounded-xl border bg-card/70 p-6"
             aria-labelledby="practice-performance-heading"
@@ -155,7 +159,11 @@ export default async function RacePerformancePage({
         primaryAction={chrome.primaryAction}
       />
       <div className="space-y-6 py-6">
-        <SessionWorkspaceNav raceId={chrome.raceId} activeTab="performance" />
+        <SessionWorkspaceNav
+          raceId={chrome.raceId}
+          activeTab="performance"
+          sessionType={chrome.sessionType}
+        />
         {chromeNode}
       </div>
     </AuthenticatedShell>

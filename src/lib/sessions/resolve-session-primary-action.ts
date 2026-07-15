@@ -24,10 +24,14 @@ export interface ResolveSessionPrimaryActionInput {
   canEdit: boolean;
   /** At least one entry has a track row. */
   hasAnyTrack: boolean;
+  /** At least one entry is still missing a track. */
+  hasMissingTrack: boolean;
   /** Any track is uploaded or still processing. */
   hasProcessingTrack: boolean;
   /** Any track failed processing/validation. */
   hasErrorTrack: boolean;
+  /** Every entry has a processed track (analyzer-ready). */
+  allTracksProcessed: boolean;
   /** Saved analysis is present and fresh for the current entry set. */
   analysisCurrent: boolean;
   /** At least one processed track with a loadable processed_path. */
@@ -55,7 +59,7 @@ export function resolveSessionPrimaryAction(
   const reviewHref =
     sessionType === "race" ? `/races/${raceId}/review` : dataHref(raceId);
 
-  if (!input.hasAnyTrack && input.canUpload) {
+  if ((!input.hasAnyTrack || input.hasMissingTrack) && input.canUpload) {
     return {
       kind: "add-data",
       label: "Add data",
@@ -73,7 +77,7 @@ export function resolveSessionPrimaryAction(
     };
   }
 
-  if (input.hasErrorTrack && input.canEdit) {
+  if (input.hasErrorTrack && (input.canEdit || input.canUpload)) {
     return {
       kind: "fix-data",
       label: "Fix data issue",
@@ -82,7 +86,12 @@ export function resolveSessionPrimaryAction(
     };
   }
 
-  if (!input.analysisCurrent && input.canEdit && input.hasAnyTrack) {
+  if (
+    !input.analysisCurrent &&
+    input.canEdit &&
+    input.hasAnyTrack &&
+    input.allTracksProcessed
+  ) {
     return {
       kind: "review-analyze",
       label: "Review & analyze",
@@ -108,18 +117,39 @@ export function summarizeSessionTrackStatuses(
   tracks: readonly (SessionTrackSummaryInput | string | null | undefined)[],
 ): Pick<
   ResolveSessionPrimaryActionInput,
-  "hasAnyTrack" | "hasProcessingTrack" | "hasErrorTrack" | "replayAvailable"
+  | "hasAnyTrack"
+  | "hasMissingTrack"
+  | "hasProcessingTrack"
+  | "hasErrorTrack"
+  | "allTracksProcessed"
+  | "replayAvailable"
 > {
   let hasAnyTrack = false;
+  let hasMissingTrack = false;
   let hasProcessingTrack = false;
   let hasErrorTrack = false;
   let replayAvailable = false;
+  let processedCount = 0;
+
+  if (tracks.length === 0) {
+    return {
+      hasAnyTrack: false,
+      hasMissingTrack: false,
+      hasProcessingTrack: false,
+      hasErrorTrack: false,
+      allTracksProcessed: false,
+      replayAvailable: false,
+    };
+  }
 
   for (const track of tracks) {
     const status = typeof track === "string" || track == null ? track : track.status;
     const processedPath =
       typeof track === "object" && track ? track.processedPath : null;
-    if (!status) continue;
+    if (!status) {
+      hasMissingTrack = true;
+      continue;
+    }
     hasAnyTrack = true;
     if (status === "uploaded" || status === "processing") {
       hasProcessingTrack = true;
@@ -127,15 +157,20 @@ export function summarizeSessionTrackStatuses(
     if (status === "error") {
       hasErrorTrack = true;
     }
-    if (status === "processed" && typeof processedPath === "string" && processedPath.length > 0) {
-      replayAvailable = true;
+    if (status === "processed") {
+      processedCount += 1;
+      if (typeof processedPath === "string" && processedPath.length > 0) {
+        replayAvailable = true;
+      }
     }
   }
 
   return {
     hasAnyTrack,
+    hasMissingTrack,
     hasProcessingTrack,
     hasErrorTrack,
+    allTracksProcessed: processedCount === tracks.length && processedCount > 0,
     replayAvailable,
   };
 }
