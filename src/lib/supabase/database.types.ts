@@ -1093,6 +1093,10 @@ export type Database = {
           track_id: string
         }[]
       }
+      get_historical_import_batch_for_editor: {
+        Args: { target_batch_id: string }
+        Returns: Json
+      }
       create_practice_session: {
         Args: {
           boat_id_input: string

@@ -36,11 +36,12 @@ export default async function BoatHubPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: canView }, { data: canManage }] =
+  const [{ data: profile }, { data: canView }, { data: canManage }, { data: canEdit }] =
     await Promise.all([
       supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
       supabase.rpc("can_view_boat", { bid: boatId }),
       supabase.rpc("can_manage_boat", { bid: boatId }),
+      supabase.rpc("can_edit_boat", { bid: boatId }),
     ]);
   if (!canView) notFound();
 
@@ -83,14 +84,23 @@ export default async function BoatHubPage({
           backHref="/boats"
           backLabel="My boats"
           actions={
-            canManage ? (
-              <Button variant="outline" asChild>
-                <Link href={`/boats/${boat.id}/crew`}>
-                  <Users className="size-4" aria-hidden="true" />
-                  Manage crew
-                </Link>
-              </Button>
-            ) : null
+            <>
+              {canEdit ? (
+                <Button asChild>
+                  <Link href={`/sessions/import?boatId=${boat.id}`}>
+                    Add sailing data
+                  </Link>
+                </Button>
+              ) : null}
+              {canManage ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/boats/${boat.id}/crew`}>
+                    <Users className="size-4" aria-hidden="true" />
+                    Manage crew
+                  </Link>
+                </Button>
+              ) : null}
+            </>
           }
         />
 

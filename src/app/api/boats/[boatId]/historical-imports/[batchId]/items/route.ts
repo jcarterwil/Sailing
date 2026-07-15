@@ -73,12 +73,14 @@ export async function POST(
 
   const { data: existing, error: existingError } = await access.admin
     .from("historical_import_items")
-    .select("id, byte_size")
+    .select("id, byte_size, status")
     .eq("batch_id", batchId);
   if (existingError) return jsonError("Could not load import items.", 500);
 
-  const existingCount = existing?.length ?? 0;
-  const existingBytes = (existing ?? []).reduce((sum, row) => sum + Number(row.byte_size), 0);
+  // Skipped rows do not consume batch capacity (choose-again / replace flows).
+  const activeExisting = (existing ?? []).filter((row) => row.status !== "skipped");
+  const existingCount = activeExisting.length;
+  const existingBytes = activeExisting.reduce((sum, row) => sum + Number(row.byte_size), 0);
   if (existingCount + parsed.length > HISTORICAL_IMPORT_MAX_FILES) {
     return jsonError("Batch exceeds the 100-file limit.", 400);
   }
