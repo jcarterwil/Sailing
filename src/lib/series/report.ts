@@ -99,6 +99,12 @@ export interface SeriesReportCurrentSetupV1 {
   scoringConfig: unknown;
   races: SeriesReportCurrentRaceSetupV1[];
   boatRoles: Array<{ boatId: string; role: "competitor" | "guest" }>;
+  aliases: Array<{ sourceBoatId: string; canonicalBoatId: string }>;
+  snapshotIdentitySources: Array<{
+    sourceBoatId: string;
+    boatId: string;
+    role: "competitor" | "guest";
+  }>;
 }
 
 export function seriesReportRaceSetupMatchesV1(
@@ -128,17 +134,38 @@ export function seriesReportSetupMatchesSnapshotV1(
     return false;
   }
 
+  const currentRoleByBoatId = new Map(current.boatRoles.map((row) => [row.boatId, row.role]));
   const currentCompetitors = current.boatRoles
     .filter((row) => row.role === "competitor")
     .map((row) => row.boatId)
     .sort();
   const snapshotCompetitors = snapshot.standings.map((row) => row.boatId).sort();
-  return canonicalJson(currentCompetitors) === canonicalJson(snapshotCompetitors);
+  if (canonicalJson(currentCompetitors) !== canonicalJson(snapshotCompetitors)) return false;
+
+  const currentAliasBySource = new Map(
+    current.aliases.map((alias) => [alias.sourceBoatId, alias.canonicalBoatId]),
+  );
+  return current.snapshotIdentitySources.every((identity) => {
+    if (identity.role === "guest") {
+      return identity.sourceBoatId === identity.boatId &&
+        currentRoleByBoatId.get(identity.boatId) === "guest";
+    }
+    if (identity.sourceBoatId === identity.boatId) {
+      return currentRoleByBoatId.get(identity.boatId) === "competitor";
+    }
+    return currentRoleByBoatId.get(identity.sourceBoatId) === undefined &&
+      currentRoleByBoatId.get(identity.boatId) === "competitor" &&
+      currentAliasBySource.get(identity.sourceBoatId) === identity.boatId;
+  });
 }
 
-/** Entryless races are scored from explicit DNS decisions and need no Performance analysis. */
-export function seriesReportAnalysisRequiredV1(entryCount: number): boolean {
-  return entryCount > 0;
+/** Only included, completed races with entries consume Performance analysis. */
+export function seriesReportAnalysisRequiredV1(input: {
+  entryCount: number;
+  included: boolean;
+  state: "scheduled" | "completed" | "abandoned";
+}): boolean {
+  return input.entryCount > 0 && input.included && input.state === "completed";
 }
 
 export function resolveSeriesReportRaceStateV1(input: {
@@ -146,13 +173,16 @@ export function resolveSeriesReportRaceStateV1(input: {
   snapshotSource: SeriesRaceSourceV1;
   currentSource: SeriesReportSourceV1 | null;
   entrySetMatches: boolean;
+  analysisRequired?: boolean;
 }): SeriesReportRaceStateV1 {
   if (input.evidenceState !== "current") return input.evidenceState;
   if (!input.entrySetMatches || !input.currentSource) return "incomplete";
   const snapshot = input.snapshotSource;
   const current = input.currentSource;
-  return current.analysisVersion === snapshot.analysisVersion &&
-      current.performanceCalculationVersion === snapshot.performanceCalculationVersion &&
+  return (input.analysisRequired === false || (
+      current.analysisVersion === snapshot.analysisVersion &&
+      current.performanceCalculationVersion === snapshot.performanceCalculationVersion
+    )) &&
       current.correctionsVersion === snapshot.correctionsVersion &&
       current.officialResultsRevision === snapshot.officialResultsRevision
     ? "current"

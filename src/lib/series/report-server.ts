@@ -6,6 +6,7 @@ import {
   SERIES_MAX_RACES,
   SERIES_MAX_RESULTS_PER_RACE,
 } from "@/lib/analytics/constants";
+import type { SeriesScoringResultV1 } from "@/lib/analytics/series/types";
 import { analysisForEntryIds, parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import { parseRaceMeta } from "@/lib/races/meta";
 import {
@@ -22,11 +23,16 @@ import {
   type SeriesReportSnapshotV1,
 } from "@/lib/series/report";
 import { parseStoredSeriesSnapshotV1 } from "@/lib/series/snapshot";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 
 type ServerSupabase = SupabaseClient<Database>;
 type SeriesEntryEvidenceRow = { id: string; race_id: string };
 type SeriesTrackEvidenceRow = { entry_id: string; status: string; updated_at: string };
+type SnapshotIdentitySourceV1 = {
+  sourceBoatId: string;
+  boatId: string;
+  role: "competitor" | "guest";
+};
 
 const EVIDENCE_PAGE_SIZE = 1_000;
 const MAX_SERIES_EVIDENCE_ROWS = SERIES_MAX_RACES * SERIES_MAX_RESULTS_PER_RACE;
@@ -45,6 +51,40 @@ function fail(context: string, message: string): never {
 
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function snapshotIdentitySourcesV1(
+  snapshot: SeriesScoringResultV1,
+  links: Array<{ race_id: string; official_results: Json }>,
+): SnapshotIdentitySourceV1[] | null {
+  const linkByRaceId = new Map(links.map((link) => [link.race_id, link]));
+  const identities: SnapshotIdentitySourceV1[] = [];
+  for (const race of snapshot.races) {
+    if (!race.completedForSeries) continue;
+    const stored = linkByRaceId.get(race.raceId)?.official_results;
+    if (!Array.isArray(stored) || stored.length !== race.rows.length) return null;
+    const storedByEntryId = new Map<string, Record<string, unknown>>();
+    for (const value of stored) {
+      if (!isRecord(value) || typeof value.entryId !== "string" ||
+          storedByEntryId.has(value.entryId)) return null;
+      storedByEntryId.set(value.entryId, value);
+    }
+    for (const row of race.rows) {
+      const source = storedByEntryId.get(row.entryId);
+      if (!source || typeof source.sourceBoatId !== "string" ||
+          source.boatId !== row.boatId || source.identity !== row.identity) return null;
+      identities.push({
+        sourceBoatId: source.sourceBoatId,
+        boatId: row.boatId,
+        role: row.identity,
+      });
+    }
+  }
+  return identities;
 }
 
 function snapshotState(
@@ -216,6 +256,7 @@ export async function loadSeriesReportModelV1(
     boatsResult,
     linkedResult,
     competitorsResult,
+    aliasesResult,
     racesResult,
     analysesResult,
     correctionsResult,
@@ -226,11 +267,17 @@ export async function loadSeriesReportModelV1(
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from("race_series_races")
-        .select("race_id, sequence, included, discard_eligible, state, official_results_revision")
+        .select(
+          "race_id, sequence, included, discard_eligible, state, official_results, official_results_revision",
+        )
         .eq("series_id", seriesId),
       supabase
         .from("race_series_competitors")
         .select("boat_id, role")
+        .eq("series_id", seriesId),
+      supabase
+        .from("race_series_boat_aliases")
+        .select("source_boat_id, canonical_boat_id")
         .eq("series_id", seriesId),
       raceIds.length
         ? supabase
@@ -255,6 +302,7 @@ export async function loadSeriesReportModelV1(
     ["series boats", boatsResult],
     ["series race links", linkedResult],
     ["series competitors", competitorsResult],
+    ["series aliases", aliasesResult],
     ["series races", racesResult],
     ["race analyses", analysesResult],
     ["race corrections", correctionsResult],
@@ -279,15 +327,29 @@ export async function loadSeriesReportModelV1(
     }),
   );
   const currentRaceSetupById = new Map(currentRaceSetup.map((race) => [race.raceId, race]));
-  const scoringSetupState = seriesReportSetupMatchesSnapshotV1({
-    scoringVersion: series.scoring_version,
-    scoringConfig: series.scoring_config,
-    races: currentRaceSetup,
-    boatRoles: (competitorsResult.data ?? []).flatMap((row) =>
-      row.role === "competitor" || row.role === "guest"
-        ? [{ boatId: row.boat_id, role: row.role }]
-        : []),
-  }, snapshot.result) ? "current" : "stale";
+  const snapshotIdentitySources = snapshotIdentitySourcesV1(
+    snapshot.result,
+    linkedResult.data ?? [],
+  );
+  const scoringSetupState = snapshotIdentitySources && seriesReportSetupMatchesSnapshotV1(
+    {
+      scoringVersion: series.scoring_version,
+      scoringConfig: series.scoring_config,
+      races: currentRaceSetup,
+      boatRoles: (competitorsResult.data ?? []).flatMap((row) =>
+        row.role === "competitor" || row.role === "guest"
+          ? [{ boatId: row.boat_id, role: row.role }]
+          : []),
+      aliases: (aliasesResult.data ?? []).map((row) => ({
+        sourceBoatId: row.source_boat_id,
+        canonicalBoatId: row.canonical_boat_id,
+      })),
+      snapshotIdentitySources,
+    },
+    snapshot.result,
+  )
+    ? "current"
+    : "stale";
   const analysisByRaceId = new Map((analysesResult.data ?? []).map((row) => [row.race_id, row]));
   const correctionByRaceId = new Map(
     (correctionsResult.data ?? []).map((row) => [row.race_id, row]),
@@ -309,7 +371,11 @@ export async function loadSeriesReportModelV1(
     const allEntriesProcessed = raceEntries.every(
       (entry) => trackByEntryId.get(entry.id)?.status === "processed",
     );
-    const analysisRequired = seriesReportAnalysisRequiredV1(raceEntries.length);
+    const analysisRequired = seriesReportAnalysisRequiredV1({
+      entryCount: raceEntries.length,
+      included: snapshotRace.included,
+      state: snapshotRace.state,
+    });
     const parsed = analysis
       ? parseStoredRaceAnalysis({
           value: analysis.analysis,
@@ -325,7 +391,7 @@ export async function loadSeriesReportModelV1(
       : null;
     const currentSource: SeriesReportSourceV1 | null = race && link
       ? {
-          analysisVersion: analysisRequired ? analysis?.source_revision ?? null : analysis?.source_revision ?? 0,
+          analysisVersion: analysisRequired ? analysis?.source_revision ?? null : 0,
           performanceCalculationVersion: analysisRequired
             ? parsed?.performance?.calculationVersion ?? null
             : "unavailable",
@@ -340,6 +406,7 @@ export async function loadSeriesReportModelV1(
       snapshotSource: snapshotRace.source,
       currentSource,
       entrySetMatches: !analysisRequired || currentAnalysis !== null,
+      analysisRequired,
     });
     const sourceState = evidenceSourceState === "current" &&
         !seriesReportRaceSetupMatchesV1(

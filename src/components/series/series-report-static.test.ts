@@ -40,6 +40,13 @@ describe("authenticated series report integration", () => {
     );
   });
 
+  it("checks every scoring-relevant roster and effective alias before calling setup current", () => {
+    expect(loader).toContain('.from("race_series_boat_aliases")');
+    expect(loader).toContain("official_results, official_results_revision");
+    expect(loader).toContain("snapshotIdentitySourcesV1");
+    expect(loader).toContain("snapshotIdentitySources && seriesReportSetupMatchesSnapshotV1");
+  });
+
   it("keeps deterministic scoring out of React and page components", () => {
     expect(parser).toContain("scoreSeriesLowPointV1");
     expect(page).not.toContain("scoreSeriesLowPointV1");

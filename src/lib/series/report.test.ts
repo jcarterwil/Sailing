@@ -39,6 +39,12 @@ describe("resolveSeriesReportRaceStateV1", () => {
         state: race.state,
       })),
       boatRoles: [...roles].map(([boatId, role]) => ({ boatId, role })),
+      aliases: [],
+      snapshotIdentitySources: snapshot.races.flatMap((race) => race.rows.map((row) => ({
+        sourceBoatId: row.boatId,
+        boatId: row.boatId,
+        role: row.identity,
+      }))),
     };
 
     expect(seriesReportSetupMatchesSnapshotV1(current, snapshot)).toBe(true);
@@ -59,11 +65,52 @@ describe("resolveSeriesReportRaceStateV1", () => {
       boatRoles: current.boatRoles.map((row, index) =>
         index === 0 ? { ...row, role: "guest" as const } : row),
     }, snapshot)).toBe(false);
+
+    const snapshotGuest = current.snapshotIdentitySources.find((row) => row.role === "guest");
+    if (!snapshotGuest) throw new Error("Golden series fixture must include a guest.");
+    expect(seriesReportSetupMatchesSnapshotV1({
+      ...current,
+      boatRoles: current.boatRoles.filter((row) => row.boatId !== snapshotGuest.boatId),
+    }, snapshot)).toBe(false);
+
+    const aliased = current.snapshotIdentitySources.find((row) => row.role === "competitor");
+    if (!aliased) throw new Error("Golden series fixture must include a competitor result.");
+    const sourceBoatId = "legacy-source-boat";
+    const withAlias = {
+      ...current,
+      aliases: [{ sourceBoatId, canonicalBoatId: aliased.boatId }],
+      snapshotIdentitySources: current.snapshotIdentitySources.map((row) =>
+        row === aliased ? { ...row, sourceBoatId } : row),
+    };
+    expect(seriesReportSetupMatchesSnapshotV1(withAlias, snapshot)).toBe(true);
+    expect(seriesReportSetupMatchesSnapshotV1({
+      ...withAlias,
+      aliases: [],
+    }, snapshot)).toBe(false);
+    expect(seriesReportSetupMatchesSnapshotV1({
+      ...withAlias,
+      aliases: [{ sourceBoatId, canonicalBoatId: "different-boat" }],
+    }, snapshot)).toBe(false);
   });
 
   it("requires Performance analysis only when the race has entries", () => {
-    expect(seriesReportAnalysisRequiredV1(0)).toBe(false);
-    expect(seriesReportAnalysisRequiredV1(1)).toBe(true);
+    expect(seriesReportAnalysisRequiredV1({
+      entryCount: 0,
+      included: true,
+      state: "completed",
+    })).toBe(false);
+    expect(seriesReportAnalysisRequiredV1({
+      entryCount: 1,
+      included: true,
+      state: "completed",
+    })).toBe(true);
+    for (const race of [
+      { entryCount: 2, included: false, state: "completed" as const },
+      { entryCount: 2, included: true, state: "scheduled" as const },
+      { entryCount: 2, included: true, state: "abandoned" as const },
+    ]) {
+      expect(seriesReportAnalysisRequiredV1(race)).toBe(false);
+    }
 
     const entrylessSource = {
       analysisVersion: 0,
@@ -76,13 +123,15 @@ describe("resolveSeriesReportRaceStateV1", () => {
       snapshotSource: entrylessSource,
       currentSource: entrylessSource,
       entrySetMatches: true,
+      analysisRequired: false,
     })).toBe("current");
     expect(resolveSeriesReportRaceStateV1({
       evidenceState: "current",
       snapshotSource: entrylessSource,
       currentSource: { ...entrylessSource, analysisVersion: 2 },
       entrySetMatches: true,
-    })).toBe("stale");
+      analysisRequired: false,
+    })).toBe("current");
   });
 
   it("is current only when every source used by the snapshot still matches", () => {
