@@ -104,6 +104,8 @@ export function RaceMetaPanel({
   defaultWeatherLocation,
   defaultWeatherStartsAt,
   defaultWeatherEndsAt,
+  title = "Race conditions",
+  description = "Wind, sea state, and tags for later performance correlation.",
 }: {
   raceId: string;
   canEdit: boolean;
@@ -113,6 +115,8 @@ export function RaceMetaPanel({
   defaultWeatherLocation: string;
   defaultWeatherStartsAt: string;
   defaultWeatherEndsAt: string;
+  title?: string;
+  description?: string;
 }) {
   const [conditions, setConditions] = useState<RaceConditions>(
     initialConditions ?? {
@@ -175,10 +179,8 @@ export function RaceMetaPanel({
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>Race conditions</CardTitle>
-            <CardDescription>
-              Wind, sea state, and tags for later performance correlation.
-            </CardDescription>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
           </div>
           {!canEdit && summaryBits.length > 0 && (
             <span className="text-xs text-muted-foreground">{summaryBits.join(" · ")}</span>

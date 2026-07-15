@@ -818,8 +818,10 @@ export type Database = {
           join_code: string
           name: string
           organizer_id: string
+          session_type: string
           share_slug: string | null
-          starts_at: string | null
+          starts_at: string
+          starts_at_source: string
           tags: string[]
           timezone: string | null
           updated_at: string
@@ -832,8 +834,10 @@ export type Database = {
           join_code?: string
           name: string
           organizer_id: string
+          session_type?: string
           share_slug?: string | null
-          starts_at?: string | null
+          starts_at: string
+          starts_at_source?: string
           tags?: string[]
           timezone?: string | null
           updated_at?: string
@@ -846,8 +850,10 @@ export type Database = {
           join_code?: string
           name?: string
           organizer_id?: string
+          session_type?: string
           share_slug?: string | null
-          starts_at?: string | null
+          starts_at?: string
+          starts_at_source?: string
           tags?: string[]
           timezone?: string | null
           updated_at?: string
@@ -964,6 +970,20 @@ export type Database = {
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }
+      create_practice_session: {
+        Args: {
+          boat_id_input: string
+          name_input: string
+          starts_at_input: string
+          timezone_input: string
+          venue_input?: string | null
+        }
+        Returns: {
+          boat_id: string
+          entry_id: string
+          race_id: string
+        }[]
+      }
       create_race_entry_for_boat: {
         Args: {
           existing_boat_id?: string | null

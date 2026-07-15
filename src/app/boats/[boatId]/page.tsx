@@ -14,6 +14,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  formatSessionDateTime,
+  isLegacySessionDate,
+  legacyDateWarning,
+  sessionBadgeLabel,
+} from "@/lib/sessions/format";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +52,8 @@ export default async function BoatHubPage({
       .maybeSingle(),
     supabase
       .from("race_entries")
-      .select("id, races(id, name, venue, starts_at, created_at), tracks(status)")
+      // Nested * keeps boat hub loading if session columns are not live yet.
+      .select("id, races(*), tracks(status)")
       .eq("boat_id", boatId),
   ]);
   if (!boat) notFound();
@@ -107,9 +114,9 @@ export default async function BoatHubPage({
 
           <Card className="bg-card/70">
             <CardHeader>
-              <CardTitle>Races</CardTitle>
+              <CardTitle>Sessions</CardTitle>
               <CardDescription>
-                {races.length} race{races.length === 1 ? "" : "s"} for this boat
+                {races.length} session{races.length === 1 ? "" : "s"} for this boat
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -121,19 +128,38 @@ export default async function BoatHubPage({
                       className="flex items-center justify-between gap-3 py-3"
                     >
                       <div className="min-w-0">
-                        <Link
-                          href={`/races/${entry.races!.id}`}
-                          className="font-medium hover:text-primary"
-                        >
-                          {entry.races!.name}
-                        </Link>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/races/${entry.races!.id}`}
+                            className="font-medium hover:text-primary"
+                          >
+                            {entry.races!.name}
+                          </Link>
+                          <Badge variant="outline">
+                            {sessionBadgeLabel(
+                              "session_type" in entry.races!
+                                ? entry.races!.session_type
+                                : "race",
+                            )}
+                          </Badge>
+                        </div>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <CalendarDays className="size-3.5" aria-hidden="true" />
-                          {new Date(
+                          {formatSessionDateTime(
                             entry.races!.starts_at ?? entry.races!.created_at,
-                          ).toLocaleDateString()}
+                            entry.races!.timezone,
+                          )}
                           {entry.races!.venue ? ` · ${entry.races!.venue}` : ""}
                         </p>
+                        {isLegacySessionDate(
+                          "starts_at_source" in entry.races!
+                            ? entry.races!.starts_at_source
+                            : null,
+                        ) ? (
+                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                            {legacyDateWarning()}
+                          </p>
+                        ) : null}
                       </div>
                       <Badge
                         variant={
@@ -147,7 +173,7 @@ export default async function BoatHubPage({
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  This boat isn&apos;t in any races yet.
+                  This boat isn&apos;t in any sessions yet.
                 </p>
               )}
             </CardContent>

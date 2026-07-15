@@ -16,6 +16,12 @@ import {
   type RaceConditions,
 } from "@/lib/races/meta";
 import { normalizeOwnerInvitationCode } from "@/lib/boats/owner-invitations";
+import {
+  localDateTimeToUtc,
+  localToUtcErrorMessage,
+  parseLocalDateAndTime,
+} from "@/lib/sessions/local-datetime";
+import { isSessionType, type SessionType } from "@/lib/sessions/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -40,20 +46,91 @@ async function requireUser() {
   return { supabase, user };
 }
 
-export async function createRace(formData: FormData) {
+export async function createSession(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const venue = String(formData.get("venue") ?? "").trim();
-  if (!name) throw new Error("Race name is required.");
+  const sessionTypeRaw = String(formData.get("session_type") ?? "race").trim();
+  const localDate = String(formData.get("local_date") ?? "").trim();
+  const localTime = String(formData.get("local_time") ?? "").trim();
+  const timezoneRaw = String(formData.get("timezone") ?? "").trim();
+  const boatId = String(formData.get("boat_id") ?? "").trim();
 
-  const { data: race, error } = await supabase
-    .from("races")
-    .insert({ organizer_id: user.id, name, venue: venue || null })
-    .select("id")
-    .single();
-  if (error) throw new Error(`Could not create race: ${error.message}`);
+  if (!name) throw new Error("Session name is required.");
+  if (name.length > 200) throw new Error("Session name must be 200 characters or fewer.");
+  if (!isSessionType(sessionTypeRaw)) {
+    throw new Error("Choose Race or Practice.");
+  }
+  const sessionType: SessionType = sessionTypeRaw;
+  if (!isValidIanaTimezone(timezoneRaw)) {
+    throw new Error("Choose a valid IANA timezone, such as America/Detroit.");
+  }
+  const timezone = normalizeIanaTimezone(timezoneRaw);
+  if (!timezone) {
+    throw new Error("Choose a valid IANA timezone, such as America/Detroit.");
+  }
 
-  redirect(`/races/${race.id}`);
+  const localParts = parseLocalDateAndTime(localDate, localTime);
+  if (!localParts) throw new Error("Enter a valid local date and time.");
+  const converted = localDateTimeToUtc(localParts, timezone);
+  if (!converted.ok) throw new Error(localToUtcErrorMessage(converted.reason));
+
+  if (sessionType === "race") {
+    // Omit session_type / starts_at_source so app-first deploys still insert
+    // against the pre-migration schema; DB defaults fill them after migrate.
+    const { data: race, error } = await supabase
+      .from("races")
+      .insert({
+        organizer_id: user.id,
+        name,
+        venue: venue || null,
+        starts_at: converted.iso,
+        timezone,
+        share_slug: null,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(`Could not create race: ${error.message}`);
+    redirect(`/races/${race.id}`);
+  }
+
+  if (!UUID_PATTERN.test(boatId)) {
+    throw new Error("Choose a boat you own or can edit for practice.");
+  }
+  const { data: canEditBoat, error: editError } = await supabase.rpc("can_edit_boat", {
+    bid: boatId,
+  });
+  if (editError) {
+    throw new Error(`Could not check boat permissions: ${editError.message}`);
+  }
+  if (!canEditBoat) {
+    throw new Error("Choose a boat you own or can edit for practice.");
+  }
+
+  const { data, error } = await supabase.rpc("create_practice_session", {
+    name_input: name,
+    venue_input: venue || null,
+    starts_at_input: converted.iso,
+    timezone_input: timezone,
+    boat_id_input: boatId,
+  });
+  const created = data?.[0];
+  if (error || !created) {
+    if (error?.code === "PGRST202") {
+      throw new Error("Practice sessions are being updated. Try again in a moment.");
+    }
+    throw new Error(error?.message ?? "Could not create practice session.");
+  }
+
+  revalidatePath("/boats");
+  revalidatePath("/dashboard");
+  redirect(`/races/${created.race_id}`);
+}
+
+/** @deprecated Prefer createSession — kept for any residual callers. */
+export async function createRace(formData: FormData) {
+  if (!formData.get("session_type")) formData.set("session_type", "race");
+  return createSession(formData);
 }
 
 function validateBoatSelection(selection: BoatSelection) {
@@ -79,6 +156,8 @@ export async function joinRace(input: { code: string; selection: BoatSelection }
   if (!code || code.length > 64) throw new Error("Enter a valid join code.");
   validateBoatSelection(input.selection);
 
+  // Practice rejection is enforced inside join_race_with_boat (security definer):
+  // join codes for races the caller cannot yet read are not visible under RLS.
   const existing = input.selection.kind === "existing" ? input.selection.boatId : null;
   const newBoat = input.selection.kind === "new" ? input.selection : null;
   const { data, error } = await supabase.rpc("join_race_with_boat", {
@@ -108,6 +187,17 @@ export async function createRaceEntryForFleetFile(input: {
   const { supabase } = await requireUser();
   if (!UUID_PATTERN.test(input.raceId)) throw new Error("Choose a valid race.");
   validateBoatSelection(input.selection);
+
+  const { data: race, error: raceError } = await supabase
+    .from("races")
+    .select("*")
+    .eq("id", input.raceId)
+    .maybeSingle();
+  if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
+  if (!race) throw new Error("Race not found.");
+  if ("session_type" in race && race.session_type === "practice") {
+    throw new Error("Fleet mapping is only available for race sessions.");
+  }
 
   const { data, error } = await supabase.rpc("create_race_entry_for_boat", {
     target_race_id: input.raceId,
@@ -381,11 +471,14 @@ export async function toggleShare(
 
   const { data: race, error: raceError } = await supabase
     .from("races")
-    .select("id")
+    .select("*")
     .eq("id", raceId)
     .maybeSingle();
   if (raceError) throw new Error(`Could not load race: ${raceError.message}`);
   if (!race) throw new Error("Race not found.");
+  if ("session_type" in race && race.session_type === "practice") {
+    throw new Error("Practice sessions cannot be shared publicly.");
+  }
 
   const { data: canOrganize, error: organizerError } = await supabase.rpc(
     "is_race_organizer",
