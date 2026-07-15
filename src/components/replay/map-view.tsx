@@ -21,7 +21,6 @@ import {
 import {
   usePlaybackStore,
   type CameraMode,
-  type TrailMode,
 } from "@/components/replay/playback-store";
 import type { ReplayBaseStyle } from "@/components/replay/replay-display-preferences";
 import type {
