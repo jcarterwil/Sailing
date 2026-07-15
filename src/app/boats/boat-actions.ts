@@ -62,6 +62,16 @@ export async function updateBoatDetails(input: {
   const name = input.name.trim();
   if (!name) return { error: "A boat name is required." };
 
+  const { data: existing } = await supabase
+    .from("boats")
+    .select("id, merged_into_id")
+    .eq("id", input.boatId)
+    .maybeSingle();
+  if (!existing) return { error: "Boat not found." };
+  if (existing.merged_into_id) {
+    return { error: "This boat was merged into another boat." };
+  }
+
   const { data, error } = await supabase
     .from("boats")
     .update({
@@ -70,6 +80,7 @@ export async function updateBoatDetails(input: {
       boat_class: input.boatClass.trim() || null,
     })
     .eq("id", input.boatId)
+    .is("merged_into_id", null)
     .select("id")
     .maybeSingle();
   if (error) return { error: `Could not save the boat: ${error.message}` };

@@ -4,6 +4,7 @@ import {
   boatAccessLabel,
   mergeViewableBoatOptions,
   resolveActiveBoatId,
+  resolveMergedBoatId,
 } from "@/lib/boats/my-sailing";
 
 const boat = (id: string, name: string) => ({
@@ -78,6 +79,20 @@ describe("resolveActiveBoatId", () => {
 
   it("returns null when the user has no boats", () => {
     expect(resolveActiveBoatId(null, [])).toBeNull();
+  });
+});
+
+describe("resolveMergedBoatId", () => {
+  it("follows a tombstone hop to the canonical id", () => {
+    expect(
+      resolveMergedBoatId(
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+      ),
+    ).toBe("00000000-0000-4000-8000-000000000002");
+    expect(resolveMergedBoatId("00000000-0000-4000-8000-000000000001", null)).toBe(
+      "00000000-0000-4000-8000-000000000001",
+    );
   });
 });
 

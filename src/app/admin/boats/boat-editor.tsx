@@ -21,6 +21,7 @@ import {
   startOwnershipTransfer,
   updateBoat,
 } from "@/app/admin/actions";
+import { MergeDuplicateDialog } from "@/app/admin/boats/merge-duplicate-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,9 @@ export interface BoatRow {
   ownerId: string | null;
   ownerName: string | null;
   creatorName: string | null;
+  mergedIntoId: string | null;
+  mergedAt: string | null;
+  mergeTargetName: string | null;
 }
 
 interface BoatForm {
@@ -573,7 +577,11 @@ export function BoatsList({ rows }: { rows: BoatRow[] }) {
             <span className="text-xs text-muted-foreground">#{row.sailNumber}</span>
           )}
           {row.boatClass && <Badge variant="outline">{row.boatClass}</Badge>}
-          {row.ownerId ? (
+          {row.mergedIntoId ? (
+            <Badge variant="secondary">
+              Merged into {row.mergeTargetName ?? "canonical boat"}
+            </Badge>
+          ) : row.ownerId ? (
             <Badge variant="secondary" className="gap-1">
               <UserCheck className="size-3" aria-hidden="true" />
               Owner: {row.ownerName ?? "claimed"}
@@ -581,25 +589,34 @@ export function BoatsList({ rows }: { rows: BoatRow[] }) {
           ) : !row.claimCode ? (
             <Badge variant="outline">unclaimed</Badge>
           ) : null}
-          {row.claimCode && (
+          {!row.mergedIntoId && row.claimCode && (
             <Badge variant="outline">
               {row.ownerId ? "transfer pending" : "owner invite pending"}
             </Badge>
           )}
-          {row.claimEmail && (
+          {!row.mergedIntoId && row.claimEmail && (
             <span className="text-xs text-muted-foreground">{row.claimEmail}</span>
           )}
-          {row.claimCode && (
+          {!row.mergedIntoId && row.claimCode && (
             <>
               <CopyInvitationLinkButton code={row.claimCode} />
               <CopyButton value={row.claimCode} label="Copy owner invitation code" />
             </>
           )}
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/boats/${row.id}/crew`}>Crew access</Link>
-          </Button>
-          {row.ownerId && <TransferOwnerDialog row={row} />}
-          <EditBoatDialog row={row} />
+          {row.mergedIntoId ? (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/boats/${row.mergedIntoId}`}>Open canonical</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/boats/${row.id}/crew`}>Crew access</Link>
+              </Button>
+              {row.ownerId && <TransferOwnerDialog row={row} />}
+              <MergeDuplicateDialog source={row} candidates={rows} />
+              <EditBoatDialog row={row} />
+            </>
+          )}
         </li>
       ))}
     </ul>
