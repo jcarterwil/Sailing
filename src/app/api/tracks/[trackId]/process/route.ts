@@ -67,6 +67,16 @@ export async function POST(
   if (track.status === "processing" && !force) {
     return NextResponse.json({ error: "Already processing." }, { status: 409 });
   }
+  if (track.status === "processed" && !force) {
+    return NextResponse.json({
+      status: "processed",
+      alreadyProcessed: true,
+      pointCount: null,
+      summary: null,
+      warnings: [],
+      analyzed: null,
+    });
+  }
 
   const admin = createAdminClient();
   const { error: processingError } = await admin

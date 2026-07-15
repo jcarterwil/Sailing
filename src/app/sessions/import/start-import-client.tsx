@@ -21,11 +21,14 @@ async function startOrResumeBatch(boatId: string): Promise<string> {
       const batch = await fetchHistoricalImportBatch(boatId, remembered);
       if (
         batch.status === "draft" ||
-        batch.status === "committed" ||
         batch.status === "committing" ||
         batch.status === "error"
       ) {
         return batch.id;
+      }
+      // Finished imports should not be resumed — start a fresh draft.
+      if (batch.status === "committed" || batch.status === "cancelled") {
+        clearHistoricalImportDraft(boatId);
       }
     } catch {
       clearHistoricalImportDraft(boatId);

@@ -509,6 +509,7 @@ export function processJobsFromBatchItems(
 ): ProcessJob[] {
   return items
     .filter((item) => item.committedTrackId)
+    // Skip fully processed tracks; "processing" is waited out via 409 retry.
     .filter((item) => trackStatuses[item.committedTrackId!] !== "processed")
     .map((item) => ({ itemId: item.id, trackId: item.committedTrackId! }));
 }

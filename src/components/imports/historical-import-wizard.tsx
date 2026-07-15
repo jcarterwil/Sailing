@@ -103,11 +103,18 @@ function sanitizeClientError(error: unknown): string {
     message.startsWith("Acknowledge ") ||
     message.startsWith("Expected ") ||
     message.startsWith("Processing ") ||
+    message.startsWith("Already ") ||
     message.startsWith("Something ")
   ) {
     return message;
   }
   return "Something went wrong. Please try again.";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function validateLocalFiles(
@@ -217,7 +224,7 @@ export function HistoricalImportWizard({
   const localFilesRef = useRef<Map<string, File>>(new Map());
   const uploadUrlsRef = useRef<Map<string, string>>(new Map());
   const runningOpsRef = useRef<Set<string>>(new Set());
-  const runningProcessRef = useRef<string | null>(null);
+  const runningProcessIdsRef = useRef<Set<string>>(new Set());
   const autoMappedRef = useRef<Set<string>>(new Set());
   const cancelledItemIdsRef = useRef<Set<string>>(new Set());
 
@@ -238,8 +245,13 @@ export function HistoricalImportWizard({
   }, [boat.id, batch.id, trackStatuses]);
 
   useEffect(() => {
-    rememberHistoricalImportDraft(boat.id, batch.id);
-  }, [boat.id, batch.id]);
+    if (batch.status === "draft" || batch.status === "committing" || batch.status === "error") {
+      rememberHistoricalImportDraft(boat.id, batch.id);
+      return;
+    }
+    // Don't repopulate localStorage after a finished import clears it.
+    clearHistoricalImportDraft(boat.id);
+  }, [boat.id, batch.id, batch.status]);
 
   const runFileOp = useEffectEvent(async (itemId: string, kind: "upload" | "inspect") => {
     const key = `${itemId}:${kind}`;
@@ -324,20 +336,40 @@ export function HistoricalImportWizard({
   });
 
   const runProcessJob = useEffectEvent(async (itemId: string, trackId: string) => {
-    if (runningProcessRef.current === trackId) return;
-    runningProcessRef.current = trackId;
+    if (runningProcessIdsRef.current.has(trackId)) return;
+    runningProcessIdsRef.current.add(trackId);
     try {
-      await processTrack(trackId);
-      dispatch({ type: "processSucceeded", itemId });
-      dispatch({ type: "setStatusMessage", message: "Track processed." });
-    } catch (error) {
+      for (let attempt = 0; attempt < 45; attempt += 1) {
+        try {
+          await processTrack(trackId);
+          dispatch({ type: "processSucceeded", itemId });
+          dispatch({ type: "setStatusMessage", message: "Track processed." });
+          return;
+        } catch (error) {
+          const message = sanitizeClientError(error);
+          if (message.startsWith("Already processing")) {
+            dispatch({
+              type: "setStatusMessage",
+              message: "Track is still processing…",
+            });
+            await sleep(2000);
+            continue;
+          }
+          dispatch({
+            type: "processFailed",
+            itemId,
+            error: message,
+          });
+          return;
+        }
+      }
       dispatch({
         type: "processFailed",
         itemId,
-        error: sanitizeClientError(error),
+        error: "Track is still processing. Retry in a moment.",
       });
     } finally {
-      runningProcessRef.current = null;
+      runningProcessIdsRef.current.delete(trackId);
     }
   });
 
