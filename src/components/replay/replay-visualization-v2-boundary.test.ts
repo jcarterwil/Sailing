@@ -86,6 +86,12 @@ describe("replay visualization v2 boundaries", () => {
       'className="ml-auto size-11 shrink-0 sm:hidden"',
     );
     expect(controlsSource).toContain(
+      'className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]"',
+    );
+    expect(controlsSource).not.toContain(
+      'className="max-h-[82dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden"',
+    );
+    expect(controlsSource).toContain(
       'className="size-11 shrink-0 sm:size-9"',
     );
     expect(controlsSource).toContain(
