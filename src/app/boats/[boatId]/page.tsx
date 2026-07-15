@@ -40,6 +40,7 @@ async function resolveBoatAccess(
   boatId: string,
   userId: string,
   ownerId: string,
+  isAdmin: boolean,
 ): Promise<ViewableBoatAccess> {
   if (ownerId === userId) return "owner";
   const { data: membership } = await supabase
@@ -49,6 +50,9 @@ async function resolveBoatAccess(
     .eq("user_id", userId)
     .maybeSingle();
   if (membership?.role === "editor") return "editor";
+  if (membership?.role === "viewer") return "viewer";
+  // Admins inherit manage/edit without membership; label that clearly.
+  if (isAdmin) return "admin";
   return "viewer";
 }
 
@@ -89,11 +93,13 @@ export default async function BoatHubPage({
   ]);
   if (!boat) notFound();
 
+  const isAdmin = profile?.is_admin ?? false;
   const access = await resolveBoatAccess(
     supabase,
     boat.id,
     user.id,
     boat.owner_id ?? "",
+    isAdmin,
   );
   const completeness = summarizeBoatDataCompleteness(sessions);
   const recent = sessions.slice(0, MY_SAILING_RECENT_SESSION_LIMIT);
@@ -112,12 +118,12 @@ export default async function BoatHubPage({
     <AuthenticatedShell
       email={user.email ?? ""}
       displayName={profile?.display_name}
-      isAdmin={profile?.is_admin ?? false}
+      isAdmin={isAdmin}
     >
       <PageHeader
         title={boat.name}
         description={`${subtitle} · ${boatAccessLabel(access)}`}
-        backHref="/dashboard"
+        backHref={`/dashboard?boat=${boat.id}`}
         backLabel="My Sailing"
         actions={
           activeTab === "overview" && canEdit ? (

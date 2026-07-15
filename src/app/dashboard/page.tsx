@@ -20,6 +20,7 @@ import { listActiveEditableBoats } from "@/lib/boats/active-boats";
 import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
 import {
   boatAccessLabel,
+  includeRequestedViewableBoat,
   listViewableBoats,
   MY_SAILING_RECENT_SESSION_LIMIT,
   resolveActiveBoatId,
@@ -47,13 +48,19 @@ export default async function DashboardPage({
     redirect("/login");
   }
 
-  const [{ data: profile }, viewableBoats, editableBoats] = await Promise.all([
+  const [{ data: profile }, listedBoats, editableBoats] = await Promise.all([
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     listViewableBoats(supabase, user.id),
     listActiveEditableBoats(supabase, user.id),
   ]);
   const isAdmin = profile?.is_admin ?? false;
 
+  const viewableBoats = await includeRequestedViewableBoat(
+    supabase,
+    user.id,
+    requestedBoatId,
+    listedBoats,
+  );
   const activeBoatId = resolveActiveBoatId(requestedBoatId, viewableBoats);
   const activeBoat = viewableBoats.find((boat) => boat.id === activeBoatId) ?? null;
 

@@ -12,7 +12,7 @@ const UUID_PATTERN =
 export const MY_SAILING_RECENT_SESSION_LIMIT = 6;
 export const BOAT_HUB_ACTIVITY_PAGE_SIZE = 20;
 
-export type ViewableBoatAccess = "owner" | "editor" | "viewer";
+export type ViewableBoatAccess = "owner" | "editor" | "viewer" | "admin";
 
 export interface ViewableBoatOption extends ActiveBoatOption {
   access: ViewableBoatAccess;
@@ -107,7 +107,60 @@ export function resolveActiveBoatId(
 export function boatAccessLabel(access: ViewableBoatAccess): string {
   if (access === "owner") return "Owner";
   if (access === "editor") return "Editor";
+  if (access === "admin") return "Admin";
   return "Viewer";
+}
+
+/**
+ * If ?boat= names an accessible boat outside the capped selector list, fetch
+ * it and append so resolveActiveBoatId / the switcher stay consistent.
+ */
+export async function includeRequestedViewableBoat(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  requestedBoatId: string | null | undefined,
+  boats: ViewableBoatOption[],
+): Promise<ViewableBoatOption[]> {
+  if (!isBoatUuid(requestedBoatId)) return boats;
+  if (boats.some((boat) => boat.id === requestedBoatId)) return boats;
+
+  const { data: canView } = await supabase.rpc("can_view_boat", {
+    bid: requestedBoatId,
+  });
+  if (!canView) return boats;
+
+  const [{ data: boat }, { data: membership }, { data: profile }] = await Promise.all([
+    supabase
+      .from("boats")
+      .select("id, name, sail_number, boat_class, owner_id")
+      .eq("id", requestedBoatId)
+      .maybeSingle(),
+    supabase
+      .from("boat_memberships")
+      .select("role")
+      .eq("boat_id", requestedBoatId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle(),
+  ]);
+  if (!boat) return boats;
+
+  let access: ViewableBoatAccess = "viewer";
+  if (boat.owner_id === userId) access = "owner";
+  else if (membership?.role === "editor") access = "editor";
+  else if (membership?.role === "viewer") access = "viewer";
+  else if (profile?.is_admin) access = "admin";
+
+  return [
+    ...boats,
+    {
+      id: boat.id,
+      name: boat.name,
+      sailNumber: boat.sail_number,
+      boatClass: boat.boat_class,
+      access,
+    },
+  ];
 }
 
 export async function listViewableBoats(

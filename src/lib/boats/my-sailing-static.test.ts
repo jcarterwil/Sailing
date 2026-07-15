@@ -15,6 +15,7 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     expect(nav).toContain('href: "/dashboard"');
     expect(dashboard).toContain("searchParams");
     expect(dashboard).toContain("requestedBoatId");
+    expect(dashboard).toContain("includeRequestedViewableBoat");
     expect(dashboard).toContain("/sessions/import?boatId=");
     expect(dashboard).toContain('.rpc("can_edit_boat"');
     expect(dashboard).toContain("min-h-11");
@@ -34,6 +35,9 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     expect(hub).toContain("canManage");
     expect(hub).toContain("Add sailing data");
     expect(hub).toContain("Manage crew");
+    expect(hub).toContain("`/dashboard?boat=${boat.id}`");
+    expect(hub).toContain("isAdmin");
+    expect(hub).toContain('return "admin"');
     expect(hub).toContain("min-h-11");
     expect(hub).not.toContain("processed_path");
   });

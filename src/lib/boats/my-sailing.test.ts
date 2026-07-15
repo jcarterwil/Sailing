@@ -86,5 +86,6 @@ describe("boatAccessLabel", () => {
     expect(boatAccessLabel("owner")).toBe("Owner");
     expect(boatAccessLabel("editor")).toBe("Editor");
     expect(boatAccessLabel("viewer")).toBe("Viewer");
+    expect(boatAccessLabel("admin")).toBe("Admin");
   });
 });
