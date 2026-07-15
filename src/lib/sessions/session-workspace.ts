@@ -7,6 +7,7 @@ import {
   resolveSessionPrimaryAction,
   summarizeSessionTrackStatuses,
   type SessionPrimaryAction,
+  type SessionTrackSummaryInput,
 } from "@/lib/sessions/resolve-session-primary-action";
 import type { SessionType } from "@/lib/sessions/types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -17,10 +18,10 @@ export function buildSessionPrimaryAction(input: {
   sessionType: SessionType;
   canUpload: boolean;
   canEdit: boolean;
-  trackStatuses: readonly (string | null | undefined)[];
+  tracks: readonly SessionTrackSummaryInput[];
   analysisCurrent: boolean;
 }): SessionPrimaryAction | null {
-  const trackFlags = summarizeSessionTrackStatuses(input.trackStatuses);
+  const trackFlags = summarizeSessionTrackStatuses(input.tracks);
   return resolveSessionPrimaryAction({
     raceId: input.raceId,
     sessionType: input.sessionType,
@@ -54,23 +55,28 @@ export async function loadSessionWorkspaceChrome(
   raceId: string,
   userId: string,
 ): Promise<SessionWorkspaceChromeModel | null> {
-  const { data: race } = await supabase
+  const { data: race, error: raceError } = await supabase
     .from("races")
     .select("*")
     .eq("id", raceId)
     .maybeSingle();
+  if (raceError) {
+    throw new Error(`Could not load session: ${raceError.message}`);
+  }
   if (!race) return null;
 
   const [
-    { data: entries },
-    { data: canOrganize },
-    { data: boatMemberships },
-    { data: analysisRow },
-    { data: correctionsRow },
+    { data: entries, error: entriesError },
+    { data: canOrganize, error: organizerError },
+    { data: boatMemberships, error: membershipsError },
+    { data: analysisRow, error: analysisError },
+    { data: correctionsRow, error: correctionsError },
   ] = await Promise.all([
     supabase
       .from("race_entries")
-      .select("id, added_by, boats(id, name, owner_id), tracks(status, updated_at)")
+      .select(
+        "id, added_by, boats(id, name, owner_id), tracks(status, updated_at, processed_path)",
+      )
       .eq("race_id", raceId)
       .order("created_at", { ascending: true }),
     supabase.rpc("is_race_organizer", { rid: raceId }),
@@ -90,6 +96,22 @@ export async function loadSessionWorkspaceChrome(
       .maybeSingle(),
   ]);
 
+  if (entriesError) {
+    throw new Error(`Could not load session entries: ${entriesError.message}`);
+  }
+  if (organizerError) {
+    throw new Error(`Could not check session permissions: ${organizerError.message}`);
+  }
+  if (membershipsError) {
+    throw new Error(`Could not load boat access: ${membershipsError.message}`);
+  }
+  if (analysisError) {
+    throw new Error(`Could not load session analysis: ${analysisError.message}`);
+  }
+  if (correctionsError) {
+    throw new Error(`Could not load session corrections: ${correctionsError.message}`);
+  }
+
   const isOrganizer = canOrganize ?? false;
   const sessionType = resolveSessionType(race.session_type);
   const membershipByBoatId = new Map(
@@ -105,7 +127,10 @@ export async function loadSessionWorkspaceChrome(
         (entry.added_by === userId && (!boat || !membershipByBoatId.has(boat.id)))
       );
     });
-  const trackStatuses = (entries ?? []).map((entry) => entry.tracks?.status ?? null);
+  const tracks: SessionTrackSummaryInput[] = (entries ?? []).map((entry) => ({
+    status: entry.tracks?.status ?? null,
+    processedPath: entry.tracks?.processed_path ?? null,
+  }));
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",
   );
@@ -143,7 +168,7 @@ export async function loadSessionWorkspaceChrome(
       sessionType,
       canUpload,
       canEdit: isOrganizer,
-      trackStatuses,
+      tracks,
       analysisCurrent,
     }),
   };

@@ -84,7 +84,7 @@ export default async function RaceManagePage({
     supabase
       .from("race_entries")
       .select(
-        "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at, updated_at)",
+        "id, color, added_by, crew, tags, boats(id, name, owner_id), tracks(id, status, error_message, point_count, original_filename, summary, started_at, ended_at, updated_at, processed_path)",
       )
       .eq("race_id", raceId)
       .order("created_at", { ascending: true }),
@@ -170,6 +170,10 @@ export default async function RaceManagePage({
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
   const canUpload = isOrganizer || panelEntries.some((entry) => entry.canUpload);
   const trackStatuses = panelEntries.map((entry) => entry.track?.status ?? null);
+  const trackSummaries = (entries ?? []).map((entry) => ({
+    status: entry.tracks?.status ?? null,
+    processedPath: entry.tracks?.processed_path ?? null,
+  }));
   const enteredBoatIds = new Set(
     (entries ?? []).flatMap((entry) => (entry.boats ? [entry.boats.id] : [])),
   );
@@ -207,13 +211,12 @@ export default async function RaceManagePage({
     sessionType,
     canUpload,
     canEdit: canManageRace,
-    trackStatuses,
+    tracks: trackSummaries,
     analysisCurrent,
   });
-  const practiceBoatName =
-    isPractice
-      ? panelEntries.find((entry) => entry.boatName)?.boatName ?? null
-      : null;
+  const practiceBoatName = isPractice
+    ? (entries ?? []).find((entry) => entry.boats?.name)?.boats?.name ?? null
+    : null;
   const trackStarts = processedEntries
     .map((entry) => entry.tracks?.started_at)
     .filter((value): value is string => !!value)

@@ -30,8 +30,14 @@ export interface ResolveSessionPrimaryActionInput {
   hasErrorTrack: boolean;
   /** Saved analysis is present and fresh for the current entry set. */
   analysisCurrent: boolean;
-  /** At least one processed track is available for replay. */
+  /** At least one processed track with a loadable processed_path. */
   replayAvailable: boolean;
+}
+
+export interface SessionTrackSummaryInput {
+  status?: string | null;
+  /** Required for replayAvailable — status alone is not enough. */
+  processedPath?: string | null;
 }
 
 function dataHref(raceId: string) {
@@ -97,9 +103,9 @@ export function resolveSessionPrimaryAction(
   return null;
 }
 
-/** Derive resolver flags from per-entry track statuses. */
+/** Derive resolver flags from per-entry track rows. */
 export function summarizeSessionTrackStatuses(
-  trackStatuses: readonly (string | null | undefined)[],
+  tracks: readonly (SessionTrackSummaryInput | string | null | undefined)[],
 ): Pick<
   ResolveSessionPrimaryActionInput,
   "hasAnyTrack" | "hasProcessingTrack" | "hasErrorTrack" | "replayAvailable"
@@ -109,7 +115,10 @@ export function summarizeSessionTrackStatuses(
   let hasErrorTrack = false;
   let replayAvailable = false;
 
-  for (const status of trackStatuses) {
+  for (const track of tracks) {
+    const status = typeof track === "string" || track == null ? track : track.status;
+    const processedPath =
+      typeof track === "object" && track ? track.processedPath : null;
     if (!status) continue;
     hasAnyTrack = true;
     if (status === "uploaded" || status === "processing") {
@@ -118,7 +127,7 @@ export function summarizeSessionTrackStatuses(
     if (status === "error") {
       hasErrorTrack = true;
     }
-    if (status === "processed") {
+    if (status === "processed" && typeof processedPath === "string" && processedPath.length > 0) {
       replayAvailable = true;
     }
   }

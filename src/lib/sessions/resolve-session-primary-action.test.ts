@@ -151,12 +151,27 @@ describe("resolveSessionPrimaryAction", () => {
 });
 
 describe("summarizeSessionTrackStatuses", () => {
-  it("aggregates track flags for the resolver", () => {
-    expect(summarizeSessionTrackStatuses([null, "processing", "error", "processed"])).toEqual({
+  it("aggregates track flags and requires processed_path for replay", () => {
+    expect(
+      summarizeSessionTrackStatuses([
+        null,
+        { status: "processing" },
+        { status: "error" },
+        { status: "processed", processedPath: "tracks/a.json" },
+      ]),
+    ).toEqual({
       hasAnyTrack: true,
       hasProcessingTrack: true,
       hasErrorTrack: true,
       replayAvailable: true,
+    });
+    expect(
+      summarizeSessionTrackStatuses([{ status: "processed", processedPath: null }]),
+    ).toEqual({
+      hasAnyTrack: true,
+      hasProcessingTrack: false,
+      hasErrorTrack: false,
+      replayAvailable: false,
     });
     expect(summarizeSessionTrackStatuses([null, null])).toEqual({
       hasAnyTrack: false,
