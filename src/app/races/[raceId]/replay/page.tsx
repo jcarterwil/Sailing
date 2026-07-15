@@ -222,6 +222,9 @@ export default async function ReplayPage({
           raceMeta={raceMeta}
           analyzeContext={analyzeContext}
           analysis={replayAnalysis}
+          commentaryStatus={
+            replayAnalysis ? parsedAnalysis.replayEventsStatus : "missing"
+          }
         />
       </div>
     </main>

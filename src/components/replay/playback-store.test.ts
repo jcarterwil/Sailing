@@ -44,4 +44,16 @@ describe("playback camera defaults", () => {
 
     expect(usePlaybackStore.getState().cameraMode).toBe("north");
   });
+
+  it("preserves play state when replay events seek the shared clock", () => {
+    usePlaybackStore.getState().setBounds(1_000, 10_000);
+    usePlaybackStore.getState().setPlaying(true);
+
+    usePlaybackStore.getState().seek(6_000);
+
+    expect(usePlaybackStore.getState()).toMatchObject({
+      timeMs: 6_000,
+      playing: true,
+    });
+  });
 });

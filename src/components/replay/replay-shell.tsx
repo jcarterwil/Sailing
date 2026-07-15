@@ -6,6 +6,7 @@ import type { TrackMeta } from "@/components/replay/track-loader";
 import type { VideoMeta } from "@/components/replay/video-meta";
 import type { RaceAnalysis } from "@/lib/analytics/types";
 import type { RaceAnalyzeContext, RaceMeta } from "@/lib/races/meta";
+import type { ReplayCommentaryStatus } from "@/components/replay/replay-commentary";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // maplibre-gl is browser-only; load the whole replay client-side.
@@ -33,6 +34,8 @@ export function ReplayShell(props: {
   analyzeContext: RaceAnalyzeContext;
   /** Persisted `race_analyses.analysis` when available. */
   analysis?: RaceAnalysis | null;
+  /** Parse state for the optional replay-event sub-contract. */
+  commentaryStatus?: ReplayCommentaryStatus;
   /** Public share view — hide manage-race links. */
   readOnly?: boolean;
 }) {

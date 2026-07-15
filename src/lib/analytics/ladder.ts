@@ -21,6 +21,31 @@ export interface LadderRung {
   inTrack: boolean;
 }
 
+export interface LadderFrameState {
+  timeMs: number;
+  axisSign: 1 | -1;
+  axisFlipped: boolean;
+  coverageComplete: boolean;
+  order: string[];
+  rungs: LadderRung[];
+}
+
+export interface LadderFrameInput {
+  timeMs: number;
+  boatsNow: LadderBoat[];
+  boatsLegLookback: LadderBoat[];
+  twdDeg: number;
+  origin: { lat: number; lon: number };
+  previousOrder?: string[];
+  previousAxisSign?: 1 | -1;
+  /** Reviewed leg-direction hint; when present it overrides motion inference. */
+  axisSignHint?: 1 | -1;
+}
+
+function compareEntryId(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function projectBoat(
   boat: LadderBoat,
   twdDeg: number,
@@ -67,11 +92,41 @@ export function ladderRungs(
   origin: { lat: number; lon: number },
   axisSign: 1 | -1 = 1,
 ): LadderRung[] {
-  const projected = boats.map((b) => projectBoat(b, twdDeg, origin, axisSign));
+  const projected = [...boats]
+    .sort((a, b) => compareEntryId(a.entryId, b.entryId))
+    .map((b) => projectBoat(b, twdDeg, origin, axisSign));
   const inTrack = projected.filter((b) => b.inTrack);
   const outTrack = projected.filter((b) => !b.inTrack);
-  inTrack.sort((a, b) => b.dmgM - a.dmgM);
+  inTrack.sort((a, b) => b.dmgM - a.dmgM || compareEntryId(a.entryId, b.entryId));
   return assignRanksAndGaps([...inTrack, ...outTrack]);
+}
+
+/**
+ * Shared, pure ladder frame doctrine for replay UI and offline event analysis.
+ * Callers own sampling; unavailable boats must be passed with `inTrack=false`.
+ */
+export function buildLadderFrameState(input: LadderFrameInput): LadderFrameState {
+  const previousAxisSign = input.previousAxisSign ?? 1;
+  const rawNow = ladderRungs(input.boatsNow, input.twdDeg, input.origin, 1);
+  const rawPast = ladderRungs(input.boatsLegLookback, input.twdDeg, input.origin, 1);
+  const axisSign = input.axisSignHint ?? estimateAxisSign(
+    previousAxisSign,
+    fleetMedianDmgDelta(rawNow, rawPast),
+  );
+  const raw = ladderRungs(input.boatsNow, input.twdDeg, input.origin, axisSign);
+  const rungs = applyRankHysteresis(raw, input.previousOrder ?? []);
+  const coverageComplete = input.boatsNow.length >= 2 && input.boatsNow.every((boat) =>
+    boat.inTrack &&
+    Number.isFinite(boat.lat) &&
+    Number.isFinite(boat.lon));
+  return {
+    timeMs: input.timeMs,
+    axisSign,
+    axisFlipped: axisSign !== previousAxisSign,
+    coverageComplete,
+    order: rungs.filter((rung) => rung.inTrack).map((rung) => rung.entryId),
+    rungs,
+  };
 }
 
 /**
@@ -91,7 +146,7 @@ export function applyRankHysteresis(
       const ia = prevIndex.get(a.entryId);
       const ib = prevIndex.get(b.entryId);
       if (ia !== undefined && ib !== undefined) return ia - ib;
-      return a.entryId.localeCompare(b.entryId);
+      return compareEntryId(a.entryId, b.entryId);
     }
     if (Math.abs(a.dmgM - b.dmgM) < deadbandM) {
       const ia = prevIndex.get(a.entryId);

@@ -27,3 +27,7 @@ Little-endian row records: 1-byte key + fixed payload. Key/size table and quater
 ## Testing
 
 Golden tests (`*.test.ts`) run against the real `Examples/` files via Vitest. Anchors that must stay true: VKX race-start event at `2026-07-07T22:10:00Z`, per-boat point counts, CSV tz offset `-300`, estimated TWD ≈ 283°. Add a test with any new algorithm and keep the existing anchors green.
+
+## Replay event ledger
+
+`analyzeRace` builds the optional versioned `replayEvents` fact ledger only after corrected race/wind/maneuvers and Performance V1 are final. The ledger is deterministic, bounded, JSON-safe, and display-name-free. It may describe only facts supported by the shared ladder state, existing maneuver classification, canonical passages/results, and anchored performance opportunities. It must never persist prose, infer intent or causality, cross a rejected source gap, or depend on input order or wall-clock time. Presentation resolves current boat names and formats those facts later.

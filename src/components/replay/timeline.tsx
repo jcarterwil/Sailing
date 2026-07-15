@@ -12,7 +12,45 @@ const AXIS_HEIGHT = 20;
 
 function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
   const local = new Date(timeMs + (tzOffsetMinutes ?? 0) * 60_000);
-  return local.toISOString().slice(11, 19);
+  return Number.isFinite(local.getTime())
+    ? local.toISOString().slice(11, 19)
+    : "--:--:--";
+}
+
+function markerStroke(marker: ReplayEventMarker): string {
+  switch (marker.kind) {
+    case "finish":
+      return "16, 185, 129";
+    case "mark_rounding":
+      return "139, 92, 246";
+    case "maneuver":
+      return "245, 158, 11";
+    case "initial_lead":
+    case "lead_change":
+      return "14, 165, 233";
+    case "position_change":
+      return "59, 130, 246";
+    case "leg_insight":
+      return "217, 70, 239";
+  }
+}
+
+function markerFlagClass(marker: ReplayEventMarker): string {
+  switch (marker.kind) {
+    case "finish":
+      return "bg-emerald-700/95";
+    case "mark_rounding":
+      return "bg-violet-600/95";
+    case "maneuver":
+      return "bg-amber-700/95";
+    case "initial_lead":
+    case "lead_change":
+      return "bg-sky-700/95";
+    case "position_change":
+      return "bg-blue-600/95";
+    case "leg_insight":
+      return "bg-fuchsia-600/95";
+  }
 }
 
 // Min/max-per-pixel SOG strips, one row per boat, drawn once per resize;
@@ -121,16 +159,15 @@ export function Timeline({
         ctx.fill();
       }
 
-      // Reviewed race milestones: first fleet rounding at each mark and first finish.
+      // Reviewed race events: key facts are stronger; detail facts remain subdued.
       for (const marker of eventMarkers) {
         if (marker.timeMs < t0 || marker.timeMs > t1) continue;
         const x = ((marker.timeMs - t0) / span) * width;
+        const key = marker.importance === "key";
         ctx.save();
-        ctx.strokeStyle = marker.kind === "finish"
-          ? "rgba(16, 185, 129, 0.9)"
-          : "rgba(139, 92, 246, 0.85)";
-        ctx.lineWidth = 1.25;
-        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = `rgba(${markerStroke(marker)}, ${key ? 0.9 : 0.35})`;
+        ctx.lineWidth = key ? 1.25 : 0.75;
+        ctx.setLineDash(key ? [3, 3] : [1, 4]);
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height - AXIS_HEIGHT);
@@ -262,6 +299,9 @@ export function Timeline({
       <canvas ref={overlayRef} className="absolute inset-0" />
       {span > 0 && eventMarkers.map((marker) => {
         if (marker.timeMs < t0 || marker.timeMs > t1) return null;
+        // Every fact is drawn on canvas; only key events become overlapping
+        // interactive flags. Detail events remain available in the full feed.
+        if (marker.importance !== "key") return null;
         const boatName = tracks.find((track) => track.entryId === marker.entryId)?.boatName;
         const pct = ((marker.timeMs - t0) / span) * 100;
         const title = `${marker.title}${boatName ? ` — ${boatName}` : ""} at ${formatClock(marker.timeMs, tz)}. Click to jump.`;
@@ -270,20 +310,16 @@ export function Timeline({
             key={marker.id}
             type="button"
             data-replay-event={marker.id}
-            className={`absolute top-0 z-10 flex h-[18px] min-w-8 -translate-x-1/2 items-center justify-center gap-0.5 rounded-b px-1 font-mono text-[9px] font-semibold leading-none text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
-              marker.kind === "finish" ? "bg-emerald-600/95" : "bg-violet-600/95"
-            }`}
+            className="absolute top-0 z-10 flex h-11 min-w-11 -translate-x-1/2 items-start justify-center rounded-b font-mono text-[9px] font-semibold leading-none text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
             style={{ left: `${Math.min(97.5, Math.max(2.5, pct))}%` }}
             aria-label={title}
             title={title}
-            onClick={() => {
-              const state = usePlaybackStore.getState();
-              state.setPlaying(false);
-              state.seek(marker.timeMs);
-            }}
+            onClick={() => usePlaybackStore.getState().seek(marker.timeMs)}
           >
-            <Flag className="size-2.5" aria-hidden="true" />
-            {marker.label}
+            <span className={`flex h-[18px] min-w-8 items-center justify-center gap-0.5 rounded-b px-1 shadow-sm ${markerFlagClass(marker)}`}>
+              <Flag className="size-2.5" aria-hidden="true" />
+              {marker.label}
+            </span>
           </button>
         );
       })}

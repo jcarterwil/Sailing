@@ -4,6 +4,7 @@ import { buildReviewPreview } from "@/components/replay/review-preview";
 import { analyzeRace } from "@/lib/analytics/analyze";
 import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { parsePerformanceV1 } from "@/lib/analytics/performance/parse";
+import { parseReplayEventTimelineV1 } from "@/lib/analytics/replay-events/parse";
 import {
   SIX_BOAT_FIVE_LEG_FIXTURE,
 } from "@/lib/analytics/performance/__fixtures__/six-boat-five-leg";
@@ -19,5 +20,7 @@ describe("buildReviewPreview", () => {
     expect(preview.analysis).toEqual(server);
     expect(preview.coursePreview.course).toEqual(server.performance?.course);
     expect(parsePerformanceV1(preview.analysis.performance).status).toBe("valid");
+    expect(parseReplayEventTimelineV1(preview.analysis.replayEvents).status)
+      .toBe("valid");
   });
 });
