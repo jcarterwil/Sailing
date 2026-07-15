@@ -86,10 +86,10 @@ export default async function RacePerformancePage({
     return workspaceChrome(
       <section
         className="rounded-xl border bg-card/70 p-6"
-        aria-labelledby="practice-performance-heading"
+        aria-labelledby="practice-report-heading"
       >
         <h2
-          id="practice-performance-heading"
+          id="practice-report-heading"
           className="text-xl font-semibold tracking-tight"
         >
           Report unavailable for Practice
@@ -193,7 +193,7 @@ export default async function RacePerformancePage({
       width="wide"
       className="!px-0 !py-0 sm:!px-0 sm:!py-0 lg:!px-0"
     >
-      <div className="border-b border-border/70 px-4 pt-4 sm:px-10 lg:px-12">
+      <div className="px-4 pt-4 sm:px-10 lg:px-12">
         <SessionWorkspaceNav
           raceId={chrome.raceId}
           activeTab="performance"
