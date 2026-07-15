@@ -567,18 +567,59 @@ begin
   -- Drop all source memberships (tombstone has no crew).
   delete from public.boat_memberships m where m.boat_id = p_source_boat_id;
 
-  -- Drop series aliases that reference the source before moving competitors
-  -- (aliases FK to competitors on canonical_boat_id).
-  delete from public.race_series_boat_aliases a
-  where a.source_boat_id = p_source_boat_id
-     or a.canonical_boat_id = p_source_boat_id;
-
-  -- Series competitors: move source-only rows to target.
-  update public.race_series_competitors c
-  set boat_id = p_target_boat_id,
+  -- Remap series alias labels that pointed at the duplicate boat. Skip rows
+  -- that would become self-aliases, collide with an existing target label, or
+  -- make the target both a competitor and an alias source in the same series.
+  update public.race_series_boat_aliases a
+  set source_boat_id = p_target_boat_id,
       updated_at = merged_at_ts
-  where c.boat_id = p_source_boat_id;
+  where a.source_boat_id = p_source_boat_id
+    and a.canonical_boat_id is distinct from p_target_boat_id
+    and not exists (
+      select 1
+      from public.race_series_boat_aliases other
+      where other.series_id = a.series_id
+        and other.source_boat_id = p_target_boat_id
+    )
+    and not exists (
+      select 1
+      from public.race_series_competitors c
+      where c.series_id = a.series_id
+        and c.boat_id = p_target_boat_id
+    );
+
+  -- Remaining source-label aliases cannot be remapped safely.
+  delete from public.race_series_boat_aliases a
+  where a.source_boat_id = p_source_boat_id;
+
+  -- Move source competitors onto the target first so aliases that used the
+  -- source as canonical can be repointed without breaking the FK.
+  insert into public.race_series_competitors (
+    series_id, boat_id, role, created_at, updated_at
+  )
+  select
+    c.series_id,
+    p_target_boat_id,
+    c.role,
+    c.created_at,
+    merged_at_ts
+  from public.race_series_competitors c
+  where c.boat_id = p_source_boat_id
+  on conflict (series_id, boat_id) do nothing;
   get diagnostics series_competitors_moved = row_count;
+
+  -- Drop aliases that would become self-references after the canonical remap.
+  delete from public.race_series_boat_aliases a
+  where a.canonical_boat_id = p_source_boat_id
+    and a.source_boat_id = p_target_boat_id;
+
+  update public.race_series_boat_aliases a
+  set canonical_boat_id = p_target_boat_id,
+      updated_at = merged_at_ts
+  where a.canonical_boat_id = p_source_boat_id;
+
+  delete from public.race_series_competitors c
+  where c.boat_id = p_source_boat_id;
 
   -- Historical import batches stay attached to the canonical boat.
   update public.historical_import_batches b

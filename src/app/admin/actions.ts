@@ -187,10 +187,11 @@ export async function regenerateClaimCode(boatId: string) {
 
   const { data: boat } = await admin
     .from("boats")
-    .select("id, owner_id, claim_email, claim_code")
+    .select("id, owner_id, claim_email, claim_code, merged_into_id")
     .eq("id", boatId)
     .maybeSingle();
   if (!boat) throw new Error("Boat not found.");
+  if (boat.merged_into_id) throw new Error("This boat was merged into another boat.");
   if (boat.owner_id && !boat.claim_email && !boat.claim_code) {
     throw new Error("Start an ownership transfer before generating an invitation link.");
   }
@@ -200,7 +201,8 @@ export async function regenerateClaimCode(boatId: string) {
   const { error } = await admin
     .from("boats")
     .update({ claim_code: claimCode, updated_at: new Date().toISOString() })
-    .eq("id", boatId);
+    .eq("id", boatId)
+    .is("merged_into_id", null);
   if (error) throw new Error(`Could not regenerate code: ${error.message}`);
 
   revalidatePath("/admin/boats");
@@ -211,10 +213,19 @@ export async function clearClaim(boatId: string) {
   await requireAdmin();
   const admin = createAdminClient();
 
+  const { data: boat } = await admin
+    .from("boats")
+    .select("id, merged_into_id")
+    .eq("id", boatId)
+    .maybeSingle();
+  if (!boat) throw new Error("Boat not found.");
+  if (boat.merged_into_id) throw new Error("This boat was merged into another boat.");
+
   const { error } = await admin
     .from("boats")
     .update({ claim_email: null, claim_code: null, updated_at: new Date().toISOString() })
-    .eq("id", boatId);
+    .eq("id", boatId)
+    .is("merged_into_id", null);
   if (error) throw new Error(`Could not clear claim: ${error.message}`);
 
   revalidatePath("/admin/boats");
@@ -226,10 +237,11 @@ async function sendBoatOwnerInvitation(boatId: string) {
   // Service role: claim_email is hidden from the authenticated role.
   const { data: boat } = await admin
     .from("boats")
-    .select("id, claim_email, claim_code, owner_id")
+    .select("id, claim_email, claim_code, owner_id, merged_into_id")
     .eq("id", boatId)
     .maybeSingle();
   if (!boat) throw new Error("Boat not found.");
+  if (boat.merged_into_id) throw new Error("This boat was merged into another boat.");
   if (!boat.claim_email) {
     throw new Error("Add a claim email before sending an invite.");
   }
@@ -368,6 +380,34 @@ async function loadBoatMergeIdentity(
   };
 }
 
+async function listAllIds(
+  admin: ReturnType<typeof createAdminClient>,
+  table: "race_entries" | "race_series_competitors",
+  boatId: string,
+  column: "race_id" | "series_id",
+): Promise<string[]> {
+  const pageSize = 1000;
+  const ids: string[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin
+      .from(table)
+      .select(column)
+      .eq("boat_id", boatId)
+      .order(column, { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(`Could not load ${table} for merge preview: ${error.message}`);
+    }
+    if (!data?.length) break;
+    for (const row of data) {
+      const value = row[column as keyof typeof row];
+      if (typeof value === "string") ids.push(value);
+    }
+    if (data.length < pageSize) break;
+  }
+  return ids;
+}
+
 export async function previewBoatMerge(
   sourceBoatId: string,
   targetBoatId: string,
@@ -380,29 +420,27 @@ export async function previewBoatMerge(
     loadBoatMergeIdentity(admin, targetBoatId),
   ]);
 
-  const [{ data: sourceEntries }, { data: targetEntries }, { count: destinationCount }] =
+  const [sourceRaceIds, targetRaceIds, sourceSeriesIds, targetSeriesIds, destinationCountResult] =
     await Promise.all([
-      admin.from("race_entries").select("race_id").eq("boat_id", sourceBoatId),
-      admin.from("race_entries").select("race_id").eq("boat_id", targetBoatId),
+      listAllIds(admin, "race_entries", sourceBoatId, "race_id"),
+      listAllIds(admin, "race_entries", targetBoatId, "race_id"),
+      listAllIds(admin, "race_series_competitors", sourceBoatId, "series_id"),
+      listAllIds(admin, "race_series_competitors", targetBoatId, "series_id"),
       admin
         .from("boats")
         .select("id", { count: "exact", head: true })
         .eq("merged_into_id", sourceBoatId),
     ]);
 
-  const sourceRaceIds = new Set((sourceEntries ?? []).map((row) => row.race_id));
-  const targetRaceIds = new Set((targetEntries ?? []).map((row) => row.race_id));
-  const conflictingRaceIds = [...sourceRaceIds].filter((id) => targetRaceIds.has(id)).sort();
-  const affectedRaceIds = [...sourceRaceIds].sort();
+  const targetRaceSet = new Set(targetRaceIds);
+  const conflictingRaceIds = [...new Set(sourceRaceIds)]
+    .filter((id) => targetRaceSet.has(id))
+    .sort();
+  const affectedRaceIds = [...new Set(sourceRaceIds)].sort();
 
-  const [{ data: sourceCompetitors }, { data: targetCompetitors }] = await Promise.all([
-    admin.from("race_series_competitors").select("series_id").eq("boat_id", sourceBoatId),
-    admin.from("race_series_competitors").select("series_id").eq("boat_id", targetBoatId),
-  ]);
-  const sourceSeriesIds = new Set((sourceCompetitors ?? []).map((row) => row.series_id));
-  const targetSeriesIds = new Set((targetCompetitors ?? []).map((row) => row.series_id));
-  const conflictingSeriesIds = [...sourceSeriesIds]
-    .filter((id) => targetSeriesIds.has(id))
+  const targetSeriesSet = new Set(targetSeriesIds);
+  const conflictingSeriesIds = [...new Set(sourceSeriesIds)]
+    .filter((id) => targetSeriesSet.has(id))
     .sort();
 
   let analysesToInvalidate = 0;
@@ -428,7 +466,7 @@ export async function previewBoatMerge(
     target,
     conflictingRaceIds,
     conflictingSeriesIds,
-    sourceIsMergeDestination: (destinationCount ?? 0) > 0,
+    sourceIsMergeDestination: (destinationCountResult.count ?? 0) > 0,
     affectedRaceIds,
     analysesToInvalidate,
     reportsToInvalidate,

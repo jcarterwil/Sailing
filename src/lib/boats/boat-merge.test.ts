@@ -77,6 +77,13 @@ describe("boat merge duplicates migration", () => {
     expect(migration).toContain("create or replace function public.create_race_entry_for_boat");
     expect(migration).toContain("create or replace function public.create_practice_session");
   });
+
+  it("remaps series aliases to the canonical boat instead of dropping them wholesale", () => {
+    expect(migration).toContain("set source_boat_id = p_target_boat_id");
+    expect(migration).toContain("set canonical_boat_id = p_target_boat_id");
+    expect(migration).toContain("insert into public.race_series_competitors");
+    expect(migration).toContain("delete from public.race_series_competitors c");
+  });
 });
 
 describe("evaluateBoatMergePreview", () => {

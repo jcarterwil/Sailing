@@ -67,7 +67,7 @@ export async function updateBoatDetails(input: {
     .select("id, merged_into_id")
     .eq("id", input.boatId)
     .maybeSingle();
-  if (!existing) return { error: "You don't have access to edit this boat." };
+  if (!existing) return { error: "Boat not found." };
   if (existing.merged_into_id) {
     return { error: "This boat was merged into another boat." };
   }

@@ -111,9 +111,18 @@ export function boatAccessLabel(access: ViewableBoatAccess): string {
   return "Viewer";
 }
 
+/** Follow one tombstone hop to the canonical boat id (or null if missing). */
+export function resolveMergedBoatId(
+  boatId: string,
+  mergedIntoId: string | null | undefined,
+): string {
+  return mergedIntoId ?? boatId;
+}
+
 /**
  * If ?boat= names an accessible boat outside the capped selector list, fetch
  * it and append so resolveActiveBoatId / the switcher stay consistent.
+ * Merged tombstones resolve to their canonical target.
  */
 export async function includeRequestedViewableBoat(
   supabase: SupabaseClient<Database>,
@@ -122,10 +131,19 @@ export async function includeRequestedViewableBoat(
   boats: ViewableBoatOption[],
 ): Promise<ViewableBoatOption[]> {
   if (!isBoatUuid(requestedBoatId)) return boats;
-  if (boats.some((boat) => boat.id === requestedBoatId)) return boats;
+
+  const { data: requested } = await supabase
+    .from("boats")
+    .select("id, merged_into_id")
+    .eq("id", requestedBoatId)
+    .maybeSingle();
+  if (!requested) return boats;
+
+  const resolvedId = resolveMergedBoatId(requested.id, requested.merged_into_id);
+  if (boats.some((boat) => boat.id === resolvedId)) return boats;
 
   const { data: canView } = await supabase.rpc("can_view_boat", {
-    bid: requestedBoatId,
+    bid: resolvedId,
   });
   if (!canView) return boats;
 
@@ -133,13 +151,13 @@ export async function includeRequestedViewableBoat(
     supabase
       .from("boats")
       .select("id, name, sail_number, boat_class, owner_id")
-      .eq("id", requestedBoatId)
+      .eq("id", resolvedId)
       .is("merged_into_id", null)
       .maybeSingle(),
     supabase
       .from("boat_memberships")
       .select("role")
-      .eq("boat_id", requestedBoatId)
+      .eq("boat_id", resolvedId)
       .eq("user_id", userId)
       .maybeSingle(),
     supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle(),

@@ -20,6 +20,11 @@ describe("boat merge application contracts", () => {
     expect(mySailing).toContain('.is("merged_into_id", null)');
   });
 
+  it("resolves dashboard ?boat= tombstones to the canonical boat", () => {
+    expect(mySailing).toContain("resolveMergedBoatId");
+    expect(mySailing).toContain("merged_into_id");
+  });
+
   it("redirects merged boat hub urls to the canonical boat", () => {
     expect(boatHub).toContain("merged_into_id");
     expect(boatHub).toContain("redirect(`/boats/${boatMeta.merged_into_id}");
@@ -29,5 +34,8 @@ describe("boat merge application contracts", () => {
     expect(adminActions).toContain("previewBoatMerge");
     expect(adminActions).toContain("mergeDuplicateBoats");
     expect(adminActions).toContain('rpc("merge_boats"');
+    expect(adminActions).toContain("listAllIds");
+    expect(adminActions).toMatch(/regenerateClaimCode[\s\S]*merged_into_id/);
+    expect(adminActions).toMatch(/sendBoatOwnerInvitation[\s\S]*merged_into_id/);
   });
 });
