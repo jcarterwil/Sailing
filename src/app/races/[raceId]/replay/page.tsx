@@ -204,7 +204,10 @@ export default async function ReplayPage({
           showJoinCode={chrome.showJoinCode}
           boatContext={chrome.practiceBoatName}
           tags={chrome.tags}
-          primaryAction={chrome.primaryAction}
+          // Don't invite Open replay on the empty replay surface itself.
+          primaryAction={
+            chrome.primaryAction?.kind === "open-replay" ? null : chrome.primaryAction
+          }
         />
         <div className="space-y-6 py-6">
           <SessionWorkspaceNav

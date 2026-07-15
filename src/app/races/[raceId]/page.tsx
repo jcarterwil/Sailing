@@ -27,6 +27,7 @@ import { listActiveBoats } from "@/lib/boats/active-boats";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { resolveSessionType } from "@/lib/sessions/format";
+import { summarizeSessionTrackStatuses } from "@/lib/sessions/resolve-session-primary-action";
 import { buildSessionPrimaryAction } from "@/lib/sessions/session-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { parseVideoUploadSummary } from "@/lib/videos/upload";
@@ -169,7 +170,6 @@ export default async function RaceManagePage({
   });
   const processedCount = panelEntries.filter((e) => e.track?.status === "processed").length;
   const canUpload = isOrganizer || panelEntries.some((entry) => entry.canUpload);
-  const trackStatuses = panelEntries.map((entry) => entry.track?.status ?? null);
   const trackSummaries = (entries ?? []).map((entry) => ({
     status: entry.tracks?.status ?? null,
     processedPath: entry.tracks?.processed_path ?? null,
@@ -206,6 +206,7 @@ export default async function RaceManagePage({
       correctionsRow?.updated_at,
     );
   const analysisComputedAt = analysisCurrent ? analysisRow?.computed_at ?? null : null;
+  const trackFlags = summarizeSessionTrackStatuses(trackSummaries);
   const primaryAction = buildSessionPrimaryAction({
     raceId: race.id,
     sessionType,
@@ -244,15 +245,19 @@ export default async function RaceManagePage({
     weatherStartMs + 24 * 60 * 60 * 1000,
   );
 
-  const statusSummary = !panelEntries.some((entry) => entry.track)
+  const statusSummary = !trackFlags.hasAnyTrack
     ? "No track data yet"
-    : trackStatuses.some((status) => status === "uploaded" || status === "processing")
-      ? "Track processing in progress"
-      : trackStatuses.some((status) => status === "error")
-        ? "A track needs attention"
-        : analysisCurrent
-          ? "Analysis is current"
-          : "Analysis needs review";
+    : trackFlags.hasMissingTrack
+      ? "Waiting for remaining track data"
+      : trackFlags.hasProcessingTrack
+        ? "Track processing in progress"
+        : trackFlags.hasErrorTrack
+          ? "A track needs attention"
+          : analysisCurrent && trackFlags.replayAvailable
+            ? "Analysis is current"
+            : analysisCurrent
+              ? "Replay files are not ready yet"
+              : "Analysis needs review";
 
   return (
     <AuthenticatedShell
