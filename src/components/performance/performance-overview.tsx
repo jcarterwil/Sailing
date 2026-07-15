@@ -122,6 +122,11 @@ export function PerformanceOverview({
     publicHref?: string | null;
     /** Hide duplicate back link / page title when Session workspace wraps this view. */
     embedded?: boolean;
+    /**
+     * When false, keep document title/Print chrome but render a `<div>` so the
+     * page can sit inside AuthenticatedShell's existing `<main>` landmark.
+     */
+    asMain?: boolean;
   };
 }) {
   const [boatFilter, setBoatFilter] = useState("all");
@@ -165,6 +170,7 @@ export function PerformanceOverview({
   const backLabel = navigation?.backLabel ?? "Back to Session";
   const publicHref = navigation?.publicHref ?? null;
   const { glossaryLink } = useHelpUi();
+  const asMain = navigation?.asMain ?? !embedded;
 
   function updateSort(key: MetricSortKey) {
     setSort((current) => current.key === key
@@ -172,7 +178,7 @@ export function PerformanceOverview({
       : { key, direction: key === "boatName" ? "asc" : "desc" });
   }
 
-  const Screen = embedded ? "div" : "main";
+  const Screen = asMain ? "main" : "div";
   return (
     <>
     <Screen

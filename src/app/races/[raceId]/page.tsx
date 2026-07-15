@@ -29,7 +29,10 @@ import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { resolveSessionType } from "@/lib/sessions/format";
 import { summarizeSessionTrackStatuses } from "@/lib/sessions/resolve-session-primary-action";
-import { buildSessionPrimaryAction } from "@/lib/sessions/session-workspace";
+import {
+  buildSessionPrimaryAction,
+  sessionReportAvailable,
+} from "@/lib/sessions/session-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { parseVideoUploadSummary } from "@/lib/videos/upload";
 
@@ -97,7 +100,7 @@ export default async function RaceManagePage({
       .eq("user_id", user.id),
     supabase
       .from("race_analyses")
-      .select("computed_at")
+      .select("analysis, computed_at")
       .eq("race_id", raceId)
       .maybeSingle(),
     supabase
@@ -198,16 +201,24 @@ export default async function RaceManagePage({
   const processedEntries = (entries ?? []).filter(
     (entry) => entry.tracks?.status === "processed",
   );
+  const processedUpdatedAts = processedEntries.map((entry) => entry.tracks!.updated_at);
   const analysisCurrent =
     processedEntries.length > 0 &&
     processedEntries.length === (entries?.length ?? 0) &&
     analysisIsFresh(
       analysisRow?.computed_at,
-      processedEntries.map((entry) => entry.tracks!.updated_at),
+      processedUpdatedAts,
       correctionsRow?.updated_at,
     );
   const analysisComputedAt = analysisCurrent ? analysisRow?.computed_at ?? null : null;
   const trackFlags = summarizeSessionTrackStatuses(trackSummaries);
+  const reportAvailable = sessionReportAvailable({
+    sessionType,
+    analysis: analysisRow?.analysis,
+    computedAt: analysisRow?.computed_at,
+    processedTrackUpdatedAts: processedUpdatedAts,
+    correctionsUpdatedAt: correctionsRow?.updated_at,
+  });
   const primaryAction = buildSessionPrimaryAction({
     raceId: race.id,
     sessionType,
@@ -215,6 +226,7 @@ export default async function RaceManagePage({
     canEdit: canManageRace,
     tracks: trackSummaries,
     analysisCurrent,
+    reportAvailable,
   });
   const practiceBoatName = isPractice
     ? (entries ?? []).find((entry) => entry.boats?.name)?.boats?.name ?? null

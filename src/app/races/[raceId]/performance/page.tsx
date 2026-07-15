@@ -207,6 +207,8 @@ export default async function RacePerformancePage({
           backLabel: "Back to Session",
           publicHref: race.share_slug ? `/s/${race.share_slug}/performance` : null,
           embedded: false,
+          // PageShell already provides the page <main>.
+          asMain: false,
         }}
         drilldown={{
           tracks: drilldownTracks.tracks,
