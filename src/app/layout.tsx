@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { HelpTooltipProvider } from "@/components/help/help-tooltip-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -52,9 +53,11 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <ImpersonationBanner />
-          {children}
-          <Toaster richColors position="top-center" />
+          <HelpTooltipProvider>
+            <ImpersonationBanner />
+            {children}
+            <Toaster richColors position="top-center" />
+          </HelpTooltipProvider>
         </ThemeProvider>
       </body>
     </html>

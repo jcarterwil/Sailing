@@ -16,6 +16,7 @@ describe("authenticated product shell", () => {
     "src/app/boats/[boatId]/page.tsx",
     "src/app/boats/[boatId]/crew/page.tsx",
     "src/app/races/[raceId]/page.tsx",
+    "src/app/help/metrics/page.tsx",
   ].map(source);
 
   it("renders desktop and mobile navigation from the same item component", () => {

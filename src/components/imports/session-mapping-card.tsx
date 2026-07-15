@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
+import { HelpTip } from "@/components/help/help-tip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -301,7 +302,10 @@ export function SessionMappingCard({
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label>Session type</Label>
+                <div className="flex items-center gap-1">
+                  <Label>Session type</Label>
+                  <HelpTip termKey="sessionType" />
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     type="button"
@@ -342,7 +346,10 @@ export function SessionMappingCard({
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor={`tz-${item.id}`}>Timezone (IANA)</Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor={`tz-${item.id}`}>Timezone (IANA)</Label>
+                  <HelpTip termKey="timezone" />
+                </div>
                 <Input
                   id={`tz-${item.id}`}
                   className="min-h-11"

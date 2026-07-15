@@ -7,6 +7,7 @@ import { ReanalyzeButton } from "@/app/races/[raceId]/reanalyze-button";
 import { SharePanel } from "@/app/races/[raceId]/share-panel";
 import { UploadPanel } from "@/app/races/[raceId]/upload-panel";
 import { VideoPanel } from "@/app/races/[raceId]/video-panel";
+import { HelpTip } from "@/components/help/help-tip";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { SessionHeader } from "@/components/sessions/session-header";
 import {
@@ -368,17 +369,20 @@ export default async function RaceManagePage({
                   />
                 ) : null}
                 {canManageRace && isRaceSession ? (
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="min-h-11"
-                    disabled={processedCount === 0}
-                  >
-                    <Link href={`/races/${race.id}/review`}>
-                      <SlidersHorizontal className="size-4" aria-hidden="true" />
-                      Review data
-                    </Link>
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <HelpTip termKey="review" />
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={processedCount === 0}
+                    >
+                      <Link href={`/races/${race.id}/review`}>
+                        <SlidersHorizontal className="size-4" aria-hidden="true" />
+                        Review data
+                      </Link>
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -387,7 +391,11 @@ export default async function RaceManagePage({
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <CardTitle>{isPractice ? "Track" : "Fleet tracks"}</CardTitle>
+                    <CardTitle className="flex flex-wrap items-center gap-1">
+                      {isPractice ? "Track" : "Fleet tracks"}
+                      <HelpTip termKey="vkxCsv" />
+                      <HelpTip termKey="replaceTrack" />
+                    </CardTitle>
                     <CardDescription>
                       {!panelEntries.some((entry) => entry.track)
                         ? isPractice

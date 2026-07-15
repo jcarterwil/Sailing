@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { HelpUiProvider } from "@/components/help/help-ui-context";
 import { PerformanceOverview } from "@/components/performance/performance-overview";
 import { PerformanceState } from "@/components/performance/performance-state";
 import type { PerformanceTrackMeta } from "@/components/performance/drilldown-worker-contract";
@@ -121,25 +122,27 @@ export default async function SharedPerformancePage({
     : ["One or more public drilldown tracks are unavailable."];
 
   return (
-    <PerformanceOverview
-      model={model}
-      navigation={{
-        backHref: sharedReplayHref,
-        backLabel: "Back to shared replay",
-        publicHref: `/s/${slug}/performance`,
-      }}
-      drilldown={{
-        tracks,
-        issues: trackIssues,
-        performance: publicPerformance,
-        analysis: {
-          wind: publicWind,
-          entries: currentAnalysis.perEntry.map((entry) => ({
-            entryId: entry.entryId,
-            maneuvers: entry.maneuvers,
-          })),
-        },
-      }}
-    />
+    <HelpUiProvider glossaryLink={false}>
+      <PerformanceOverview
+        model={model}
+        navigation={{
+          backHref: sharedReplayHref,
+          backLabel: "Back to shared replay",
+          publicHref: `/s/${slug}/performance`,
+        }}
+        drilldown={{
+          tracks,
+          issues: trackIssues,
+          performance: publicPerformance,
+          analysis: {
+            wind: publicWind,
+            entries: currentAnalysis.perEntry.map((entry) => ({
+              entryId: entry.entryId,
+              maneuvers: entry.maneuvers,
+            })),
+          },
+        }}
+      />
+    </HelpUiProvider>
   );
 }
