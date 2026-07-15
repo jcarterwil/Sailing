@@ -59,7 +59,8 @@ describe("authenticated product shell", () => {
 
     expect(crewPage).toContain("backHref={getBoatHref(boat.id)}");
     expect(crewPage).not.toContain('href="/dashboard"');
-    expect(replayPage).toContain("Back to {race.name}");
+    expect(replayPage).toContain("SessionWorkspaceNav");
+    expect(replayPage).toContain('activeTab="replay"');
     expect(replayPage).toContain("min-h-11");
   });
 });

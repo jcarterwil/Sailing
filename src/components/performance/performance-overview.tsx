@@ -109,9 +109,11 @@ export function PerformanceOverview({
     issues: string[];
   };
   navigation?: {
-    backHref: string;
-    backLabel: string;
-    publicHref: string | null;
+    backHref?: string | null;
+    backLabel?: string;
+    publicHref?: string | null;
+    /** Hide duplicate back link / page title when Session workspace wraps this view. */
+    embedded?: boolean;
   };
 }) {
   const [boatFilter, setBoatFilter] = useState("all");
@@ -150,8 +152,9 @@ export function PerformanceOverview({
     });
   }, [model.distributions, visibleEntryIds]);
   const evidence = model.weather.evidence;
-  const backHref = navigation?.backHref ?? `/races/${model.race.id}`;
-  const backLabel = navigation?.backLabel ?? "Back to race";
+  const embedded = navigation?.embedded ?? false;
+  const backHref = navigation?.backHref;
+  const backLabel = navigation?.backLabel ?? "Back to Session";
   const publicHref = navigation?.publicHref ?? null;
 
   function updateSort(key: MetricSortKey) {
@@ -160,21 +163,50 @@ export function PerformanceOverview({
       : { key, direction: key === "boatName" ? "asc" : "desc" });
   }
 
+  const Screen = embedded ? "div" : "main";
   return (
     <>
-    <main className="performance-screen mx-auto min-h-screen w-full max-w-7xl overflow-x-hidden px-4 py-6 sm:px-8 lg:px-10">
+    <Screen
+      className={
+        embedded
+          ? "performance-screen w-full overflow-x-hidden"
+          : "performance-screen mx-auto min-h-screen w-full max-w-7xl overflow-x-hidden px-4 py-6 sm:px-8 lg:px-10"
+      }
+    >
       <header className="border-b border-border/70 pb-6">
-        <Link href={backHref} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {backLabel}
-        </Link>
-        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        {!embedded && backHref ? (
+          <Link
+            href={backHref}
+            className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {backLabel}
+          </Link>
+        ) : null}
+        <div
+          className={
+            embedded
+              ? "flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+              : "mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+          }
+        >
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">Performance Overview V1</p>
-            <h1 className="mt-1 flex items-center gap-2 text-3xl font-semibold tracking-tight">
-              <Waves className="size-7 text-primary" aria-hidden="true" />
-              {model.race.name}
-            </h1>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
+              Performance Overview V1
+            </p>
+            {!embedded ? (
+              <h1 className="mt-1 flex items-center gap-2 text-3xl font-semibold tracking-tight">
+                <Waves className="size-7 text-primary" aria-hidden="true" />
+                {model.race.name}
+              </h1>
+            ) : (
+              <h2
+                id="session-performance-heading"
+                className="mt-1 text-xl font-semibold tracking-tight"
+              >
+                Performance
+              </h2>
+            )}
             <p className="mt-2 text-sm text-muted-foreground">
               {formatRaceDate(model.race.raceDateMs, model.race.timezone)}
               {model.race.venue ? ` · ${model.race.venue}` : ""}
@@ -428,7 +460,7 @@ export function PerformanceOverview({
       <div className="border-t py-6 text-center text-xs text-muted-foreground">
         Deterministic persisted metrics · authorized tracks are used only for bounded drilldown displays
       </div>
-    </main>
+    </Screen>
     <PerformancePrintReport model={model} publicHref={publicHref} />
     </>
   );

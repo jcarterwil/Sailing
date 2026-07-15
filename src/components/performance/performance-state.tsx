@@ -55,6 +55,7 @@ export function PerformanceState({
   issues,
   backHref,
   backLabel,
+  embedded = false,
 }: {
   state: Exclude<PerformancePageState, "current">;
   raceId: string;
@@ -64,18 +65,36 @@ export function PerformanceState({
   issues: readonly string[];
   backHref?: string;
   backLabel?: string;
+  /** When true, omit the standalone page chrome (Session workspace wraps this). */
+  embedded?: boolean;
 }) {
   const copy = STATE_COPY[state];
   const Icon = copy.icon;
+  const dataHref = `/races/${raceId}?tab=data`;
+  const Wrapper = embedded ? "div" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center gap-6 px-6 py-12">
-      <Link href={backHref ?? `/races/${raceId}`} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        {backLabel ?? raceName}
-      </Link>
+    <Wrapper
+      className={
+        embedded
+          ? "mx-auto flex w-full max-w-2xl flex-col gap-6"
+          : "mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center gap-6 px-6 py-12"
+      }
+    >
+      {!embedded ? (
+        <Link
+          href={backHref ?? `/races/${raceId}`}
+          className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {backLabel ?? raceName}
+        </Link>
+      ) : null}
       <section className="rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="performance-state-title">
         <Icon className="size-8 text-amber-500" aria-hidden="true" />
-        <h1 id="performance-state-title" className="mt-4 text-2xl font-semibold">{copy.title}</h1>
+        <Heading id="performance-state-title" className="mt-4 text-2xl font-semibold">
+          {copy.title}
+        </Heading>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.detail}</p>
         {issues.length > 0 && (
           <details className="mt-4 text-xs text-muted-foreground">
@@ -89,17 +108,19 @@ export function PerformanceState({
           {canManage ? (
             <>
               {canReview && (
-                <Button asChild>
+                <Button asChild className="min-h-11">
                   <Link href={`/races/${raceId}/review`}>Review and reanalyze</Link>
                 </Button>
               )}
-              <Button asChild variant="outline">
-              <Link href={backHref ?? `/races/${raceId}`}>{canReview ? "Manage tracks" : "Open race controls"}</Link>
+              <Button asChild variant="outline" className="min-h-11">
+                <Link href={backHref ?? dataHref}>
+                  {canReview ? "Manage tracks" : "Open Data"}
+                </Link>
               </Button>
             </>
           ) : (
-            <Button asChild variant="outline">
-              <Link href={backHref ?? `/races/${raceId}`}>Back to race</Link>
+            <Button asChild variant="outline" className="min-h-11">
+              <Link href={backHref ?? `/races/${raceId}`}>Back to Session</Link>
             </Button>
           )}
         </div>
@@ -109,6 +130,6 @@ export function PerformanceState({
           </p>
         )}
       </section>
-    </main>
+    </Wrapper>
   );
 }
