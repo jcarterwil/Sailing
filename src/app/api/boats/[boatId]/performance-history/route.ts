@@ -24,7 +24,7 @@ export async function GET(
   if ("error" in auth) return auth.error;
 
   const filters = parseHistoryQueryParams(new URL(request.url).searchParams);
-  const rows = await loadBoatSessionObservations(auth.supabase, boatId);
+  const rows = await loadBoatSessionObservations(auth.supabase, boatId, filters);
   const result = queryBoatPerformanceHistory(boatId, rows, filters);
 
   // Strip nothing further — CompactObservationRowV1 is already public-safe.

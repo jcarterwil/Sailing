@@ -163,8 +163,9 @@ export interface PerformanceHistoryQueryResultV1 {
   coverage: {
     observationCount: number;
     includedCount: number;
-    excludedCount: number;
-    excludedByReason: Record<string, number>;
+    /** Total per-metric exclusion entries across included observations (not a row count). */
+    exclusionCount: number;
+    exclusionsByReason: Record<string, number>;
   };
   units: ObservationUnitsV1;
   metricVersion: string | null;

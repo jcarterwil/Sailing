@@ -46,6 +46,7 @@ alter table public.boat_session_observations enable row level security;
 revoke all on table public.boat_session_observations from anon;
 -- Authenticated clients may read only; writes use the service-role admin client.
 grant select on table public.boat_session_observations to authenticated;
+revoke insert, update, delete on table public.boat_session_observations from authenticated;
 
 create policy "Boat viewers read session observations"
 on public.boat_session_observations

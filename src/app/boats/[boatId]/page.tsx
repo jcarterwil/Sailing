@@ -134,6 +134,7 @@ export default async function BoatHubPage({
     n: number;
     metricVersion: string | null;
     aggregatesStatus: string;
+    metricVersionStatus: string;
     truncated: boolean;
   } | null = null;
   if (activeTab === "overview") {
@@ -144,6 +145,7 @@ export default async function BoatHubPage({
         n: history.n,
         metricVersion: history.metricVersion,
         aggregatesStatus: history.aggregates.status,
+        metricVersionStatus: history.metricVersionStatus,
         truncated: history.bound.truncated,
       };
     } catch {
@@ -213,7 +215,9 @@ export default async function BoatHubPage({
                     {performanceHistorySummary.metricVersion
                       ? ` · ${performanceHistorySummary.metricVersion}`
                       : ""}
-                    {performanceHistorySummary.aggregatesStatus === "ok"
+                    {performanceHistorySummary.aggregatesStatus === "ok" &&
+                    (performanceHistorySummary.metricVersionStatus === "single" ||
+                      performanceHistorySummary.metricVersionStatus === "filtered")
                       ? " · median/IQR ready"
                       : ""}
                     {performanceHistorySummary.truncated ? " · bound applied" : ""}

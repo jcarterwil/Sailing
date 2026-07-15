@@ -145,14 +145,19 @@ export function queryBoatPerformanceHistory(
     metricVersionStatus = "mismatched";
   }
 
-  // Aggregates always run on a single-version cohort (included). The envelope
-  // still surfaces mismatchedVersions so clients can prompt for an explicit filter.
+  // Prefer a single-version cohort for aggregates. When versions conflict and
+  // no explicit filter was set, withhold trend summaries so clients must pick.
   const aggregates = buildAggregateSummaries(included, {
-    metricVersionStatus: included.length === 0 ? "empty" : "single",
+    metricVersionStatus:
+      included.length === 0
+        ? "empty"
+        : metricVersionStatus === "mismatched"
+          ? "mismatched"
+          : "single",
   });
 
-  const excludedByReason = countExclusions(included);
-  const exclusionReasonCount = Object.values(excludedByReason).reduce((a, b) => a + b, 0);
+  const exclusionsByReason = countExclusions(included);
+  const exclusionCount = Object.values(exclusionsByReason).reduce((a, b) => a + b, 0);
 
   return {
     boatId,
@@ -167,8 +172,8 @@ export function queryBoatPerformanceHistory(
     coverage: {
       observationCount: working.length,
       includedCount: included.length,
-      excludedCount: exclusionReasonCount,
-      excludedByReason,
+      exclusionCount,
+      exclusionsByReason,
     },
     units: OBSERVATION_UNITS_V1,
     metricVersion: selectedVersion,

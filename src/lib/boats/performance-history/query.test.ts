@@ -156,7 +156,7 @@ describe("queryBoatPerformanceHistory", () => {
     });
     expect(result.n).toBe(2);
     expect(result.filters.sessionType).toBe("practice");
-    expect(result.coverage.excludedByReason["practice-session"]).toBeGreaterThan(0);
+    expect(result.coverage.exclusionsByReason["practice-session"]).toBeGreaterThan(0);
     expect(
       result.observations.every((o) => o.observation.raceRelative.rank === null),
     ).toBe(true);
@@ -188,6 +188,7 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.observations.every((o) => o.metricVersion === "performance-v1.3.0")).toBe(
       true,
     );
+    expect(result.aggregates.status).toBe("version-mismatch");
   });
 
   it("filters to an explicit metricVersion", () => {

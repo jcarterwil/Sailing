@@ -183,7 +183,8 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   }
 
   // Compact comparable observations for boat Performance History (#172/#173).
-  // Soft-defer when the observations migration has not landed yet.
+  // Analysis already succeeded — observation upsert is best-effort so a
+  // secondary write failure does not fail the analyze API response.
   if (analysis.performance) {
     try {
       await persistBoatSessionObservations({
@@ -192,10 +193,10 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
         computedAt,
       });
     } catch (error) {
-      throw new AnalyzeRaceError(
-        error instanceof Error
-          ? error.message
-          : "Could not persist session observations.",
+      console.error(
+        "[analyzeAndPersistRace] observation persist failed",
+        raceId,
+        error instanceof Error ? error.message : error,
       );
     }
   }

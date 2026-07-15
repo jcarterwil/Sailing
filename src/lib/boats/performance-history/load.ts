@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
   BOAT_SESSION_OBSERVATION_CONTRACT,
   BOAT_SESSION_OBSERVATION_PAYLOAD_VERSION,
   type BoatSessionObservationPayloadV1,
   type CompactObservationRowV1,
+  type PerformanceHistoryQueryFilters,
 } from "@/lib/boats/performance-history/types";
 import { isSessionType } from "@/lib/sessions/types";
 import type { Database, Json } from "@/lib/supabase/database.types";
@@ -32,20 +34,39 @@ export function parseObservationPayload(
 
 /**
  * Load compact observations for one boat. Relies on RLS `can_view_boat`.
- * Selects only compact columns — never joins tracks or storage paths.
+ * Pushes session-type / date / metric-version filters and a hard fetch cap
+ * (bound + 1) into the DB query so interactive history stays bounded.
  */
 export async function loadBoatSessionObservations(
   supabase: SupabaseClient<Database>,
   boatId: string,
+  filters?: PerformanceHistoryQueryFilters,
 ): Promise<CompactObservationRowV1[]> {
-  const { data, error } = await supabase
+  const fetchLimit = BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT + 1;
+  let query = supabase
     .from("boat_session_observations")
     .select(
       "boat_id, race_id, entry_id, session_type, occurred_at, timezone, metric_version, observation",
     )
-    .eq("boat_id", boatId)
+    .eq("boat_id", boatId);
+
+  if (filters?.sessionType === "race" || filters?.sessionType === "practice") {
+    query = query.eq("session_type", filters.sessionType);
+  }
+  if (filters?.from) {
+    query = query.gte("occurred_at", filters.from);
+  }
+  if (filters?.to) {
+    query = query.lte("occurred_at", filters.to);
+  }
+  if (filters?.metricVersion) {
+    query = query.eq("metric_version", filters.metricVersion);
+  }
+
+  const { data, error } = await query
     .order("occurred_at", { ascending: false, nullsFirst: false })
-    .order("race_id", { ascending: false });
+    .order("race_id", { ascending: false })
+    .limit(fetchLimit);
 
   if (error) {
     throw new Error(`Could not load boat session observations: ${error.message}`);

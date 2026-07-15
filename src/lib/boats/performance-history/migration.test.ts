@@ -19,6 +19,9 @@ describe("boat_session_observations migration", () => {
     expect(migration).toContain(
       "grant select on table public.boat_session_observations to authenticated",
     );
+    expect(migration).toContain(
+      "revoke insert, update, delete on table public.boat_session_observations from authenticated",
+    );
     expect(migration).toContain("can_view_boat(boat_id)");
     expect(migration).not.toMatch(/grant insert|grant update|grant delete/i);
   });
