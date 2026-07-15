@@ -163,9 +163,10 @@ export function PerformanceOverview({
       : { key, direction: key === "boatName" ? "asc" : "desc" });
   }
 
+  const Screen = embedded ? "div" : "main";
   return (
     <>
-    <div
+    <Screen
       className={
         embedded
           ? "performance-screen w-full overflow-x-hidden"
@@ -459,7 +460,7 @@ export function PerformanceOverview({
       <div className="border-t py-6 text-center text-xs text-muted-foreground">
         Deterministic persisted metrics · authorized tracks are used only for bounded drilldown displays
       </div>
-    </div>
+    </Screen>
     <PerformancePrintReport model={model} publicHref={publicHref} />
     </>
   );

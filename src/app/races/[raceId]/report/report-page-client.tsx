@@ -128,8 +128,10 @@ export function ReportPageClient({
   const completeReport = snapshot.latestComplete;
   const hasPriorReport = !!completeReport?.markdown;
 
+  const Wrapper = embedded ? "div" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <div
+    <Wrapper
       className={
         embedded
           ? "report-print-page w-full"
@@ -148,13 +150,13 @@ export function ReportPageClient({
         ) : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2
+            <Heading
               id="session-report-heading"
               className="flex items-center gap-2 text-xl font-semibold tracking-tight sm:text-3xl"
             >
               <FileText className="size-6 text-primary" aria-hidden="true" />
               Coach report
-            </h2>
+            </Heading>
             <p className="mt-2 text-sm text-muted-foreground">
               {raceName}
               {raceVenue ? ` · ${raceVenue}` : ""} · {new Date(raceDate).toLocaleDateString()}
@@ -240,6 +242,6 @@ export function ReportPageClient({
           </section>
         )
       )}
-    </div>
+    </Wrapper>
   );
 }

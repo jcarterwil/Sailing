@@ -71,8 +71,10 @@ export function PerformanceState({
   const copy = STATE_COPY[state];
   const Icon = copy.icon;
   const dataHref = `/races/${raceId}?tab=data`;
+  const Wrapper = embedded ? "div" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <div
+    <Wrapper
       className={
         embedded
           ? "mx-auto flex w-full max-w-2xl flex-col gap-6"
@@ -90,9 +92,9 @@ export function PerformanceState({
       ) : null}
       <section className="rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="performance-state-title">
         <Icon className="size-8 text-amber-500" aria-hidden="true" />
-        <h2 id="performance-state-title" className="mt-4 text-2xl font-semibold">
+        <Heading id="performance-state-title" className="mt-4 text-2xl font-semibold">
           {copy.title}
-        </h2>
+        </Heading>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.detail}</p>
         {issues.length > 0 && (
           <details className="mt-4 text-xs text-muted-foreground">
@@ -128,6 +130,6 @@ export function PerformanceState({
           </p>
         )}
       </section>
-    </div>
+    </Wrapper>
   );
 }
