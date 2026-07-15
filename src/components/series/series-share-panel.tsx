@@ -20,7 +20,7 @@ function configuredOrigin(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
 }
 
-function CopySeriesUrlButton({ path }: { path: string }) {
+function CopySeriesUrlButton({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -29,8 +29,8 @@ function CopySeriesUrlButton({ path }: { path: string }) {
       size="sm"
       className="gap-1.5 font-mono text-xs"
       onClick={async () => {
-        const url = new URL(path, window.location.origin).toString();
-        await navigator.clipboard.writeText(url);
+        const clipboardUrl = new URL(url, window.location.origin).toString();
+        await navigator.clipboard.writeText(clipboardUrl);
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1_500);
       }}
@@ -43,15 +43,16 @@ function CopySeriesUrlButton({ path }: { path: string }) {
 
 export function SeriesSharePanel({
   seriesId,
-  initialRevision,
+  revision,
   initialSlug,
+  onRevisionChange,
 }: {
   seriesId: string;
-  initialRevision: number;
+  revision: number;
   initialSlug: string | null;
+  onRevisionChange: (revision: number) => void;
 }) {
   const [slug, setSlug] = useState(initialSlug);
-  const [revision, setRevision] = useState(initialRevision);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const enabled = Boolean(slug);
@@ -69,7 +70,7 @@ export function SeriesSharePanel({
           enable: next,
         });
         setSlug(result.shareSlug);
-        setRevision(result.revision);
+        onRevisionChange(result.revision);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Could not update sharing.");
       }
@@ -106,7 +107,7 @@ export function SeriesSharePanel({
               {displayedUrl}
             </code>
             <div className="flex gap-2">
-              <CopySeriesUrlButton path={publicPath} />
+              <CopySeriesUrlButton url={displayedUrl} />
               <Button asChild variant="outline" size="sm">
                 <Link href={publicPath} target="_blank" rel="noreferrer">
                   <ExternalLink className="size-3.5" aria-hidden="true" />

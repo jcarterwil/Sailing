@@ -368,7 +368,8 @@ export async function toggleSeriesShare(input: {
     if (!error && updated) {
       revalidatePath("/series");
       revalidatePath(`/series/${input.seriesId}`);
-      revalidatePath(`/series/${input.seriesId}/edit`);
+      // The live edit workspace consumes the returned revision. Refreshing it here would discard
+      // unsaved setup/official-result drafts even though sharing is independent of those fields.
       if (previousSlug) revalidatePath(`/series/s/${previousSlug}`);
       if (updated.share_slug) revalidatePath(`/series/s/${updated.share_slug}`);
       return { shareSlug: updated.share_slug, revision: updated.revision };

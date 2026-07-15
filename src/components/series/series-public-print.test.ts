@@ -164,6 +164,38 @@ describe("public series report and print boundary", () => {
     expect(body).toContain("revalidatePath(`/series/s/${previousSlug}`)");
   });
 
+  it("keeps sharing and organizer actions on one live revision without discarding drafts", () => {
+    const page = source("src/app/series/[seriesId]/edit/page.tsx");
+    const workspace = source("src/app/series/[seriesId]/edit/series-editor-workspace.tsx");
+    const editor = source("src/app/series/[seriesId]/edit/series-workflow-editor.tsx");
+    const sharePanel = source("src/components/series/series-share-panel.tsx");
+
+    expect(page).toContain("<SeriesEditorWorkspace key={model.series.revision}");
+    expect(workspace).toContain("useState(model.series.revision)");
+    expect(workspace).toContain("revision={revision}");
+    expect(workspace).toContain("onRevisionChange={setRevision}");
+    expect(workspace).not.toContain("<SeriesWorkflowEditor key={revision}");
+    expect(sharePanel).toContain("onRevisionChange(result.revision)");
+    expect(sharePanel).not.toContain("useState(initialRevision)");
+    expect(sharePanel).not.toContain("router.refresh");
+    expect(editor).toContain("onRevisionChange(result.revision)");
+    expect(editor).not.toContain("useState(model.series.revision)");
+
+    const actions = source("src/app/series/actions.ts");
+    const toggleStart = actions.indexOf("export async function toggleSeriesShare");
+    const toggleEnd = actions.indexOf("\nexport async function ", toggleStart + 1);
+    const toggleBody = actions.slice(toggleStart, toggleEnd);
+    expect(toggleBody).not.toContain("revalidatePath(`/series/${input.seriesId}/edit`)");
+  });
+
+  it("copies the same canonical-or-relative series URL displayed beside the button", () => {
+    const sharePanel = source("src/components/series/series-share-panel.tsx");
+
+    expect(sharePanel).toContain("<CopySeriesUrlButton url={displayedUrl}");
+    expect(sharePanel).toContain("new URL(url, window.location.origin)");
+    expect(sharePanel).not.toContain("new URL(path, window.location.origin)");
+  });
+
   it("uses browser print with intentional grayscale pages and no false page total", () => {
     const button = source("src/components/series/series-print-button.tsx");
     const report = source("src/components/series/series-report.tsx");
