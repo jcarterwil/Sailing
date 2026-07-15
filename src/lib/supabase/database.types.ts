@@ -83,6 +83,57 @@ export type Database = {
           },
         ]
       }
+      boat_crew_people: {
+        Row: {
+          archived_at: string | null
+          boat_id: string
+          created_at: string
+          created_by: string
+          default_role: string | null
+          display_name: string
+          id: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          boat_id: string
+          created_at?: string
+          created_by: string
+          default_role?: string | null
+          display_name: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          boat_id?: string
+          created_at?: string
+          created_by?: string
+          default_role?: string | null
+          display_name?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_crew_people_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_crew_people_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boat_memberships: {
         Row: {
           boat_id: string
@@ -126,6 +177,153 @@ export type Database = {
           {
             foreignKeyName: "boat_memberships_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boat_sails: {
+        Row: {
+          archived_at: string | null
+          boat_id: string
+          created_at: string
+          created_by: string
+          id: string
+          label: string
+          notes: string | null
+          sail_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          boat_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          label: string
+          notes?: string | null
+          sail_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          boat_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          sail_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_sails_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_sails_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boat_session_tag_defs: {
+        Row: {
+          archived_at: string | null
+          boat_id: string
+          created_at: string
+          created_by: string
+          id: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          boat_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          boat_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_session_tag_defs_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_session_tag_defs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boat_setups: {
+        Row: {
+          archived_at: string | null
+          boat_id: string
+          created_at: string
+          created_by: string
+          fields: Json
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          boat_id: string
+          created_at?: string
+          created_by: string
+          fields?: Json
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          boat_id?: string
+          created_at?: string
+          created_by?: string
+          fields?: Json
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boat_setups_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boat_setups_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1029,6 +1227,68 @@ export type Database = {
           },
         ]
       }
+      session_metadata_snapshots: {
+        Row: {
+          boat_id: string
+          created_at: string
+          created_by: string
+          entry_id: string
+          id: string
+          payload: Json
+          race_id: string
+          revision: number
+        }
+        Insert: {
+          boat_id: string
+          created_at?: string
+          created_by: string
+          entry_id: string
+          id?: string
+          payload: Json
+          race_id: string
+          revision: number
+        }
+        Update: {
+          boat_id?: string
+          created_at?: string
+          created_by?: string
+          entry_id?: string
+          id?: string
+          payload?: Json
+          race_id?: string
+          revision?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_metadata_snapshots_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_metadata_snapshots_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_metadata_snapshots_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "race_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_metadata_snapshots_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       historical_import_batches: {
         Row: {
           boat_id: string
@@ -1240,6 +1500,7 @@ export type Database = {
           snapshot_revision: number
         }[]
       }
+      can_edit_active_boat: { Args: { bid: string }; Returns: boolean }
       can_edit_boat: { Args: { bid: string }; Returns: boolean }
       can_manage_boat: { Args: { bid: string }; Returns: boolean }
       can_view_boat: { Args: { bid: string }; Returns: boolean }
@@ -1323,6 +1584,10 @@ export type Database = {
           venue_input: string
         }
         Returns: number
+      }
+      save_session_metadata_snapshot: {
+        Args: { entry_id_input: string; payload_input: Json }
+        Returns: string
       }
     }
     Enums: {
