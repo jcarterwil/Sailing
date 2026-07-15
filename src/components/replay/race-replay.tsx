@@ -1,15 +1,23 @@
 "use client";
 
 import {
+  Component,
+  createContext,
+  type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Loader2 } from "lucide-react";
-import dynamic from "next/dynamic";
+import dynamic, {
+  type DynamicOptionsLoadingProps,
+} from "next/dynamic";
 
 import type { Broadcast3dFailure } from "@/components/replay/broadcast-3d";
+import { broadcastFailureFromCause } from "@/components/replay/broadcast-runtime-boundary";
 import { Leaderboard } from "@/components/replay/leaderboard";
 import { MapView } from "@/components/replay/map-view";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
@@ -70,6 +78,53 @@ const HelmPov = dynamic(
   },
 );
 
+type BroadcastLoadFailureHandler = (
+  failure: Broadcast3dFailure,
+  retry: (() => void) | null,
+) => void;
+
+const BroadcastLoadFailureContext =
+  createContext<BroadcastLoadFailureHandler | null>(null);
+
+function Broadcast3dLoading({
+  error,
+  retry,
+}: DynamicOptionsLoadingProps) {
+  const onLoadFailure = useContext(
+    BroadcastLoadFailureContext,
+  );
+  const reportedErrorRef = useRef<Error | null>(null);
+
+  // Next's loadable runtime renders this component with `error` instead of
+  // throwing a rejected dynamic import through the React error boundary.
+  useEffect(() => {
+    if (!error || reportedErrorRef.current === error) return;
+    reportedErrorRef.current = error;
+    onLoadFailure?.(
+      broadcastFailureFromCause(error),
+      retry ?? null,
+    );
+  }, [error, onLoadFailure, retry]);
+
+  if (error) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-sky-100 text-sm text-sky-950">
+        Broadcast 3D was unavailable. Switching to Tactical…
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-sky-100 text-sm text-sky-950">
+      <Loader2
+        className="size-5 animate-spin"
+        aria-hidden="true"
+      />
+      Loading Broadcast 3D…
+    </div>
+  );
+}
+
 const Broadcast3d = dynamic(
   () =>
     import("@/components/replay/broadcast-3d").then(
@@ -77,17 +132,35 @@ const Broadcast3d = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-sky-100 text-sm text-sky-950">
-        <Loader2
-          className="size-5 animate-spin"
-          aria-hidden="true"
-        />
-        Loading Broadcast 3D…
-      </div>
-    ),
+    loading: Broadcast3dLoading,
   },
 );
+
+class BroadcastComponentErrorBoundary extends Component<
+  {
+    children: ReactNode;
+    onFailure: (failure: Broadcast3dFailure) => void;
+  },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(cause: Error) {
+    try {
+      this.props.onFailure(broadcastFailureFromCause(cause));
+    } catch {
+      // The lazy component boundary must not escalate into the route boundary.
+    }
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 /**
  * Resolve true-wind direction at a scrub time for ladder / wind UI.
@@ -170,6 +243,9 @@ export function RaceReplay({
     );
   const [rendererNotice, setRendererNotice] =
     useState<string | null>(null);
+  const broadcastRetryRef = useRef<(() => void) | null>(
+    null,
+  );
   const povEnabled =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("pov") ===
@@ -223,19 +299,6 @@ export function RaceReplay({
     [analysis?.race, origin, startsMs, tracks, windAt],
   );
 
-  const updateDisplayPreferences = useCallback(
-    (patch: Partial<ReplayDisplayPreferences>) => {
-      if (patch.viewMode === "broadcast") {
-        setRendererNotice(null);
-      }
-      setDisplayPreferences((current) => ({
-        ...current,
-        ...patch,
-      }));
-    },
-    [],
-  );
-
   const handleBroadcastFailure = useCallback(
     (failure: Broadcast3dFailure) => {
       setDisplayPreferences((current) => ({
@@ -247,6 +310,33 @@ export function RaceReplay({
           failure.message +
           "). Switched to Tactical.",
       );
+    },
+    [],
+  );
+
+  const handleBroadcastLoadFailure = useCallback(
+    (
+      failure: Broadcast3dFailure,
+      retry: (() => void) | null,
+    ) => {
+      broadcastRetryRef.current = retry;
+      handleBroadcastFailure(failure);
+    },
+    [handleBroadcastFailure],
+  );
+
+  const updateDisplayPreferences = useCallback(
+    (patch: Partial<ReplayDisplayPreferences>) => {
+      if (patch.viewMode === "broadcast") {
+        const retry = broadcastRetryRef.current;
+        broadcastRetryRef.current = null;
+        retry?.();
+        setRendererNotice(null);
+      }
+      setDisplayPreferences((current) => ({
+        ...current,
+        ...patch,
+      }));
     },
     [],
   );
@@ -365,14 +455,22 @@ export function RaceReplay({
           {povEnabled ? (
             <HelmPov source={frameSource} />
           ) : displayPreferences.viewMode === "broadcast" ? (
-            <Broadcast3d
-              source={frameSource}
-              cameraMode={
-                displayPreferences.broadcastCamera
-              }
-              quality="auto"
-              onFailure={handleBroadcastFailure}
-            />
+            <BroadcastLoadFailureContext.Provider
+              value={handleBroadcastLoadFailure}
+            >
+              <BroadcastComponentErrorBoundary
+                onFailure={handleBroadcastFailure}
+              >
+                <Broadcast3d
+                  source={frameSource}
+                  cameraMode={
+                    displayPreferences.broadcastCamera
+                  }
+                  quality="auto"
+                  onFailure={handleBroadcastFailure}
+                />
+              </BroadcastComponentErrorBoundary>
+            </BroadcastLoadFailureContext.Provider>
           ) : (
             <MapView
               tracks={tracks}
@@ -419,7 +517,10 @@ export function RaceReplay({
         />
       </div>
 
-      <div className="border-t border-border/70 bg-background/95 px-2 py-2 sm:px-4 sm:py-3">
+      <div
+        className="border-t border-border/70 bg-background/95 px-2 py-2 sm:px-4 sm:py-3"
+        data-replay-controls
+      >
         <div className="flex items-center justify-between gap-4">
           <PlaybackControls
             tzOffsetMinutes={
@@ -436,7 +537,10 @@ export function RaceReplay({
             {raceName}
           </span>
         </div>
-        <div className="mt-2 sm:mt-3">
+        <div
+          className="mt-2 sm:mt-3"
+          data-replay-commentary
+        >
           <ReplayCommentary
             timeline={analysis?.replayEvents ?? null}
             status={resolvedCommentaryStatus}

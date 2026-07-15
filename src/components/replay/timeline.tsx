@@ -7,7 +7,7 @@ import { usePlaybackStore } from "@/components/replay/playback-store";
 import type { ReplayEventMarker } from "@/components/replay/replay-events";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 
-const STRIP_HEIGHT = 22;
+const DEFAULT_STRIP_HEIGHT = 22;
 const AXIS_HEIGHT = 20;
 
 function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
@@ -69,7 +69,7 @@ export function Timeline({
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ mode: "scrub" | "brush"; startX: number } | null>(null);
 
-  const height = tracks.length * STRIP_HEIGHT + AXIS_HEIGHT;
+  const height = tracks.length * DEFAULT_STRIP_HEIGHT + AXIS_HEIGHT;
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -78,14 +78,20 @@ export function Timeline({
 
     const draw = () => {
       const width = wrap.clientWidth;
+      const drawHeight = wrap.clientHeight;
+      const stripHeight = Math.max(
+        1,
+        (drawHeight - AXIS_HEIGHT) /
+          Math.max(1, tracks.length),
+      );
       const dpr = window.devicePixelRatio || 1;
       base.width = width * dpr;
-      base.height = height * dpr;
+      base.height = drawHeight * dpr;
       base.style.width = `${width}px`;
-      base.style.height = `${height}px`;
+      base.style.height = `${drawHeight}px`;
       const ctx = base.getContext("2d")!;
       ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, drawHeight);
 
       const { t0, t1 } = usePlaybackStore.getState();
       const span = t1 - t0;
@@ -99,9 +105,14 @@ export function Timeline({
       }
 
       tracks.forEach((track, row) => {
-        const yTop = row * STRIP_HEIGHT;
+        const yTop = row * stripHeight;
         ctx.fillStyle = "rgba(148, 163, 184, 0.08)";
-        ctx.fillRect(0, yTop, width, STRIP_HEIGHT - 2);
+        ctx.fillRect(
+          0,
+          yTop,
+          width,
+          Math.max(1, stripHeight - 2),
+        );
         ctx.strokeStyle = track.color;
         ctx.globalAlpha = 0.9;
         ctx.lineWidth = 1;
@@ -122,8 +133,9 @@ export function Timeline({
             idx++;
           }
           if (min === Infinity) continue;
-          const yMax = yTop + (STRIP_HEIGHT - 3) * (1 - max / maxSog) + 1;
-          const yMin = yTop + (STRIP_HEIGHT - 3) * (1 - min / maxSog) + 1;
+          const plotHeight = Math.max(1, stripHeight - 3);
+          const yMax = yTop + plotHeight * (1 - max / maxSog) + 1;
+          const yMin = yTop + plotHeight * (1 - min / maxSog) + 1;
           ctx.moveTo(px + 0.5, yMax);
           ctx.lineTo(px + 0.5, yMin + 1);
         }
@@ -141,8 +153,12 @@ export function Timeline({
         const minute = Math.round((t - firstMinute) / 60_000);
         if (minute % labelEvery !== 0) continue;
         const x = ((t - t0) / span) * width;
-        ctx.fillRect(x, height - AXIS_HEIGHT, 1, 4);
-        ctx.fillText(formatClock(t, tz).slice(0, 5), x + 3, height - 6);
+        ctx.fillRect(x, drawHeight - AXIS_HEIGHT, 1, 4);
+        ctx.fillText(
+          formatClock(t, tz).slice(0, 5),
+          x + 3,
+          drawHeight - 6,
+        );
       }
 
       // Fleet start guns — static ticks on the base canvas.
@@ -150,11 +166,16 @@ export function Timeline({
         if (gun < t0 || gun > t1) continue;
         const x = ((gun - t0) / span) * width;
         ctx.fillStyle = "rgba(251, 191, 36, 0.95)";
-        ctx.fillRect(x - 0.75, 0, 1.5, height - AXIS_HEIGHT);
+        ctx.fillRect(
+          x - 0.75,
+          0,
+          1.5,
+          drawHeight - AXIS_HEIGHT,
+        );
         ctx.beginPath();
-        ctx.moveTo(x, height - AXIS_HEIGHT);
-        ctx.lineTo(x - 4, height - AXIS_HEIGHT + 6);
-        ctx.lineTo(x + 4, height - AXIS_HEIGHT + 6);
+        ctx.moveTo(x, drawHeight - AXIS_HEIGHT);
+        ctx.lineTo(x - 4, drawHeight - AXIS_HEIGHT + 6);
+        ctx.lineTo(x + 4, drawHeight - AXIS_HEIGHT + 6);
         ctx.closePath();
         ctx.fill();
       }
@@ -170,7 +191,7 @@ export function Timeline({
         ctx.setLineDash(key ? [3, 3] : [1, 4]);
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, height - AXIS_HEIGHT);
+        ctx.lineTo(x, drawHeight - AXIS_HEIGHT);
         ctx.stroke();
         ctx.restore();
       }
@@ -190,16 +211,20 @@ export function Timeline({
 
     const drawOverlay = () => {
       const width = wrap.clientWidth;
+      const drawHeight = wrap.clientHeight;
       const dpr = window.devicePixelRatio || 1;
-      if (overlay.width !== width * dpr) {
+      if (
+        overlay.width !== width * dpr ||
+        overlay.height !== drawHeight * dpr
+      ) {
         overlay.width = width * dpr;
-        overlay.height = height * dpr;
+        overlay.height = drawHeight * dpr;
         overlay.style.width = `${width}px`;
-        overlay.style.height = `${height}px`;
+        overlay.style.height = `${drawHeight}px`;
       }
       const ctx = overlay.getContext("2d")!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, drawHeight);
       const { t0, t1, timeMs, rangeSel } = usePlaybackStore.getState();
       const span = t1 - t0;
       if (span <= 0) return;
@@ -207,14 +232,19 @@ export function Timeline({
         const xA = ((rangeSel[0] - t0) / span) * width;
         const xB = ((rangeSel[1] - t0) / span) * width;
         ctx.fillStyle = "rgba(56, 189, 248, 0.15)";
-        ctx.fillRect(xA, 0, xB - xA, height - AXIS_HEIGHT);
+        ctx.fillRect(
+          xA,
+          0,
+          xB - xA,
+          drawHeight - AXIS_HEIGHT,
+        );
         ctx.fillStyle = "rgba(56, 189, 248, 0.6)";
-        ctx.fillRect(xA, 0, 1, height - AXIS_HEIGHT);
-        ctx.fillRect(xB, 0, 1, height - AXIS_HEIGHT);
+        ctx.fillRect(xA, 0, 1, drawHeight - AXIS_HEIGHT);
+        ctx.fillRect(xB, 0, 1, drawHeight - AXIS_HEIGHT);
       }
       const x = ((timeMs - t0) / span) * width;
       ctx.fillStyle = "#38bdf8";
-      ctx.fillRect(x, 0, 1.5, height);
+      ctx.fillRect(x, 0, 1.5, drawHeight);
     };
 
     drawOverlay();
@@ -291,6 +321,7 @@ export function Timeline({
   return (
     <div
       ref={wrapRef}
+      data-replay-timeline
       className="relative w-full cursor-crosshair touch-none select-none"
       style={{ height }}
       title="Drag to scrub · Shift-drag to select a range"

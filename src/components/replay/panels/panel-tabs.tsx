@@ -103,6 +103,8 @@ export function PanelTabs({
       ref={sheetRef}
       style={sheetStyle}
       aria-label="Race data"
+      data-replay-data-panel
+      data-replay-panel-open={panelExposed}
       className={`${
         mobileOpen
           ? "[transform:translateY(var(--sheet-drag-y))]"
@@ -113,6 +115,7 @@ export function PanelTabs({
         ref={handleRef}
         type="button"
         variant="ghost"
+        data-replay-data-handle
         className="relative flex h-[3.25rem] w-full touch-none flex-col gap-1 rounded-none px-4 py-1 md:hidden"
         aria-expanded={panelExposed}
         aria-controls="replay-data-panel"
@@ -141,6 +144,8 @@ export function PanelTabs({
 
       <div
         id="replay-data-panel"
+        data-replay-data-content
+        data-replay-panel-open={panelExposed}
         className={`${
           panelExposed ? "flex" : "hidden md:flex"
         } min-h-0 flex-1 flex-col overflow-hidden border-t border-border/70 md:border-t-0`}

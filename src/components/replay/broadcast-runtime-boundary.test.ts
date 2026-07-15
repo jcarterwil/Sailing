@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import type { BroadcastRendererFailure } from "@/components/replay/broadcast-3d-renderer";
-import { runBroadcastRendererActionSafely } from "@/components/replay/broadcast-runtime-boundary";
+import {
+  broadcastFailureFromCause,
+  runBroadcastRendererActionSafely,
+} from "@/components/replay/broadcast-runtime-boundary";
 
 describe("Broadcast renderer runtime boundary", () => {
+  it("normalizes a lazy component-load failure for Tactical fallback", () => {
+    const cause = new Error("Loading chunk 42 failed");
+
+    expect(broadcastFailureFromCause(cause)).toEqual({
+      code: "initialization-failed",
+      message: "Loading chunk 42 failed",
+      cause,
+    });
+    expect(broadcastFailureFromCause("offline")).toEqual({
+      code: "initialization-failed",
+      message: "Could not initialize Broadcast 3D.",
+      cause: "offline",
+    });
+  });
+
   it("reports a throwing action without letting renderer or callback errors escape", () => {
     const rendererError = new Error("render exploded");
     const reported: BroadcastRendererFailure[] = [];

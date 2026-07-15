@@ -162,4 +162,35 @@ describe("createReplayRenderFrameSource", () => {
     expect(updates).toEqual([]);
     unsubscribeAgain();
   });
+
+  it("isolates a throwing renderer listener from the clock and its peers", () => {
+    const store = new FakePlaybackStore({
+      timeMs: 0,
+      playing: true,
+      selectedEntryId: null,
+    });
+    const source = createReplayRenderFrameSource(INPUTS, store);
+    const listenerError = new Error("renderer failed");
+    const reported: unknown[] = [];
+    const healthyFrames: number[] = [];
+
+    const unsubscribeThrowing = source.subscribe(
+      () => {
+        throw listenerError;
+      },
+      (cause) => reported.push(cause),
+    );
+    const unsubscribeHealthy = source.subscribe((frame) => {
+      healthyFrames.push(frame.timeMs);
+    });
+
+    expect(() => store.set({ timeMs: 16 })).not.toThrow();
+    expect(() => store.set({ timeMs: 32 })).not.toThrow();
+    expect(reported).toEqual([listenerError]);
+    expect(healthyFrames).toEqual([16, 32]);
+    expect(source.frameRef.current.timeMs).toBe(32);
+
+    unsubscribeThrowing();
+    unsubscribeHealthy();
+  });
 });

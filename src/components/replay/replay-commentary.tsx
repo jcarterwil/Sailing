@@ -205,6 +205,8 @@ export function ReplayCommentary({
 
   return (
     <section
+      data-replay-commentary-panel
+      data-replay-commentary-expanded={expanded}
       className="overflow-hidden rounded-lg border bg-card shadow-sm"
       aria-label="Race play-by-play"
     >
@@ -253,7 +255,11 @@ export function ReplayCommentary({
       </div>
 
       {expanded && (
-        <div id={panelId} className="border-t">
+        <div
+          id={panelId}
+          data-replay-commentary-feed
+          className="border-t"
+        >
           <div className="flex min-h-11 items-center justify-between gap-3 border-b px-3 py-1.5">
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               Commentary feed
