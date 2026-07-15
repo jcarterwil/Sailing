@@ -23,6 +23,16 @@ describe("performance-history integration static gates", () => {
     expect(route).toContain("loadBoatSessionObservations");
   });
 
+  it("loads with a DB-side bound and soft-handles missing tables", () => {
+    const load = readFileSync(
+      join(process.cwd(), "src/lib/boats/performance-history/load.ts"),
+      "utf8",
+    );
+    expect(load).toContain("BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT + 1");
+    expect(load).toContain("isMissingObservationsRelation");
+    expect(load).toContain(".limit(fetchLimit)");
+  });
+
   it("regenerates database types for boat_session_observations", () => {
     const types = readFileSync(
       join(process.cwd(), "src/lib/supabase/database.types.ts"),

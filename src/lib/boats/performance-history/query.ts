@@ -114,6 +114,13 @@ export function queryBoatPerformanceHistory(
     working = working.filter((row) => row.sessionType === resolved.sessionType);
   }
   working = working.filter((row) => inDateRange(row, resolved.from, resolved.to));
+
+  // Apply an explicit metricVersion filter before the interactive session cap so
+  // older matching versions are not discarded by a newest-250 pre-slice.
+  if (resolved.metricVersion) {
+    working = working.filter((row) => row.metricVersion === resolved.metricVersion);
+  }
+
   working = [...working].sort(compareNewestFirst);
 
   const scannedSessions = working.length;
@@ -132,8 +139,7 @@ export function queryBoatPerformanceHistory(
     metricVersionStatus = "empty";
   } else if (resolved.metricVersion) {
     selectedVersion = resolved.metricVersion;
-    included = working.filter((row) => row.metricVersion === resolved.metricVersion);
-    mismatchedVersions = versions.filter((v) => v !== resolved.metricVersion);
+    mismatchedVersions = [];
     metricVersionStatus = "filtered";
   } else if (versions.length <= 1) {
     selectedVersion = versions[0] ?? null;

@@ -15,6 +15,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isMissingObservationsRelation(error: {
+  code?: string;
+  message?: string;
+  details?: string;
+}): boolean {
+  const code = error.code ?? "";
+  if (code === "42P01" || code === "PGRST205") return true;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  return (
+    /boat_session_observations/i.test(text) &&
+    /does not exist|could not find the table/i.test(text)
+  );
+}
+
 /** Best-effort parse of a stored observation payload; skips malformed rows. */
 export function parseObservationPayload(
   value: Json | null | undefined,
@@ -36,6 +50,7 @@ export function parseObservationPayload(
  * Load compact observations for one boat. Relies on RLS `can_view_boat`.
  * Pushes session-type / date / metric-version filters and a hard fetch cap
  * (bound + 1) into the DB query so interactive history stays bounded.
+ * Missing-table (app-before-migration) returns [] for deploy-order safety.
  */
 export async function loadBoatSessionObservations(
   supabase: SupabaseClient<Database>,
@@ -69,6 +84,7 @@ export async function loadBoatSessionObservations(
     .limit(fetchLimit);
 
   if (error) {
+    if (isMissingObservationsRelation(error)) return [];
     throw new Error(`Could not load boat session observations: ${error.message}`);
   }
 

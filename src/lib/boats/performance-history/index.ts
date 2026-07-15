@@ -33,4 +33,5 @@ export {
   persistBoatSessionObservations,
   persistObservationsFromStoredAnalysis,
 } from "@/lib/boats/performance-history/persist";
+export { backfillBoatSessionObservations } from "@/lib/boats/performance-history/backfill";
 export { requireBoatViewer } from "@/lib/boats/performance-history/auth";

@@ -191,10 +191,18 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.aggregates.status).toBe("version-mismatch");
   });
 
-  it("filters to an explicit metricVersion", () => {
+  it("filters to an explicit metricVersion before the session cap", () => {
     const rows = [
-      row(1, { metricVersion: "a", occurredAt: "2026-07-15T12:00:00.000Z" }),
-      row(2, { metricVersion: "b", occurredAt: "2026-07-14T12:00:00.000Z" }),
+      ...Array.from({ length: 250 }, (_, i) =>
+        row(i, {
+          metricVersion: "a",
+          occurredAt: `2026-08-${String((i % 28) + 1).padStart(2, "0")}T12:00:00.000Z`,
+        }),
+      ),
+      row(900, {
+        metricVersion: "b",
+        occurredAt: "2026-01-01T12:00:00.000Z",
+      }),
     ];
     const result = queryBoatPerformanceHistory(BOAT_ID, rows, {
       metricVersion: "b",
@@ -202,6 +210,7 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.metricVersionStatus).toBe("filtered");
     expect(result.n).toBe(1);
     expect(result.metricVersion).toBe("b");
+    expect(result.bound.truncated).toBe(false);
   });
 
   it("builds median/IQR aggregates when n >= 3 on a single version", () => {
