@@ -31,6 +31,10 @@ import {
   boatAccessLabel,
   type ViewableBoatAccess,
 } from "@/lib/boats/my-sailing";
+import {
+  loadBoatSessionObservations,
+  queryBoatPerformanceHistory,
+} from "@/lib/boats/performance-history";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +129,28 @@ export default async function BoatHubPage({
     BOAT_HUB_ACTIVITY_PAGE_SIZE,
   );
 
+  // Thin smoke consumer for the bounded history query layer (#173). Full charts are #174.
+  let performanceHistorySummary: {
+    n: number;
+    metricVersion: string | null;
+    aggregatesStatus: string;
+    truncated: boolean;
+  } | null = null;
+  if (activeTab === "overview") {
+    try {
+      const observationRows = await loadBoatSessionObservations(supabase, boat.id);
+      const history = queryBoatPerformanceHistory(boat.id, observationRows);
+      performanceHistorySummary = {
+        n: history.n,
+        metricVersion: history.metricVersion,
+        aggregatesStatus: history.aggregates.status,
+        truncated: history.bound.truncated,
+      };
+    } catch {
+      performanceHistorySummary = null;
+    }
+  }
+
   const subtitle =
     [boat.sail_number ? `#${boat.sail_number}` : null, boat.boat_class]
       .filter(Boolean)
@@ -179,6 +205,20 @@ export default async function BoatHubPage({
                   {completeness.withTrackCount} with tracks ·{" "}
                   {completeness.processedCount} processed
                 </p>
+                {performanceHistorySummary ? (
+                  <p>
+                    <span className="text-muted-foreground">Performance history:</span>{" "}
+                    {performanceHistorySummary.n} comparable observation
+                    {performanceHistorySummary.n === 1 ? "" : "s"}
+                    {performanceHistorySummary.metricVersion
+                      ? ` · ${performanceHistorySummary.metricVersion}`
+                      : ""}
+                    {performanceHistorySummary.aggregatesStatus === "ok"
+                      ? " · median/IQR ready"
+                      : ""}
+                    {performanceHistorySummary.truncated ? " · bound applied" : ""}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {canManage ? (
                     <Button variant="outline" className="min-h-11" asChild>
