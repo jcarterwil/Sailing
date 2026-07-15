@@ -414,8 +414,10 @@ export function inspectPhaseComplete(
 }
 
 export function reviewPhaseReady(items: HistoricalImportItemPublic[]): boolean {
+  if (items.length === 0) return false;
   const actionable = items.filter((item) => item.status !== "skipped");
-  if (actionable.length === 0) return false;
+  // All intentionally skipped — allow confirm/finish.
+  if (actionable.length === 0) return true;
   // Exact duplicates stay blocked until skipped; only ready items can proceed.
   return actionable.every((item) => item.status === "ready");
 }
@@ -458,9 +460,13 @@ export function deriveDefaultWizardStep(input: {
 }): WizardStep {
   const { batchStatus, items, queue } = input;
   if (batchStatus === "cancelled") return "add";
-  if (batchStatus === "committed" || batchStatus === "committing" || batchStatus === "error") {
+  if (batchStatus === "error") {
+    // Failed commits are not "complete" — return users to review.
+    return items.length === 0 ? "add" : "review";
+  }
+  if (batchStatus === "committed" || batchStatus === "committing") {
     const committed = items.filter((item) => item.committedTrackId);
-    // Confirmed import with nothing to process (all skipped) → complete.
+    // Successfully committed with nothing to process (all skipped) → complete.
     if (committed.length === 0) return "complete";
     const anyFailed = committed.some(
       (item) => queue.items[item.id]?.processStatus === "error",

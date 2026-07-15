@@ -360,6 +360,20 @@ describe("import-queue helpers", () => {
     ).toBe("complete");
   });
 
+  it("deriveDefaultWizardStep does not complete error batches with zero tracks", () => {
+    expect(
+      deriveDefaultWizardStep({
+        batchStatus: "error",
+        items: [item({ id: "s", status: "skipped" })],
+        queue: createInitialImportQueue(),
+      }),
+    ).toBe("review");
+  });
+
+  it("reviewPhaseReady allows an all-skipped batch to continue", () => {
+    expect(reviewPhaseReady([item({ id: "s", status: "skipped" })])).toBe(true);
+  });
+
   it("deriveDefaultWizardStep returns confirm when draft mappings are ready", () => {
     const items = [
       item({

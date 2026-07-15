@@ -390,9 +390,13 @@ export function HistoricalImportWizard({
 
   async function stageFiles(fileList: FileList | File[]) {
     setPageError(null);
-    const selected = [...fileList];
     const replaceId = chooseAgainItemIdRef.current;
-    const countableItems = batch.items.filter((item) => item.id !== replaceId);
+    // Choose-again is one-for-one; ignore extra selected files.
+    const selected = replaceId ? [[...fileList][0]!].filter(Boolean) : [...fileList];
+    // Skipped rows don't count toward capacity (server matches this).
+    const countableItems = batch.items.filter(
+      (item) => item.status !== "skipped" && item.id !== replaceId,
+    );
     const existingBytes = countableItems.reduce((sum, item) => sum + item.byteSize, 0);
     const validated = validateLocalFiles(
       selected,
@@ -407,6 +411,7 @@ export function HistoricalImportWizard({
 
     setBusy(true);
     try {
+      // Free the replaced slot before adding so capacity checks stay consistent.
       if (replaceId) {
         cancelledItemIdsRef.current.add(replaceId);
         dispatch({ type: "cancelFileOpsForItem", itemId: replaceId });
@@ -442,7 +447,10 @@ export function HistoricalImportWizard({
       setPageError(sanitizeClientError(error));
     } finally {
       setBusy(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+        fileInputRef.current.multiple = true;
+      }
     }
   }
 
@@ -528,7 +536,26 @@ export function HistoricalImportWizard({
 
   function chooseAgain(itemId: string) {
     chooseAgainItemIdRef.current = itemId;
+    if (fileInputRef.current) {
+      fileInputRef.current.multiple = false;
+    }
     fileInputRef.current?.click();
+  }
+
+  async function finishAllSkipped() {
+    setPageError(null);
+    setBusy(true);
+    try {
+      if (batch.status === "draft") {
+        await cancelHistoricalImportBatch(boat.id, batch.id);
+      }
+      clearHistoricalImportDraft(boat.id);
+      setStep("complete");
+    } catch (error) {
+      setPageError(sanitizeClientError(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function confirmImport() {
@@ -951,12 +978,20 @@ export function HistoricalImportWizard({
                     !reviewDone ||
                     summary.needsReview > 0 ||
                     summary.blockedExact > 0 ||
-                    summary.createNew + summary.linkExisting === 0
+                    (summary.createNew + summary.linkExisting === 0 && summary.skip === 0)
                   }
-                  onClick={() => void confirmImport()}
+                  onClick={() => {
+                    if (summary.createNew + summary.linkExisting === 0) {
+                      void finishAllSkipped();
+                      return;
+                    }
+                    void confirmImport();
+                  }}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Confirm import
+                  {summary.createNew + summary.linkExisting === 0
+                    ? "Finish without importing"
+                    : "Confirm import"}
                 </Button>
               </>
             ) : null}

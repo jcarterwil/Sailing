@@ -12,6 +12,31 @@ import {
   rememberHistoricalImportDraft,
 } from "@/lib/imports/client-api";
 
+const inFlightStarts = new Map<string, Promise<string>>();
+
+async function startOrResumeBatch(boatId: string): Promise<string> {
+  const remembered = readHistoricalImportDraft(boatId);
+  if (remembered) {
+    try {
+      const batch = await fetchHistoricalImportBatch(boatId, remembered);
+      if (
+        batch.status === "draft" ||
+        batch.status === "committed" ||
+        batch.status === "committing" ||
+        batch.status === "error"
+      ) {
+        return batch.id;
+      }
+    } catch {
+      clearHistoricalImportDraft(boatId);
+    }
+  }
+
+  const batch = await createHistoricalImportBatch(boatId);
+  rememberHistoricalImportDraft(boatId, batch.id);
+  return batch.id;
+}
+
 /** Resume a remembered draft or create a new batch, then route to the workspace. */
 export function StartImportClient({ boatId }: { boatId: string }) {
   const router = useRouter();
@@ -22,29 +47,16 @@ export function StartImportClient({ boatId }: { boatId: string }) {
 
     async function start() {
       try {
-        const remembered = readHistoricalImportDraft(boatId);
-        if (remembered) {
-          try {
-            const batch = await fetchHistoricalImportBatch(boatId, remembered);
-            if (
-              !cancelled &&
-              (batch.status === "draft" ||
-                batch.status === "committed" ||
-                batch.status === "committing" ||
-                batch.status === "error")
-            ) {
-              router.replace(`/sessions/import/${batch.id}`);
-              return;
-            }
-          } catch {
-            clearHistoricalImportDraft(boatId);
-          }
+        let pending = inFlightStarts.get(boatId);
+        if (!pending) {
+          pending = startOrResumeBatch(boatId).finally(() => {
+            inFlightStarts.delete(boatId);
+          });
+          inFlightStarts.set(boatId, pending);
         }
-
-        const batch = await createHistoricalImportBatch(boatId);
+        const batchId = await pending;
         if (cancelled) return;
-        rememberHistoricalImportDraft(boatId, batch.id);
-        router.replace(`/sessions/import/${batch.id}`);
+        router.replace(`/sessions/import/${batchId}`);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : "Could not start import.";

@@ -143,8 +143,16 @@ export function SessionMappingCard({
   const eligible = inspection.candidates.filter((row) => row.eligible && !row.hasTrack);
 
   function changeTimezone(next: string) {
+    // Preserve the instant implied by the current local fields under the old zone.
+    const [year, month, day] = localDate.split("-").map(Number);
+    const [hour, minute] = localTime.split(":").map(Number);
+    const converted = localDateTimeToUtc(
+      { year: year ?? 0, month: month ?? 1, day: day ?? 1, hour: hour ?? 0, minute: minute ?? 0 },
+      timezone,
+    );
+    const sourceIso = converted.ok ? converted.iso : anchorIso;
+    const parts = isoToLocalParts(sourceIso, next);
     setTimezone(next);
-    const parts = isoToLocalParts(anchorIso, next);
     setLocalDate(parts.date);
     setLocalTime(parts.time);
   }
