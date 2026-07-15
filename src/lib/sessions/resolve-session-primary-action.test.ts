@@ -18,6 +18,7 @@ const base: ResolveSessionPrimaryActionInput = {
   allTracksProcessed: false,
   analysisCurrent: false,
   replayAvailable: false,
+  reportAvailable: false,
 };
 
 describe("resolveSessionPrimaryAction", () => {
@@ -131,7 +132,25 @@ describe("resolveSessionPrimaryAction", () => {
     ).toBe(`/races/${base.raceId}?tab=data`);
   });
 
-  it("offers Open replay when analysis is current", () => {
+  it("offers Open report when the Race Performance report can render", () => {
+    expect(
+      resolveSessionPrimaryAction({
+        ...base,
+        hasAnyTrack: true,
+        allTracksProcessed: true,
+        replayAvailable: false,
+        analysisCurrent: true,
+        reportAvailable: true,
+      }),
+    ).toEqual({
+      kind: "open-report",
+      label: "Open report",
+      href: `/races/${base.raceId}/performance`,
+      disabled: false,
+    });
+  });
+
+  it("does not offer Open report for legacy analysis without a Performance payload", () => {
     expect(
       resolveSessionPrimaryAction({
         ...base,
@@ -139,6 +158,26 @@ describe("resolveSessionPrimaryAction", () => {
         allTracksProcessed: true,
         replayAvailable: true,
         analysisCurrent: true,
+        reportAvailable: false,
+      }),
+    ).toEqual({
+      kind: "open-replay",
+      label: "Open replay",
+      href: `/races/${base.raceId}/replay`,
+      disabled: false,
+    });
+  });
+
+  it("offers Open replay when Practice analysis is current", () => {
+    expect(
+      resolveSessionPrimaryAction({
+        ...base,
+        sessionType: "practice",
+        hasAnyTrack: true,
+        allTracksProcessed: true,
+        replayAvailable: true,
+        analysisCurrent: true,
+        reportAvailable: false,
       }),
     ).toEqual({
       kind: "open-replay",
