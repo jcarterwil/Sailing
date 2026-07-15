@@ -5,6 +5,7 @@ import { scoreSeriesLowPointV1 } from "@/lib/analytics/series/scoring";
 import {
   resolveSeriesReportRaceStateV1,
   seriesReportAnalysisRequiredV1,
+  seriesReportPerformanceHrefV1,
   seriesReportSetupMatchesSnapshotV1,
 } from "@/lib/series/report";
 
@@ -16,6 +17,24 @@ const snapshotSource = {
 };
 
 describe("resolveSeriesReportRaceStateV1", () => {
+  it("emits public race links only for independently active race shares", () => {
+    expect(seriesReportPerformanceHrefV1({
+      audience: "public",
+      raceId: "private-race-id",
+      shareSlug: "race-share-slug-123456",
+    })).toBe("/s/race-share-slug-123456/performance");
+    expect(seriesReportPerformanceHrefV1({
+      audience: "public",
+      raceId: "private-race-id",
+      shareSlug: null,
+    })).toBeNull();
+    expect(seriesReportPerformanceHrefV1({
+      audience: "authenticated",
+      raceId: "private-race-id",
+      shareSlug: null,
+    })).toBe("/races/private-race-id/performance");
+  });
+
   it("marks config, ordered-race, and registered identity changes stale", () => {
     const scored = scoreSeriesLowPointV1(LOW_POINT_V1_GOLDEN_FIXTURE);
     if (scored.status !== "valid") throw new Error("Golden series fixture must score.");

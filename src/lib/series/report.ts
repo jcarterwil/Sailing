@@ -71,6 +71,7 @@ export type SeriesReportSnapshotV1 =
 
 /** Serializable, authorization-free report model shared by private/public shells. */
 export interface SeriesReportModelV1 {
+  audience: "authenticated" | "public";
   series: {
     name: string;
     venue: string | null;
@@ -84,6 +85,7 @@ export interface SeriesReportModelV1 {
   races: SeriesReportRaceV1[];
   scoringSetupState: "current" | "stale" | null;
   organizerHref: string | null;
+  publicHref: string | null;
 }
 
 export interface SeriesReportCurrentRaceSetupV1 {
@@ -187,4 +189,18 @@ export function resolveSeriesReportRaceStateV1(input: {
       current.officialResultsRevision === snapshot.officialResultsRevision
     ? "current"
     : "stale";
+}
+
+/** Public reports link only to independently shared races; private reports keep organizer links. */
+export function seriesReportPerformanceHrefV1(input: {
+  audience: SeriesReportModelV1["audience"];
+  raceId: string;
+  shareSlug: string | null;
+}): string | null {
+  if (input.audience === "public") {
+    return input.shareSlug
+      ? `/s/${encodeURIComponent(input.shareSlug)}/performance`
+      : null;
+  }
+  return `/races/${encodeURIComponent(input.raceId)}/performance`;
 }

@@ -89,10 +89,17 @@ function parseDiscardSchedule(value: string): LowPointConfigV1["discardSchedule"
   return rows;
 }
 
-export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) {
+export function SeriesWorkflowEditor({
+  model,
+  revision,
+  onRevisionChange,
+}: {
+  model: SeriesEditorModelV1;
+  revision: number;
+  onRevisionChange: (revision: number) => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [revision, setRevision] = useState(model.series.revision);
   const [name, setName] = useState(model.series.name);
   const [venue, setVenue] = useState(model.series.venue ?? "");
   const [timezone, setTimezone] = useState(model.series.timezone ?? "");
@@ -227,7 +234,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
               note: "Explicit organizer resolution",
             })),
         });
-        setRevision(result.revision);
+        onRevisionChange(result.revision);
         setSetupDirty(false);
         setSetupRefreshPending(true);
         setNotice("Series setup saved. Official-result drafts were rebuilt from current evidence.");
@@ -296,7 +303,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           expectedRevision: revision,
           draftOfficialResults: draftPayload(),
         });
-        setRevision(result.revision);
+        onRevisionChange(result.revision);
         setNotice(result.idempotent
           ? `Snapshot revision ${result.snapshotRevision} already matches these inputs; no history was added.`
           : `Applied immutable snapshot revision ${result.snapshotRevision}.`);
@@ -316,7 +323,7 @@ export function SeriesWorkflowEditor({ model }: { model: SeriesEditorModelV1 }) 
           expectedRevision: revision,
           archived: !model.series.archivedAt,
         });
-        setRevision((current) => current + 1);
+        onRevisionChange(revision + 1);
         router.refresh();
       } catch (error) {
         setSetupError(errorMessage(error));

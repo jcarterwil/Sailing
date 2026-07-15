@@ -10,6 +10,7 @@ function source(path: string): string {
 describe("authenticated series report integration", () => {
   const page = source("src/app/series/[seriesId]/page.tsx");
   const loader = source("src/lib/series/report-server.ts");
+  const reportModel = source("src/lib/series/report.ts");
   const parser = source("src/lib/series/snapshot.ts");
   const report = source("src/components/series/series-report.tsx");
   const list = source("src/app/series/page.tsx");
@@ -73,7 +74,8 @@ describe("authenticated series report integration", () => {
   it("links standings, organizer editing, and authorized single-race Performance pages", () => {
     expect(list).toContain("Standings");
     expect(list).toContain("Organizer");
-    expect(loader).toContain("/performance");
+    expect(loader).toContain("seriesReportPerformanceHrefV1");
+    expect(reportModel).toContain("/performance");
     expect(report).toContain("Open Performance Overview");
   });
 
