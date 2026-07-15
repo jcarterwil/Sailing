@@ -13,7 +13,7 @@ React 19 + TypeScript + Supabase). Issues and pull requests are welcome.
 
 ## Development setup
 
-Requires **Node 22.x** and npm.
+Requires **Node 24.x** and npm.
 
 ```bash
 npm ci            # clean install
@@ -26,11 +26,16 @@ a secret in a `NEXT_PUBLIC_` variable.
 
 ## Before you open a PR
 
-Run the full gate and make sure it passes — CI runs the same thing:
+Run the fast local checks that apply to your change:
 
 ```bash
-npm run verify    # lint -> typecheck -> test -> build
+npm run lint
+npm run typecheck
+npm run test      # or the relevant targeted Vitest cases
 ```
+
+Do not require a local production build. GitHub CI owns the full
+`npm run verify` gate (lint → typecheck → test → build) on a clean runner.
 
 - Keep changes **surgical**: match the surrounding style, and touch only what
   the change needs. Don't refactor unrelated code in the same PR.
@@ -45,10 +50,22 @@ npm run verify    # lint -> typecheck -> test -> build
 ## Pull request flow
 
 1. Fork the repo (external contributors) or create a branch (collaborators).
-2. Make your change and get `npm run verify` green.
-3. Open the PR against `main` and fill in the template.
-4. CI must pass and a maintainer must approve before merge. `main` is protected
-   — nothing merges without review.
+2. Make your change and run the fast local checks above.
+3. Open the PR against `main` and fill in the template. Use a draft while work
+   is in progress; automated reviewers are requested only after the PR is ready.
+4. Codex and GitHub Copilot each provide one advisory review when the PR is
+   opened for review or a draft is marked ready. Address or explain material
+   findings and resolve the associated review conversations. A reviewer outage
+   or exhausted quota does not block the PR.
+5. GitHub CI must pass `verify`, including dependency review and the production
+   build. First-time fork contributors may need a maintainer to approve the
+   workflow run before CI starts.
+6. The code owner reviews the final diff after the contributor's last push, then
+   squash-merges the PR. New commits dismiss an earlier approval.
+
+Maintainer-authored PRs cannot be self-approved on GitHub. The repository owner
+self-reviews, waits for `verify`, and may then squash-merge using the configured
+review-rule bypass; the CI gate remains mandatory.
 
 By contributing, you agree that your contributions are licensed under the
 project's [MIT License](./LICENSE).
