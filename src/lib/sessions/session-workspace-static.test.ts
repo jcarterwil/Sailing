@@ -37,4 +37,19 @@ describe("Session workspace contracts", () => {
     expect(report).toContain("SessionWorkspaceNav");
     expect(report).toContain("chrome.isPractice");
   });
+
+  it("renders the #66 report as a document, not an embedded workspace panel", () => {
+    const performance = source("src/app/races/[raceId]/performance/page.tsx");
+    expect(performance).toContain("embedded: false");
+    expect(performance).toContain("asMain: false");
+    expect(performance).toContain('backLabel: "Back to Session"');
+    expect(performance).toContain('kind === "open-report"');
+    expect(source("src/lib/sessions/resolve-session-primary-action.ts")).toContain(
+      'label: "Open report"',
+    );
+    expect(source("src/lib/sessions/resolve-session-primary-action.ts")).toContain(
+      "reportAvailable",
+    );
+  });
 });
+
