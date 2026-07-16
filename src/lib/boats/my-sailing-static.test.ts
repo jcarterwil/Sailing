@@ -31,9 +31,13 @@ describe("My Sailing and Boat Hub V2 contracts", () => {
     const nav = source("src/components/boats/boat-hub-nav.tsx");
     expect(nav).toContain('"overview"');
     expect(nav).toContain('"activity"');
+    expect(nav).toContain('"performance"');
+    expect(nav).toContain('"setup"');
     expect(nav).toContain('"settings"');
     expect(hub).toContain("parseBoatHubTab");
     expect(hub).toContain("BOAT_HUB_ACTIVITY_PAGE_SIZE");
+    expect(hub).toContain("BoatPerformancePanel");
+    expect(hub).toContain("BoatSetupPanel");
     expect(hub).toContain("canEdit");
     expect(hub).toContain("canManage");
     expect(hub).toContain("Add sailing data");

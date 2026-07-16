@@ -11,6 +11,7 @@ import type { ProcessedTrack } from "@/lib/analytics/types";
 import {
   AnalyzeRaceError,
   analyzeAndPersistRace,
+  invalidatePersistedRaceAnalysis,
 } from "@/lib/races/analyze-race";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
@@ -151,15 +152,17 @@ export async function POST(
   }
 
   // Mirror process-route invalidation so consumers never serve pre-correction analysis.
-  const { error: deleteAnalysisError } = await admin
-    .from("race_analyses")
-    .delete()
-    .eq("race_id", raceId);
-  if (deleteAnalysisError) {
-    return NextResponse.json(
-      { error: `Could not clear stale analysis: ${deleteAnalysisError.message}` },
-      { status: 500 },
-    );
+  try {
+    await invalidatePersistedRaceAnalysis(raceId);
+  } catch (error) {
+    const message =
+      error instanceof AnalyzeRaceError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Could not clear stale analysis.";
+    const status = error instanceof AnalyzeRaceError ? error.status : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 
   // Drop completed / in-flight reports so /report cannot serve pre-correction text.

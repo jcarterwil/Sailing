@@ -65,6 +65,33 @@ describe("boat merge duplicates migration", () => {
     expect(migration).toContain("invalidated because duplicate boats were merged");
   });
 
+  it("relies on observation invalidation triggers when analyses are deleted", () => {
+    const followup = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260716010000_boat_session_observations_invalidation.sql",
+      ),
+      "utf8",
+    ).toLowerCase();
+    expect(followup).toContain("after delete on public.race_analyses");
+    expect(followup).toContain("delete from public.boat_session_observations");
+    expect(followup).toContain("after update of merged_into_id on public.boats");
+  });
+
+  it("remounts metadata catalogs and snapshots onto the canonical boat", () => {
+    const cleanup = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260716210000_boat_perf_history_merge_cleanup.sql",
+      ),
+      "utf8",
+    ).toLowerCase();
+    expect(cleanup).toContain("sync_session_metadata_snapshot_boat_id");
+    expect(cleanup).toContain("remount_boat_metadata_catalogs_on_merge");
+    expect(cleanup).toContain("boat_remount_metadata_catalogs_on_merge");
+    expect(cleanup).toContain("after update of boat_id on public.race_entries");
+  });
+
   it("rejects same-race collisions, conflicting owners, and pending invitations", () => {
     expect(migration).toContain("both boats have entries in the same race");
     expect(migration).toContain("boats have different owners");
