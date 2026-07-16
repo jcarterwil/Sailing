@@ -14,12 +14,17 @@ import {
 
 import { CourseReview } from "@/app/races/[raceId]/review/course-review";
 import { ResultsReview } from "@/app/races/[raceId]/review/results-review";
+import { ReviewAssistant } from "@/app/races/[raceId]/review/review-assistant";
 import {
+  fleetMedianPositionAt,
+  inferredResultCorrection,
+  replaceEntryResultCorrection,
   resetReviewDraft,
   reviewDraftErrors,
   reviewDraftIsDirty,
 } from "@/app/races/[raceId]/review/review-state";
 import { useReviewDraft } from "@/app/races/[raceId]/review/use-review-draft";
+import { deriveReviewFindings, type ReviewFinding } from "@/lib/review/findings";
 import { useReviewPreview } from "@/components/replay/use-review-preview";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
@@ -93,6 +98,7 @@ export function ReviewPageClient({
   const [explainError, setExplainError] = useState<string | null>(null);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explaining, setExplaining] = useState(false);
+  const [activeTab, setActiveTab] = useState("wind");
   const [pending, startTransition] = useTransition();
   const { preview, coursePreview, previewing } = useReviewPreview(
     processed,
@@ -174,6 +180,16 @@ export function ReviewPageClient({
     () => reviewDraftErrors(corrections, trackMetas.map((entry) => entry.entryId), trackSpan),
     [corrections, trackMetas, trackSpan],
   );
+  const findings = useMemo(
+    () =>
+      deriveReviewFindings({
+        warnings: initialAnalysis?.performance?.warnings ?? [],
+        windQuality: initialAnalysis?.windQuality,
+        corrections,
+        dispositions: reviewDraft.dispositions,
+      }),
+    [initialAnalysis, corrections, reviewDraft.dispositions],
+  );
   const previewPerformance = preview?.performance;
   const unresolvedResultCount = previewPerformance?.results.filter((result) =>
     result.status === "unresolved").length ?? 0;
@@ -200,6 +216,43 @@ export function ReviewPageClient({
     updateCorrections({ excludedWindSensorEntryIds: [...ids] });
   }
 
+  function acceptSuggestedFix(finding: ReviewFinding) {
+    const fix = finding.suggestedFix;
+    if (!fix) return;
+    if (fix.kind === "exclude-wind-sensor") {
+      toggleExclude(fix.entryId, true);
+      setActiveTab("wind");
+      return;
+    }
+    if (fix.kind === "use-inferred-result") {
+      const inferred = initialAnalysis?.performance?.results.find(
+        (result) => result.entryId === fix.entryId,
+      );
+      setCorrections((current) =>
+        replaceEntryResultCorrection(
+          current,
+          inferredResultCorrection(fix.entryId, inferred),
+          fix.entryId,
+        ));
+      setActiveTab("results");
+      return;
+    }
+    // finish-fleet-median: spec §6.3 walked input — playhead supplies the time.
+    const position = processed
+      ? fleetMedianPositionAt(processed, usePlaybackStore.getState().timeMs)
+      : null;
+    if (!position) {
+      setApplyError(
+        "Scrub the playhead to when the fleet crossed the finish, then accept the fix again.",
+      );
+      return;
+    }
+    updateCorrections({
+      course: { ...corrections.course, finish: { kind: "point", position } },
+    });
+    setActiveTab("start-course");
+  }
+
   function apply() {
     if (validationErrors.length > 0) return;
     setApplyError(null);
@@ -216,6 +269,7 @@ export function ReviewPageClient({
             body.error ?? "Could not apply corrections.",
             ...(body.details ?? []),
           ].join(" "));
+          if (res.status === 409) router.refresh();
           return;
         }
         router.refresh();
@@ -338,8 +392,22 @@ export function ReviewPageClient({
         </section>
       )}
 
+      <ReviewAssistant
+        findings={findings}
+        boatNameById={boatNameById}
+        activeFingerprint={reviewDraft.cursor}
+        onActivate={reviewDraft.setCursor}
+        onAcceptFix={acceptSuggestedFix}
+        onAdjustManually={(finding) => {
+          setActiveTab(finding.target === "start-course" ? "start-course" : finding.target);
+          reviewDraft.setCursor(finding.fingerprint);
+        }}
+        onDismiss={reviewDraft.dismissFinding}
+        onUndismiss={reviewDraft.undismissFinding}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-        <Tabs defaultValue="wind" className="min-w-0">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
           <TabsList>
             <TabsTrigger value="wind">Wind</TabsTrigger>
             <TabsTrigger value="start-course">Start &amp; Course</TabsTrigger>
