@@ -24,6 +24,29 @@ describe("performance-history integration static gates", () => {
     expect(route).toContain("loadBoatSessionObservations");
   });
 
+  it("exposes an optional cited coach handoff route", () => {
+    const route = readFileSync(
+      join(
+        process.cwd(),
+        "src/app/api/boats/[boatId]/performance-history/coach/route.ts",
+      ),
+      "utf8",
+    );
+    expect(route).toContain("buildCitedPerformanceHistoryHandoff");
+    expect(route).toContain("generatePerformanceHistoryCoachNotes");
+    expect(route).toContain("assertHandoffCitationsIntact");
+    expect(route).toContain("resolveMetadataFilterContext");
+  });
+
+  it("retains unsupported metric-version stubs at load for mismatch reporting", () => {
+    const load = readFileSync(
+      join(process.cwd(), "src/lib/boats/performance-history/load.ts"),
+      "utf8",
+    );
+    expect(load).toContain("observation: null");
+    expect(load).toContain("Keep unsupported/malformed stubs");
+  });
+
   it("loads main observation columns with a DB-side bound", () => {
     const load = readFileSync(
       join(process.cwd(), "src/lib/boats/performance-history/load.ts"),

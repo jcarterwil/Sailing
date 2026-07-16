@@ -185,8 +185,61 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.filters.sessionType).toBe("practice");
     expect(result.coverage.exclusionsByReason["practice-session"]).toBeGreaterThan(0);
     expect(
-      result.observations.every((o) => o.observation.raceRelative.rank.value === null),
+      result.observations.every(
+        (o) => o.observation?.raceRelative.rank.value === null,
+      ),
     ).toBe(true);
+  });
+
+  it("reports mismatch when incompatible versions arrive as observation stubs", () => {
+    const rows = [
+      row(1, {
+        metricVersion: CURRENT_VERSION,
+        startsAt: "2026-07-15T12:00:00.000Z",
+        avgSogKts: 7,
+      }),
+      {
+        ...row(2, {
+          metricVersion: "boat-session-observation-v0.0.0",
+          startsAt: "2026-07-14T12:00:00.000Z",
+        }),
+        observation: null,
+      },
+      row(3, {
+        metricVersion: CURRENT_VERSION,
+        startsAt: "2026-07-13T12:00:00.000Z",
+        avgSogKts: 6,
+      }),
+    ];
+    const result = queryBoatPerformanceHistory(BOAT_ID, rows);
+    expect(result.metricVersionStatus).toBe("mismatched");
+    expect(result.mismatchedVersions).toContain("boat-session-observation-v0.0.0");
+    expect(result.n).toBe(2);
+    expect(result.observations.every((o) => o.observation != null)).toBe(true);
+    expect(result.aggregates.status).toBe("version-mismatch");
+  });
+
+  it("labels stub-only incompatible cohorts as version-mismatch, not empty", () => {
+    const rows = [
+      {
+        ...row(1, {
+          metricVersion: "boat-session-observation-v0.0.0",
+          startsAt: "2026-07-15T12:00:00.000Z",
+        }),
+        observation: null,
+      },
+      {
+        ...row(2, {
+          metricVersion: "boat-session-observation-v0.1.0",
+          startsAt: "2026-07-14T12:00:00.000Z",
+        }),
+        observation: null,
+      },
+    ];
+    const result = queryBoatPerformanceHistory(BOAT_ID, rows);
+    expect(result.metricVersionStatus).toBe("mismatched");
+    expect(result.n).toBe(0);
+    expect(result.aggregates.status).toBe("version-mismatch");
   });
 
   it("handles version mismatch without silently pooling versions", () => {
@@ -252,6 +305,24 @@ describe("queryBoatPerformanceHistory", () => {
     expect(sog?.n).toBe(3);
     expect(sog?.median).toBe(6);
     expect(sog?.normalization).toBe("none");
+    expect(sog?.citationEntryIds).toHaveLength(3);
+    expect(sog?.citationSessionIds.length).toBeGreaterThan(0);
+  });
+
+  it("cites the comparable cohort when a metric has zero finite samples", () => {
+    const rows = [
+      row(1, { sessionType: "practice" }),
+      row(2, { sessionType: "practice" }),
+      row(3, { sessionType: "practice" }),
+    ];
+    const result = queryBoatPerformanceHistory(BOAT_ID, rows);
+    expect(result.aggregates.status).toBe("ok");
+    const efficiency = result.aggregates.metrics.find(
+      (m) => m.metric === "courseEfficiencyPct",
+    );
+    expect(efficiency?.n).toBe(0);
+    expect(efficiency?.citationEntryIds).toHaveLength(3);
+    expect(efficiency?.citationSessionIds).toHaveLength(3);
   });
 
   it("withholds trend aggregates for sparse n < 3", () => {

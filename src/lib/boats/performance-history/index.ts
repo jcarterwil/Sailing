@@ -4,6 +4,8 @@ export {
   PERFORMANCE_HISTORY_UNITS_V1,
 } from "@/lib/boats/performance-history/types";
 export type {
+  CitedPerformanceClaimV1,
+  CitedPerformanceHistoryHandoffV1,
   CompactObservationRowV1,
   PerformanceHistoryAggregatesV1,
   PerformanceHistoryQueryFilters,
@@ -40,6 +42,15 @@ export {
   compactExportFilename,
 } from "@/lib/boats/performance-history/export-csv";
 export { resolveMetadataFilterContext } from "@/lib/boats/performance-history/resolve-metadata-context";
+export {
+  assertHandoffCitationsIntact,
+  buildCitedPerformanceHistoryHandoff,
+} from "@/lib/boats/performance-history/handoff";
+export {
+  PERFORMANCE_HISTORY_COACH_SYSTEM_PROMPT,
+  buildPerformanceHistoryCoachCreateParams,
+  validatePerformanceHistoryCoachMarkdown,
+} from "@/lib/boats/performance-history/coach-request";
 
 // Re-export observation contract for consumers that import the history barrel.
 export type { BoatSessionObservationPayloadV1 } from "@/lib/boats/observations";

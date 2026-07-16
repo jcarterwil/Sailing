@@ -51,6 +51,7 @@ export function buildCompactObservationCsv(
 ): string {
   const lines = [CSV_COLUMNS.join(",")];
   for (const row of rows) {
+    if (!row.observation) continue;
     const abs = row.observation.absolute;
     const rel = row.observation.raceRelative;
     lines.push(

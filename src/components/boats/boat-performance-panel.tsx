@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BoatCoachHandoffClient } from "@/components/boats/boat-coach-handoff-client";
 import { boatHubHref } from "@/components/boats/boat-hub-nav";
 import { sessionWorkspaceHref } from "@/components/sessions/session-workspace-nav";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { BoatMetadataCatalogs } from "@/lib/boats/metadata";
+import type { CitedPerformanceHistoryHandoffV1 } from "@/lib/boats/performance-history/types";
 import {
   PERFORMANCE_HISTORY_AGGREGATE_MIN_N,
   type PerformanceHistoryQueryResultV1,
@@ -168,18 +170,28 @@ function AggregateCards({ history }: { history: PerformanceHistoryQueryResultV1 
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
-            <p className="text-2xl font-semibold tracking-tight">
-              {formatNumber(metric.median)}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {metric.unit}
-              </span>
-            </p>
-            <p className="text-muted-foreground">
-              IQR {formatNumber(metric.q1)} – {formatNumber(metric.q3)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Descriptive association across filtered Sessions — not a causal claim.
-            </p>
+            {metric.n >= PERFORMANCE_HISTORY_AGGREGATE_MIN_N ? (
+              <>
+                <p className="text-2xl font-semibold tracking-tight">
+                  {formatNumber(metric.median)}{" "}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {metric.unit}
+                  </span>
+                </p>
+                <p className="text-muted-foreground">
+                  IQR {formatNumber(metric.q1)} – {formatNumber(metric.q3)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Descriptive association across filtered Sessions — not a causal
+                  claim.
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                Withheld — only n={metric.n} finite values (need ≥{" "}
+                {PERFORMANCE_HISTORY_AGGREGATE_MIN_N}).
+              </p>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -247,6 +259,7 @@ function ObservationTable({ history }: { history: PerformanceHistoryQueryResultV
           </thead>
           <tbody>
             {history.observations.map((row) => {
+              if (!row.observation) return null;
               const abs = row.observation.absolute;
               const rel = row.observation.raceRelative;
               const practiceRaceOnly =
@@ -324,17 +337,37 @@ function CompactExportButton({
 export function BoatPerformancePanel({
   boatId,
   history,
+  handoff,
   catalogs,
   csv,
   csvFilename,
 }: {
   boatId: string;
   history: PerformanceHistoryQueryResultV1;
+  handoff: CitedPerformanceHistoryHandoffV1;
   catalogs: BoatMetadataCatalogs;
   csv: string;
   csvFilename: string;
 }) {
   const clearHref = boatHubHref(boatId, "performance");
+  const coachQuery = new URLSearchParams();
+  if (history.filters.sessionType !== "all") {
+    coachQuery.set("sessionType", history.filters.sessionType);
+  }
+  if (history.filters.from) coachQuery.set("from", history.filters.from);
+  if (history.filters.to) coachQuery.set("to", history.filters.to);
+  if (history.filters.metricVersion) {
+    coachQuery.set("metricVersion", history.filters.metricVersion);
+  }
+  if (history.filters.crew) coachQuery.set("crew", history.filters.crew);
+  if (history.filters.sail) coachQuery.set("sail", history.filters.sail);
+  if (history.filters.setup) coachQuery.set("setup", history.filters.setup);
+  if (history.filters.condition) {
+    coachQuery.set("condition", history.filters.condition);
+  }
+  const coachPath = `/api/boats/${boatId}/performance-history/coach${
+    coachQuery.size > 0 ? `?${coachQuery.toString()}` : ""
+  }`;
 
   return (
     <section className="space-y-6" aria-labelledby="performance-heading">
@@ -487,6 +520,7 @@ export function BoatPerformancePanel({
       <ProvenanceChrome history={history} />
       <PracticeRaceOnlyCard history={history} />
       <AggregateCards history={history} />
+      <BoatCoachHandoffClient handoff={handoff} coachPath={coachPath} />
       <ObservationTable history={history} />
     </section>
   );

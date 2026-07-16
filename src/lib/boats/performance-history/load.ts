@@ -91,17 +91,33 @@ async function fetchObservationChunk(
   for (const row of data ?? []) {
     if (!isSessionType(row.session_type)) continue;
     const parsed = parseBoatSessionObservationPayload(row.payload);
-    if (parsed.status !== "valid") continue;
-    rows.push({
-      entryId: row.entry_id,
-      sessionId: row.race_id,
-      boatId: row.boat_id,
-      sessionType: row.session_type,
-      startsAt: row.starts_at,
-      timezone: row.timezone,
-      metricVersion: row.metric_version,
-      observation: parsed.payload,
-    });
+    if (parsed.status === "valid") {
+      rows.push({
+        entryId: row.entry_id,
+        sessionId: row.race_id,
+        boatId: row.boat_id,
+        sessionType: row.session_type,
+        startsAt: row.starts_at,
+        timezone: row.timezone,
+        metricVersion: row.metric_version,
+        observation: parsed.payload,
+      });
+      continue;
+    }
+    // Keep unsupported/malformed stubs so query can report version mismatch
+    // instead of silently pretending only the parseable cohort exists.
+    if (typeof row.metric_version === "string" && row.metric_version.length > 0) {
+      rows.push({
+        entryId: row.entry_id,
+        sessionId: row.race_id,
+        boatId: row.boat_id,
+        sessionType: row.session_type,
+        startsAt: row.starts_at,
+        timezone: row.timezone,
+        metricVersion: row.metric_version,
+        observation: null,
+      });
+    }
   }
   return rows;
 }

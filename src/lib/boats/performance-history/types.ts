@@ -1,5 +1,5 @@
 /**
- * Boat Performance History V1 — bounded query/aggregate DTOs (#173).
+ * Boat Performance History V1 — bounded query/aggregate/handoff DTOs (#173/#175).
  * Observation payload contract lives in `@/lib/boats/observations` (#172).
  */
 
@@ -39,7 +39,12 @@ export interface CompactObservationRowV1 {
   startsAt: string;
   timezone: string;
   metricVersion: string;
-  observation: BoatSessionObservationPayloadV1;
+  /**
+   * Parsed payload when compatible with the current metric contract.
+   * Null when the stored payload is unsupported/malformed — retained so
+   * version-mismatch reporting is not silently dropped at load time.
+   */
+  observation: BoatSessionObservationPayloadV1 | null;
 }
 
 export type PerformanceHistorySessionTypeFilter = SessionType | "all";
@@ -85,8 +90,14 @@ export interface MetricAggregateV1 {
   median: number | null;
   q1: number | null;
   q3: number | null;
-  /** Documented normalization applied before ranking (none | identity). */
+  /** Documented normalization applied before ranking. V1 always uses `"none"`. */
   normalization: "none";
+  /**
+   * Observation/Session IDs considered for this metric (finite samples when
+   * present; otherwise the full comparable cohort for withheld claims).
+   */
+  citationEntryIds: string[];
+  citationSessionIds: string[];
 }
 
 export interface PerformanceHistoryAggregatesV1 {
@@ -122,4 +133,49 @@ export interface PerformanceHistoryQueryResultV1 {
   aggregates: PerformanceHistoryAggregatesV1;
   /** Human-readable normalization policy for aggregate summaries. */
   normalizationNote: string;
+}
+
+/** One deterministic association/trend claim with observation citations. */
+export interface CitedPerformanceClaimV1 {
+  id: string;
+  kind: "trend" | "coverage" | "withheld";
+  /** Association/trend language only — never causal prescriptions. */
+  text: string;
+  metric: string | null;
+  unit: string | null;
+  n: number | null;
+  median: number | null;
+  q1: number | null;
+  q3: number | null;
+  citationEntryIds: string[];
+  citationSessionIds: string[];
+}
+
+/**
+ * Compact Coach handoff package. Coach may receive only this payload —
+ * never raw tracks or uncited free-form claims.
+ */
+export interface CitedPerformanceHistoryHandoffV1 {
+  v: 1;
+  contract: "boat-performance-history-handoff-v1";
+  boatId: string;
+  generatedAt: string;
+  languagePolicy: "association-or-trend-only";
+  filters: ResolvedPerformanceHistoryFilters;
+  dateRange: { from: string | null; to: string | null };
+  n: number;
+  metricVersion: string | null;
+  metricVersionStatus: PerformanceHistoryQueryResultV1["metricVersionStatus"];
+  aggregatesStatus: PerformanceHistoryAggregatesV1["status"];
+  normalizationNote: string;
+  claims: CitedPerformanceClaimV1[];
+  /** Compact observation stubs for citation resolution (no raw points). */
+  observations: Array<{
+    entryId: string;
+    sessionId: string;
+    sessionType: SessionType;
+    startsAt: string;
+    timezone: string;
+    metricVersion: string;
+  }>;
 }
