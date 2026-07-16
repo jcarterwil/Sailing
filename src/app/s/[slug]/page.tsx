@@ -6,7 +6,6 @@ import { ReplayShell } from "@/components/replay/replay-shell";
 import type { TrackMeta } from "@/components/replay/track-loader";
 import {
   buildRaceAnalyzeContext,
-  parseEntryMeta,
   parseRaceMeta,
 } from "@/lib/races/meta";
 import { resolveSharedRace } from "@/lib/races/share";
@@ -28,12 +27,14 @@ export default async function SharedReplayPage({
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
 
+  // Session share must not publish private entry crew/setup or boat-history
+  // catalogs/snapshots (#176). Omit crew/tags columns from the public load.
   const [{ data: entries, error: entriesError }, { data: analysisRow }, { data: correctionsRow }] =
     await Promise.all([
       admin
         .from("race_entries")
         .select(
-          "id, color, crew, tags, boats(name), tracks(processed_path, status, updated_at)",
+          "id, color, boats(name), tracks(processed_path, status, updated_at)",
         )
         .eq("race_id", race.id)
         .order("created_at", { ascending: true }),
@@ -59,19 +60,17 @@ export default async function SharedReplayPage({
   const trackMetas: TrackMeta[] = [];
   const analyzeEntries: Parameters<typeof buildRaceAnalyzeContext>[1] = [];
   for (const entry of entries ?? []) {
-    const entryMeta = parseEntryMeta(entry.crew, entry.tags);
     analyzeEntries.push({
       entryId: entry.id,
       boatName: entry.boats?.name ?? "Unknown",
       color: entry.color,
-      crew: entryMeta.crew,
-      tags: entryMeta.tags,
+      crew: [],
+      tags: [],
     });
   }
   const analyzeContext = buildRaceAnalyzeContext(raceMeta, analyzeEntries);
 
   for (const entry of processed) {
-    const entryMeta = parseEntryMeta(entry.crew, entry.tags);
     const { data: signed } = await admin.storage
       .from("race-tracks-processed")
       .createSignedUrl(entry.tracks!.processed_path!, 3600);
@@ -81,8 +80,8 @@ export default async function SharedReplayPage({
         boatName: entry.boats?.name ?? "Unknown",
         color: entry.color,
         url: signed.signedUrl,
-        crew: entryMeta.crew,
-        tags: entryMeta.tags,
+        crew: [],
+        tags: [],
         ownedByMe: false,
         addedByMe: false,
       });
