@@ -2,8 +2,7 @@
  * Boat Performance History V1 — privacy / backfill / production acceptance (#176).
  *
  * Static + unit gates for criteria that can be verified without a live browser
- * deployment. Product UI smoke for Performance/Setup (#174) and trends (#175)
- * remain child-issue blockers and are recorded in the evidence doc.
+ * deployment. Evidence matrix lives in docs/boat-performance-history-v1-acceptance.md.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -167,42 +166,42 @@ describe("boat performance history acceptance (#176)", () => {
     expect(sharedReplay).toContain("crew: []");
   });
 
-  it("Boat Hub keeps 390px-friendly touch targets on shipped tabs", () => {
+  it("Boat Hub Performance/Setup tabs ship with 390px-friendly touch targets", () => {
     const nav = read("src/components/boats/boat-hub-nav.tsx");
     expect(nav).toContain("min-h-11");
-    expect(nav).toContain('["overview", "activity", "settings"]');
-    // Performance/Setup tabs are owned by #174 — acceptance smoke blocked until that lands.
-    expect(nav).not.toContain('"performance"');
-    expect(nav).not.toContain('"setup"');
+    expect(nav).toContain('"performance"');
+    expect(nav).toContain('"setup"');
+    expect(nav).toMatch(/overview[\s\S]*activity[\s\S]*performance[\s\S]*setup[\s\S]*settings/);
+
+    const performancePanel = read("src/components/boats/boat-performance-panel.tsx");
+    expect(performancePanel).toContain("min-h-11");
+    expect(performancePanel).toContain("practice-session");
+    expect(performancePanel).toMatch(/Race-only/);
+    expect(performancePanel).toMatch(/association/i);
+    expect(performancePanel).toMatch(/never causation/i);
+    expect(performancePanel).not.toMatch(/automatic setup prescription/i);
+
+    const setupPanel = read("src/components/boats/boat-setup-panel.tsx");
+    expect(setupPanel).toContain("min-h-11");
   });
 
-  it("records query/observation acceptance posture for child issues", () => {
-    // #172 may land before #173. When the query route exists it must stay
-    // compact/capped; observation-only landings are allowed while #173 is open.
+  it("bounded history API returns compact rows with Practice exclusion contract", () => {
     const routePath = "src/app/api/boats/[boatId]/performance-history/route.ts";
     const queryTypesPath = "src/lib/boats/performance-history/types.ts";
     const observationsPath = "src/lib/boats/observations/types.ts";
 
-    const hasRoute = existsSync(resolve(root, routePath));
-    const hasObservations = existsSync(resolve(root, observationsPath));
+    expect(existsSync(resolve(root, routePath))).toBe(true);
+    expect(existsSync(resolve(root, observationsPath))).toBe(true);
 
-    if (hasObservations) {
-      const observationTypes = read(observationsPath);
-      expect(observationTypes).toMatch(/practice-session|exclusion/i);
-    }
+    const observationTypes = read(observationsPath);
+    expect(observationTypes).toMatch(/practice-session/);
 
-    if (hasRoute) {
-      const route = read(routePath);
-      expect(route).toContain("can_view_boat");
-      expect(route.toLowerCase()).not.toContain("processed_path");
-      expect(route).not.toMatch(/from\(["']race-tracks-/);
-      if (existsSync(resolve(root, queryTypesPath))) {
-        const types = read(queryTypesPath);
-        expect(types).toMatch(/250/);
-      }
-    } else {
-      // Bounded history API still open (#173 / defect #183).
-      expect(hasRoute).toBe(false);
-    }
+    const route = read(routePath);
+    expect(route).toContain("can_view_boat");
+    expect(route.toLowerCase()).not.toContain("processed_path");
+    expect(route).not.toMatch(/from\(["']race-tracks-/);
+
+    const types = read(queryTypesPath);
+    expect(types).toMatch(/250/);
   });
 });
