@@ -14,11 +14,17 @@ import {
 
 import { CourseReview } from "@/app/races/[raceId]/review/course-review";
 import { ResultsReview } from "@/app/races/[raceId]/review/results-review";
+import { ReviewAssistant } from "@/app/races/[raceId]/review/review-assistant";
 import {
+  fleetMedianPositionAt,
+  inferredResultCorrection,
+  replaceEntryResultCorrection,
   resetReviewDraft,
   reviewDraftErrors,
   reviewDraftIsDirty,
 } from "@/app/races/[raceId]/review/review-state";
+import { useReviewDraft } from "@/app/races/[raceId]/review/use-review-draft";
+import { deriveReviewFindings, type ReviewFinding } from "@/lib/review/findings";
 import { useReviewPreview } from "@/components/replay/use-review-preview";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
@@ -47,6 +53,7 @@ import {
 } from "@/lib/analytics/corrections";
 import type { ProcessedTrack, RaceAnalysis, RaceLegType } from "@/lib/analytics/types";
 import type { RaceMeta } from "@/lib/races/meta";
+import type { StoredReviewDraft } from "@/lib/review/draft-store";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -68,6 +75,9 @@ export function ReviewPageClient({
   initialAnalysis,
   analysisStale,
   initialCorrections,
+  correctionsUpdatedAt,
+  initialStoredDraft,
+  analysisComputedAt,
 }: {
   raceId: string;
   raceName: string;
@@ -77,6 +87,8 @@ export function ReviewPageClient({
   analysisStale: boolean;
   initialCorrections: RaceCorrections;
   correctionsUpdatedAt: string | null;
+  initialStoredDraft: StoredReviewDraft | null;
+  analysisComputedAt: string | null;
 }) {
   const router = useRouter();
   const [corrections, setCorrections] = useState<RaceCorrections>(initialCorrections);
@@ -86,12 +98,22 @@ export function ReviewPageClient({
   const [explainError, setExplainError] = useState<string | null>(null);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explaining, setExplaining] = useState(false);
+  const [activeTab, setActiveTab] = useState("wind");
   const [pending, startTransition] = useTransition();
   const { preview, coursePreview, previewing } = useReviewPreview(
     processed,
     corrections,
     initialAnalysis,
   );
+  const reviewDraft = useReviewDraft({
+    raceId,
+    corrections,
+    setCorrections,
+    persistedCorrections: initialCorrections,
+    initialStoredDraft,
+    analysisComputedAt,
+    correctionsUpdatedAt,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +180,32 @@ export function ReviewPageClient({
     () => reviewDraftErrors(corrections, trackMetas.map((entry) => entry.entryId), trackSpan),
     [corrections, trackMetas, trackSpan],
   );
+  const findings = useMemo(
+    () =>
+      deriveReviewFindings({
+        warnings: initialAnalysis?.performance?.warnings ?? [],
+        windQuality: initialAnalysis?.windQuality,
+        corrections,
+        dispositions: reviewDraft.dispositions,
+      }),
+    [initialAnalysis, corrections, reviewDraft.dispositions],
+  );
+  // "Use inferred result" falls back to writing a DNF when the analysis has no
+  // resolved result to copy (inferredResultCorrection) — the button must say so
+  // instead of implying a real inferred finish exists.
+  const fixLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    const results = initialAnalysis?.performance?.results ?? [];
+    for (const finding of findings) {
+      const fix = finding.suggestedFix;
+      if (fix?.kind !== "use-inferred-result") continue;
+      const inferred = results.find((result) => result.entryId === fix.entryId);
+      if (!inferred || inferred.status === "unresolved") {
+        labels.set(finding.fingerprint, "Mark as DNF");
+      }
+    }
+    return labels;
+  }, [findings, initialAnalysis]);
   const previewPerformance = preview?.performance;
   const unresolvedResultCount = previewPerformance?.results.filter((result) =>
     result.status === "unresolved").length ?? 0;
@@ -184,6 +232,53 @@ export function ReviewPageClient({
     updateCorrections({ excludedWindSensorEntryIds: [...ids] });
   }
 
+  // The findings queue above the tabs can be very tall; a tab switch from the
+  // Review Assistant must also bring the tab content into view.
+  function goToTab(tab: string) {
+    setActiveTab(tab);
+    document.getElementById("review-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function acceptSuggestedFix(finding: ReviewFinding) {
+    const fix = finding.suggestedFix;
+    if (!fix) return;
+    if (fix.kind === "exclude-wind-sensor") {
+      toggleExclude(fix.entryId, true);
+      goToTab("wind");
+      return;
+    }
+    if (fix.kind === "use-inferred-result") {
+      const inferred = initialAnalysis?.performance?.results.find(
+        (result) => result.entryId === fix.entryId,
+      );
+      setCorrections((current) =>
+        replaceEntryResultCorrection(
+          current,
+          inferredResultCorrection(fix.entryId, inferred),
+          fix.entryId,
+        ));
+      goToTab("results");
+      return;
+    }
+    // finish-fleet-median: spec §6.3 walked input — playhead supplies the time.
+    // An untouched playhead still sits at the first sample (setBounds parks it
+    // at t0), which would silently place the finish at the race start.
+    const playback = usePlaybackStore.getState();
+    const position = processed && playback.timeMs > playback.t0
+      ? fleetMedianPositionAt(processed, playback.timeMs)
+      : null;
+    if (!position) {
+      setApplyError(
+        "Scrub the playhead to when the fleet crossed the finish, then accept the fix again.",
+      );
+      return;
+    }
+    updateCorrections({
+      course: { ...corrections.course, finish: { kind: "point", position } },
+    });
+    goToTab("start-course");
+  }
+
   function apply() {
     if (validationErrors.length > 0) return;
     setApplyError(null);
@@ -200,6 +295,7 @@ export function ReviewPageClient({
             body.error ?? "Could not apply corrections.",
             ...(body.details ?? []),
           ].join(" "));
+          if (res.status === 409) router.refresh();
           return;
         }
         router.refresh();
@@ -260,14 +356,40 @@ export function ReviewPageClient({
         </div>
         {(previewing || pending) && (
           <LoaderCircle
-            className="ml-auto size-4 animate-spin text-muted-foreground"
+            className="size-4 animate-spin text-muted-foreground"
             aria-hidden="true"
           />
         )}
+        <span className="ml-auto text-xs text-muted-foreground" aria-live="polite">
+          {reviewDraft.saveState === "saving" && "Saving draft…"}
+          {reviewDraft.saveState === "saved" && "Draft saved"}
+          {reviewDraft.saveState === "error" && "Reconnecting — changes not yet saved"}
+        </span>
       </header>
 
-      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded || validationErrors.length > 0) && (
+      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded || validationErrors.length > 0 || reviewDraft.resume) && (
         <section className="space-y-3" aria-live="polite">
+          {reviewDraft.resume && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+              <span>
+                Resume review draft
+                {reviewDraft.resume.updatedAt
+                  ? ` · saved ${new Date(reviewDraft.resume.updatedAt).toLocaleString()}`
+                  : ""}
+                {reviewDraft.resume.stale
+                  ? " · analysis changed since this draft (may be stale)"
+                  : ""}
+              </span>
+              <div className="ml-auto flex gap-2">
+                <Button type="button" size="sm" onClick={reviewDraft.resume.accept}>
+                  Resume
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={reviewDraft.resume.discard}>
+                  Start fresh
+                </Button>
+              </div>
+            </div>
+          )}
           {analysisStale && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
               Stored analysis is stale relative to tracks or corrections. Preview uses live
@@ -296,8 +418,23 @@ export function ReviewPageClient({
         </section>
       )}
 
+      <ReviewAssistant
+        findings={findings}
+        boatNameById={boatNameById}
+        fixLabels={fixLabels}
+        activeFingerprint={reviewDraft.cursor}
+        onActivate={reviewDraft.setCursor}
+        onAcceptFix={acceptSuggestedFix}
+        onAdjustManually={(finding) => {
+          goToTab(finding.target);
+          reviewDraft.setCursor(finding.fingerprint);
+        }}
+        onDismiss={reviewDraft.dismissFinding}
+        onUndismiss={reviewDraft.undismissFinding}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-        <Tabs defaultValue="wind" className="min-w-0">
+        <Tabs id="review-tabs" value={activeTab} onValueChange={setActiveTab} className="min-w-0 scroll-mt-4">
           <TabsList>
             <TabsTrigger value="wind">Wind</TabsTrigger>
             <TabsTrigger value="start-course">Start &amp; Course</TabsTrigger>

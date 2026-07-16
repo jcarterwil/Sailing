@@ -23,10 +23,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { parseTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { listActiveBoats } from "@/lib/boats/active-boats";
 import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
+import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
+import { loadReviewDispositions } from "@/lib/review/draft-store";
+import { countOpenReviewFindings, reviewBadgeLabel } from "@/lib/review/findings";
 import { resolveSessionType } from "@/lib/sessions/format";
 import { summarizeSessionTrackStatuses } from "@/lib/sessions/resolve-session-primary-action";
 import {
@@ -105,7 +109,7 @@ export default async function RaceManagePage({
       .maybeSingle(),
     supabase
       .from("race_corrections")
-      .select("updated_at")
+      .select("corrections, updated_at")
       .eq("race_id", raceId)
       .maybeSingle(),
     supabase
@@ -219,6 +223,23 @@ export default async function RaceManagePage({
     processedTrackUpdatedAts: processedUpdatedAts,
     correctionsUpdatedAt: correctionsRow?.updated_at,
   });
+  const parsedForReview = isRaceSession
+    ? parseStoredRaceAnalysis({
+        value: analysisRow?.analysis,
+        computedAt: analysisRow?.computed_at,
+        processedTrackUpdatedAts: processedUpdatedAts,
+        correctionsUpdatedAt: correctionsRow?.updated_at,
+      })
+    : null;
+  const reviewOpenCount =
+    parsedForReview?.status === "valid" && parsedForReview.performance
+      ? countOpenReviewFindings({
+          warnings: parsedForReview.performance.warnings,
+          windQuality: parsedForReview.analysis?.windQuality,
+          corrections: normalizeCorrections(correctionsRow?.corrections ?? null),
+          dispositions: await loadReviewDispositions(raceId),
+        })
+      : null;
   const primaryAction = buildSessionPrimaryAction({
     raceId: race.id,
     sessionType,
@@ -333,6 +354,25 @@ export default async function RaceManagePage({
                     No edit actions available for your role right now.
                   </p>
                 )}
+                {reviewOpenCount !== null ? (
+                  <p className="text-muted-foreground">
+                    Data review:{" "}
+                    <span className="font-medium text-foreground">
+                      {reviewBadgeLabel(reviewOpenCount)}
+                    </span>
+                    {canManageRace && reviewOpenCount > 0 ? (
+                      <>
+                        {" · "}
+                        <Link
+                          href={`/races/${race.id}/review`}
+                          className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          Review data
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
 

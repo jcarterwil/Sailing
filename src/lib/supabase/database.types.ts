@@ -811,6 +811,48 @@ export type Database = {
           },
         ]
       }
+      race_review_drafts: {
+        Row: {
+          base_analysis_computed_at: string | null
+          base_corrections_updated_at: string | null
+          draft: Json
+          race_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          base_analysis_computed_at?: string | null
+          base_corrections_updated_at?: string | null
+          draft?: Json
+          race_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          base_analysis_computed_at?: string | null
+          base_corrections_updated_at?: string | null
+          draft?: Json
+          race_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_review_drafts_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: true
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_review_drafts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       race_series: {
         Row: {
           archived_at: string | null

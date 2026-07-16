@@ -22,6 +22,7 @@ import type { PerformanceTrackMeta } from "@/components/performance/drilldown-wo
 import { PerformanceDrilldowns } from "@/components/performance/performance-drilldowns";
 import { PerformanceOpportunities } from "@/components/performance/performance-opportunities";
 import { PerformancePrintReport } from "@/components/performance/performance-print-report";
+import { ReviewStatusBadge } from "@/components/review/review-status-badge";
 import {
   formatDateTime,
   formatDelta,
@@ -108,6 +109,7 @@ export function PerformanceOverview({
   model,
   drilldown,
   navigation,
+  review,
 }: {
   model: PerformanceOverviewModel;
   drilldown?: {
@@ -128,6 +130,8 @@ export function PerformanceOverview({
      */
     asMain?: boolean;
   };
+  /** Open review-finding count; null hides the badge (e.g. stale analysis). */
+  review?: { openCount: number } | null;
 }) {
   const [boatFilter, setBoatFilter] = useState("all");
   const [sort, setSort] = useState<{ key: MetricSortKey; direction: SortDirection }>({
@@ -206,9 +210,12 @@ export function PerformanceOverview({
           }
         >
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-              Race report
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
+                Race report
+              </p>
+              {review ? <ReviewStatusBadge openCount={review.openCount} /> : null}
+            </div>
             {!embedded ? (
               <h1 className="mt-1 flex items-center gap-2 text-3xl font-semibold tracking-tight">
                 <Waves className="size-7 text-primary" aria-hidden="true" />

@@ -13,6 +13,7 @@ import {
   analyzeAndPersistRace,
   invalidatePersistedRaceAnalysis,
 } from "@/lib/races/analyze-race";
+import { clearReviewDraftAfterApply } from "@/lib/review/draft-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -185,6 +186,18 @@ export async function POST(
 
   try {
     const result = await analyzeAndPersistRace(raceId);
+    // Spec §5.2: promote-then-clear. Keep dispositions; refresh base snapshots
+    // so a resumed draft is no longer flagged stale. Draft cleanup must never
+    // fail the apply itself.
+    try {
+      await clearReviewDraftAfterApply({
+        raceId,
+        baseAnalysisComputedAt: result.computedAt,
+        baseCorrectionsUpdatedAt: result.correctionsUpdatedAt ?? updatedAt,
+      });
+    } catch (draftError) {
+      console.error("review draft cleanup failed", draftError);
+    }
     return NextResponse.json({
       computedAt: result.computedAt,
       trackCount: result.trackCount,
