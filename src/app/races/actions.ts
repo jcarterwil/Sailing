@@ -17,6 +17,11 @@ import {
 } from "@/lib/races/meta";
 import { normalizeOwnerInvitationCode } from "@/lib/boats/owner-invitations";
 import {
+  AnalyzeRaceError,
+  invalidatePersistedRaceAnalysis,
+} from "@/lib/races/analyze-race";
+import { syncBoatSessionObservationTimezone } from "@/lib/boats/observations/persist";
+import {
   localDateTimeToUtc,
   localToUtcErrorMessage,
   parseLocalDateAndTime,
@@ -292,12 +297,16 @@ export async function requestTrackUpload(
   if (trackError) throw new Error(`Could not record track: ${trackError.message}`);
 
   // Replacing a track invalidates fleet analysis until the new file is processed.
-  const { error: deleteAnalysisError } = await admin
-    .from("race_analyses")
-    .delete()
-    .eq("race_id", entry.race_id);
-  if (deleteAnalysisError) {
-    throw new Error(`Could not clear stale analysis: ${deleteAnalysisError.message}`);
+  try {
+    await invalidatePersistedRaceAnalysis(entry.race_id);
+  } catch (error) {
+    const message =
+      error instanceof AnalyzeRaceError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Could not clear stale analysis.";
+    throw new Error(message);
   }
 
   const { data: signed, error: signError } = await admin.storage
@@ -460,6 +469,9 @@ export async function updateRaceMeta(
     .update({ conditions: conditionsToJson(conditions), tags, timezone })
     .eq("id", raceId);
   if (error) throw new Error(`Could not update race metadata: ${error.message}`);
+
+  // Observation rows denormalize timezone for history queries — keep them aligned.
+  await syncBoatSessionObservationTimezone({ raceId, timezone });
 
   revalidatePath(`/races/${raceId}`);
 }

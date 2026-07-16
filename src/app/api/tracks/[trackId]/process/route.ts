@@ -10,6 +10,7 @@ import { ParseError } from "@/lib/analytics/types";
 import { sha256HexBytes } from "@/lib/imports/hash";
 import {
   analyzeAndPersistRace,
+  invalidatePersistedRaceAnalysis,
   raceHasAllTracksProcessed,
 } from "@/lib/races/analyze-race";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -154,12 +155,10 @@ export async function POST(
     // replay never serves wind/maneuvers computed against an older track set;
     // then rebuild when the whole fleet is ready. Delete failure must not flip
     // the track to error — processing already succeeded.
-    const { error: deleteAnalysisError } = await admin
-      .from("race_analyses")
-      .delete()
-      .eq("race_id", entry.race_id);
-    if (deleteAnalysisError) {
-      console.error("Could not clear stale analysis:", deleteAnalysisError);
+    try {
+      await invalidatePersistedRaceAnalysis(entry.race_id);
+    } catch (invalidateError) {
+      console.error("Could not clear stale analysis:", invalidateError);
     }
 
     let analyzed: { computedAt: string; trackCount: number } | null = null;
