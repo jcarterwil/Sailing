@@ -54,37 +54,37 @@ const AGGREGATE_SPECS: Array<{
   {
     metric: "avgSogKts",
     unit: "kts",
-    pick: (row) => row.observation.absolute.avgSogKts.value,
+    pick: (row) => row.observation?.absolute.avgSogKts.value ?? null,
   },
   {
     metric: "maxSogKts",
     unit: "kts",
-    pick: (row) => row.observation.absolute.maxSogKts.value,
+    pick: (row) => row.observation?.absolute.maxSogKts.value ?? null,
   },
   {
     metric: "sailedDistanceM",
     unit: "m",
-    pick: (row) => row.observation.absolute.sailedDistanceM.value,
+    pick: (row) => row.observation?.absolute.sailedDistanceM.value ?? null,
   },
   {
     metric: "courseEfficiencyPct",
     unit: "pct",
-    pick: (row) => row.observation.raceRelative.courseEfficiencyPct.value,
+    pick: (row) => row.observation?.raceRelative.courseEfficiencyPct.value ?? null,
   },
   {
     metric: "upwindStraightVmgKts",
     unit: "kts",
-    pick: (row) => row.observation.absolute.upwindStraightVmgKts.value,
+    pick: (row) => row.observation?.absolute.upwindStraightVmgKts.value ?? null,
   },
   {
     metric: "downwindStraightVmgKts",
     unit: "kts",
-    pick: (row) => row.observation.absolute.downwindStraightVmgKts.value,
+    pick: (row) => row.observation?.absolute.downwindStraightVmgKts.value ?? null,
   },
   {
     metric: "avgAbsHeelDeg",
     unit: "deg",
-    pick: (row) => row.observation.absolute.avgAbsHeelDeg.value,
+    pick: (row) => row.observation?.absolute.avgAbsHeelDeg.value ?? null,
   },
 ];
 
@@ -92,7 +92,8 @@ export function buildAggregateSummaries(
   rows: readonly CompactObservationRowV1[],
   options: { metricVersionStatus: "single" | "mismatched" | "empty" | "filtered" },
 ): PerformanceHistoryAggregatesV1 {
-  if (rows.length === 0) {
+  const comparable = rows.filter((row) => row.observation != null);
+  if (comparable.length === 0) {
     return {
       status: "empty",
       note: "No comparable observations in the filtered window.",
@@ -106,7 +107,7 @@ export function buildAggregateSummaries(
       metrics: [],
     };
   }
-  if (rows.length < PERFORMANCE_HISTORY_AGGREGATE_MIN_N) {
+  if (comparable.length < PERFORMANCE_HISTORY_AGGREGATE_MIN_N) {
     return {
       status: "insufficient-n",
       note: `Individual points may render at n = 1; trend summaries require n >= ${PERFORMANCE_HISTORY_AGGREGATE_MIN_N}.`,
@@ -114,12 +115,30 @@ export function buildAggregateSummaries(
     };
   }
 
+  const cohortEntryIds = comparable.map((row) => row.entryId);
+  const cohortSessionIds = [...new Set(comparable.map((row) => row.sessionId))];
+
   const metrics: MetricAggregateV1[] = [];
   for (const spec of AGGREGATE_SPECS) {
-    const values = rows
-      .map(spec.pick)
-      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-    const stats = medianIqr(values);
+    const samples: Array<{ value: number; entryId: string; sessionId: string }> = [];
+    for (const row of comparable) {
+      const value = spec.pick(row);
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      samples.push({
+        value,
+        entryId: row.entryId,
+        sessionId: row.sessionId,
+      });
+    }
+    const stats = medianIqr(samples.map((s) => s.value));
+    // Cite finite contributors when present; otherwise the full comparable
+    // cohort so withheld claims (e.g. Practice race-only metrics) stay linked.
+    const citationEntryIds =
+      samples.length > 0 ? samples.map((s) => s.entryId) : cohortEntryIds;
+    const citationSessionIds =
+      samples.length > 0
+        ? [...new Set(samples.map((s) => s.sessionId))]
+        : cohortSessionIds;
     metrics.push({
       metric: spec.metric,
       unit: spec.unit,
@@ -128,6 +147,8 @@ export function buildAggregateSummaries(
       q1: stats.q1,
       q3: stats.q3,
       normalization: "none",
+      citationEntryIds,
+      citationSessionIds,
     });
   }
 

@@ -38,16 +38,16 @@ import {
   type ViewableBoatAccess,
 } from "@/lib/boats/my-sailing";
 import {
-  loadBoatSessionObservations,
-  queryBoatPerformanceHistory,
-  parseHistoryDateBound,
-} from "@/lib/boats/performance-history";
-import {
+  buildCitedPerformanceHistoryHandoff,
   buildCompactObservationCsv,
   compactExportFilename,
-} from "@/lib/boats/performance-history/export-csv";
+  loadBoatSessionObservations,
+  parseHistoryDateBound,
+  queryBoatPerformanceHistory,
+} from "@/lib/boats/performance-history";
 import { resolveMetadataFilterContext } from "@/lib/boats/performance-history/resolve-metadata-context";
 import type {
+  CitedPerformanceHistoryHandoffV1,
   PerformanceHistoryQueryFilters,
   PerformanceHistoryQueryResultV1,
 } from "@/lib/boats/performance-history/types";
@@ -192,6 +192,7 @@ export default async function BoatHubPage({
     truncated: boolean;
   } | null = null;
   let performanceHistory: PerformanceHistoryQueryResultV1 | null = null;
+  let performanceHandoff: CitedPerformanceHistoryHandoffV1 | null = null;
   let performanceCsv = "";
   let performanceCsvFilename = "performance.csv";
   let catalogs: Awaited<ReturnType<typeof loadBoatMetadataCatalogs>> = {
@@ -240,10 +241,12 @@ export default async function BoatHubPage({
       );
 
       performanceHistory = history;
+      performanceHandoff = buildCitedPerformanceHistoryHandoff(history);
       performanceCsv = buildCompactObservationCsv(history.observations);
       performanceCsvFilename = compactExportFilename(history);
     } catch {
       performanceHistory = null;
+      performanceHandoff = null;
     }
   }
 
@@ -422,10 +425,11 @@ export default async function BoatHubPage({
         ) : null}
 
         {activeTab === "performance" ? (
-          performanceHistory ? (
+          performanceHistory && performanceHandoff ? (
             <BoatPerformancePanel
               boatId={boat.id}
               history={performanceHistory}
+              handoff={performanceHandoff}
               catalogs={catalogs}
               csv={performanceCsv}
               csvFilename={performanceCsvFilename}

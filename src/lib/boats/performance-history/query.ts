@@ -89,6 +89,7 @@ export function countExclusions(
 ): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const row of rows) {
+    if (!row.observation) continue;
     const { absolute, raceRelative, cohort } = row.observation;
     for (const metric of Object.values(absolute)) {
       tallyMetricExclusion(counts, metric);
@@ -202,25 +203,29 @@ export function queryBoatPerformanceHistory(
     metricVersionStatus = "mismatched";
   }
 
+  // Comparable payload rows only for aggregates / export / UI. Version stubs
+  // (observation == null) still participate in mismatch reporting above.
+  const comparable = included.filter((row) => row.observation != null);
+
   // Prefer a single-version cohort for aggregates. When versions conflict and
   // no explicit filter was set, withhold trend summaries so clients must pick.
-  const aggregates = buildAggregateSummaries(included, {
+  const aggregates = buildAggregateSummaries(comparable, {
     metricVersionStatus:
-      included.length === 0
+      comparable.length === 0
         ? "empty"
         : metricVersionStatus === "mismatched"
           ? "mismatched"
           : "single",
   });
 
-  const exclusionsByReason = countExclusions(included);
+  const exclusionsByReason = countExclusions(comparable);
   const exclusionCount = Object.values(exclusionsByReason).reduce((a, b) => a + b, 0);
 
   return {
     boatId,
     filters: resolved,
-    dateRange: dateRangeOf(included),
-    n: included.length,
+    dateRange: dateRangeOf(comparable),
+    n: comparable.length,
     bound: {
       maxSessions: BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
       truncated,
@@ -228,7 +233,7 @@ export function queryBoatPerformanceHistory(
     },
     coverage: {
       observationCount: working.length,
-      includedCount: included.length,
+      includedCount: comparable.length,
       exclusionCount,
       exclusionsByReason,
     },
@@ -236,7 +241,7 @@ export function queryBoatPerformanceHistory(
     metricVersion: selectedVersion,
     metricVersionStatus,
     mismatchedVersions,
-    observations: included,
+    observations: comparable,
     aggregates,
     normalizationNote: PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
   };
