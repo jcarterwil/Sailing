@@ -1,4 +1,10 @@
 export {
+  legacyEntryMetaHasContent,
+  legacyEntryMetaToSnapshotPayload,
+  shouldBackfillLegacyEntryMeta,
+  type LegacyEntryMetaBackfillInput,
+} from "@/lib/boats/metadata/backfill";
+export {
   normalizeCrewPersonInput,
   normalizeSailInput,
   normalizeSessionTagDefInput,
