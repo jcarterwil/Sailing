@@ -1849,6 +1849,22 @@ export type Database = {
         }
         Returns: string | null
       }
+      claim_email_retry_messages: {
+        Args: { p_message_ids: string[] }
+        Returns: Json
+      }
+      record_email_provider_acceptance: {
+        Args: {
+          p_accepted_at: string
+          p_message_id: string
+          p_provider_email_id: string
+        }
+        Returns: string | null
+      }
+      refresh_email_broadcast: {
+        Args: { p_broadcast_id: string }
+        Returns: string | null
+      }
       apply_race_series_score_snapshot: {
         Args: {
           actor_id_input: string

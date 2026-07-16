@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 interface NotificationPreferenceInput {
@@ -23,30 +24,23 @@ export async function updateNotificationPreferences(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Sign in required.");
 
-  const { data: existing, error: loadError } = await supabase
-    .from("notification_preferences")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (loadError) throw new Error(`Could not load email preferences: ${loadError.message}`);
-
   const values = {
+    user_id: user.id,
     email_enabled: input.emailEnabled,
     admin_announcements: input.adminAnnouncements,
     boat_activity: input.boatActivity,
     report_ready: input.reportReady,
     updated_at: new Date().toISOString(),
   };
-  const result = existing
-    ? await supabase
-        .from("notification_preferences")
-        .update(values)
-        .eq("user_id", user.id)
-    : await supabase
-        .from("notification_preferences")
-        .insert({ user_id: user.id, ...values });
-  if (result.error) {
-    throw new Error(`Could not save email preferences: ${result.error.message}`);
+  // The actor and row ID are fixed from the authenticated session. Using the
+  // server client keeps provider-managed suppression columns unavailable to
+  // the browser while making first-save creation atomic across multiple tabs.
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("notification_preferences")
+    .upsert(values, { onConflict: "user_id" });
+  if (error) {
+    throw new Error(`Could not save email preferences: ${error.message}`);
   }
   revalidatePath("/account/notifications");
 }

@@ -45,4 +45,46 @@ describe("email communications migration", () => {
     expect(migration).toContain(") from public, anon, authenticated;");
     expect(migration).toContain(") to service_role;");
   });
+
+  it("cannot downgrade a webhook state when provider acceptance is recorded", () => {
+    expect(migration).toContain(
+      "create function public.record_email_provider_acceptance",
+    );
+    expect(migration).toContain(
+      "status = case when last_event_at is null then 'sent' else status end",
+    );
+    expect(migration).toContain(
+      "error_message = case when last_event_at is null then null else error_message end",
+    );
+    expect(migration).toContain(
+      "revoke all on function public.record_email_provider_acceptance",
+    );
+  });
+
+  it("atomically re-checks current preferences while claiming retries", () => {
+    expect(migration).toContain("create function public.claim_email_retry_messages");
+    expect(migration).toContain("returns jsonb");
+    expect(migration).toContain("status = 'sending'");
+    expect(migration).toContain("from public.notification_preferences np");
+    expect(migration).toContain("not np.email_enabled");
+    expect(migration).toContain("np.suppressed_at is not null");
+    expect(migration).toContain("and not np.admin_announcements");
+    expect(migration).toContain("and not np.boat_activity");
+    expect(migration).toContain("and not np.report_ready");
+    expect(migration).toContain(
+      "revoke all on function public.claim_email_retry_messages(uuid[])",
+    );
+  });
+
+  it("refreshes broadcast acceptance totals after retries through a service-only function", () => {
+    expect(migration).toContain("create function public.refresh_email_broadcast");
+    expect(migration).toContain(
+      "count(*) filter (where provider_email_id is not null)::integer",
+    );
+    expect(migration).toContain("sent_count = v_accepted_count");
+    expect(migration).toContain("failed_count = v_failed_count");
+    expect(migration).toContain(
+      "revoke all on function public.refresh_email_broadcast(uuid)",
+    );
+  });
 });

@@ -20,6 +20,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 const RESEND_BATCH_SIZE = 100;
+const RETRY_BLOCKED_MESSAGE =
+  "Retry skipped because the recipient no longer allows this email category or is suppressed.";
 
 type EmailMessageRow = Database["public"]["Tables"]["email_messages"]["Row"];
 
@@ -117,7 +119,9 @@ async function markFailed(messages: EmailMessageRow[], errorMessage: string): Pr
     .in(
       "id",
       messages.map((message) => message.id),
-    );
+    )
+    .is("provider_email_id", null)
+    .is("last_event_at", null);
   if (error) console.error("Could not record failed email delivery:", error);
 }
 
@@ -129,6 +133,22 @@ async function sendClaimedChunk(messages: EmailMessageRow[]): Promise<{
   const resend = getResendClient();
   const admin = createAdminClient();
   const now = new Date().toISOString();
+  const recordProviderAcceptance = async (
+    message: EmailMessageRow,
+    providerEmailId: string,
+  ) => {
+    const { data, error } = await admin.rpc("record_email_provider_acceptance", {
+      p_message_id: message.id,
+      p_provider_email_id: providerEmailId,
+      p_accepted_at: now,
+    });
+    if (error || !data) {
+      console.error(
+        "Resend accepted an email but its ledger update failed:",
+        error ?? new Error("Email ledger row was not updated."),
+      );
+    }
+  };
 
   if (messages.length === 1) {
     const message = messages[0];
@@ -146,16 +166,7 @@ async function sendClaimedChunk(messages: EmailMessageRow[]): Promise<{
       await markFailed([message], result.error?.message ?? "Resend did not return an email ID.");
       return { sentCount: 0, failedCount: 1 };
     }
-    const { error } = await admin
-      .from("email_messages")
-      .update({
-        provider_email_id: result.data.id,
-        status: "sent",
-        sent_at: now,
-        error_message: null,
-      })
-      .eq("id", message.id);
-    if (error) console.error("Resend accepted an email but its ledger update failed:", error);
+    await recordProviderAcceptance(message, result.data.id);
     return { sentCount: 1, failedCount: 0 };
   }
 
@@ -179,16 +190,7 @@ async function sendClaimedChunk(messages: EmailMessageRow[]): Promise<{
   const acceptedCount = Math.min(accepted.length, messages.length);
   await Promise.all(
     messages.slice(0, acceptedCount).map(async (message, index) => {
-      const { error } = await admin
-        .from("email_messages")
-        .update({
-          provider_email_id: accepted[index].id,
-          status: "sent",
-          sent_at: now,
-          error_message: null,
-        })
-        .eq("id", message.id);
-      if (error) console.error("Resend accepted an email but its ledger update failed:", error);
+      await recordProviderAcceptance(message, accepted[index].id);
     }),
   );
   const unaccepted = messages.slice(acceptedCount);
@@ -298,6 +300,31 @@ export async function sendApplicationEmail(
   };
 }
 
+async function refreshBroadcastAggregates(messages: EmailMessageRow[]): Promise<void> {
+  const broadcastIds = [
+    ...new Set(
+      messages.flatMap((message) =>
+        message.broadcast_id ? [message.broadcast_id] : [],
+      ),
+    ),
+  ];
+  if (broadcastIds.length === 0) return;
+
+  const admin = createAdminClient();
+  await Promise.all(
+    broadcastIds.map(async (broadcastId) => {
+      const { data, error } = await admin.rpc("refresh_email_broadcast", {
+        p_broadcast_id: broadcastId,
+      });
+      if (error || !data) {
+        throw new Error(
+          `Could not refresh email broadcast totals: ${error?.message ?? "Broadcast not found."}`,
+        );
+      }
+    }),
+  );
+}
+
 export async function retryStoredEmailMessage(messageId: string): Promise<SendEmailResult> {
   const admin = createAdminClient();
   const { data: message, error } = await admin
@@ -328,19 +355,37 @@ export async function retryStoredEmailMessage(messageId: string): Promise<SendEm
     return { attemptedCount: 0, sentCount: 0, failedCount: 0, messageIds: [] };
   }
 
-  const { data: claimed, error: claimError } = await admin
-    .from("email_messages")
-    .update({ status: "sending", error_message: null })
-    .in("id", retryIds)
-    .eq("status", "failed")
-    .is("provider_email_id", null)
-    .select("*");
+  const { data: claimedValue, error: claimError } = await admin.rpc(
+    "claim_email_retry_messages",
+    { p_message_ids: retryIds },
+  );
   if (claimError) throw new Error(`Could not claim email retry: ${claimError.message}`);
-  if (!claimed || claimed.length === 0) {
+  if (!Array.isArray(claimedValue)) {
+    throw new Error("Could not claim email retry: invalid database response.");
+  }
+  const claimedRows = claimedValue as unknown as EmailMessageRow[];
+  const claimedIdSet = new Set(claimedRows.map((row) => row.id));
+  const blockedIds = retryIds.filter((id) => !claimedIdSet.has(id));
+  let preferenceBlockedCount = 0;
+  if (blockedIds.length > 0) {
+    const { data: blocked, error: blockedError } = await admin
+      .from("email_messages")
+      .update({ error_message: RETRY_BLOCKED_MESSAGE })
+      .in("id", blockedIds)
+      .eq("status", "failed")
+      .is("provider_email_id", null)
+      .select("id");
+    if (blockedError) {
+      throw new Error(`Could not record skipped email retries: ${blockedError.message}`);
+    }
+    preferenceBlockedCount = blocked?.length ?? 0;
+  }
+  if (claimedRows.length === 0) {
+    if (preferenceBlockedCount > 0) throw new Error(RETRY_BLOCKED_MESSAGE);
     return { attemptedCount: 0, sentCount: 0, failedCount: 0, messageIds: [] };
   }
 
-  const claimedRows = claimed.sort((a, b) =>
+  claimedRows.sort((a, b) =>
     a.idempotency_key.localeCompare(b.idempotency_key),
   );
   let sentCount = 0;
@@ -350,6 +395,7 @@ export async function retryStoredEmailMessage(messageId: string): Promise<SendEm
     sentCount += outcome.sentCount;
     failedCount += outcome.failedCount;
   }
+  await refreshBroadcastAggregates(claimedRows);
   return {
     attemptedCount: claimedRows.length,
     sentCount,

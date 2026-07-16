@@ -13,6 +13,8 @@ describe("Resend delivery event mapping", () => {
     expect(deliveryStatusForEvent("email.complained")).toBe("complained");
     expect(isDeliveryEventType("email.received")).toBe(false);
     expect(isDeliveryEventType("contact.created")).toBe(false);
+    expect(isDeliveryEventType("toString")).toBe(false);
+    expect(isDeliveryEventType("__proto__")).toBe(false);
   });
 
   it("extracts safe failure details for the admin log", () => {

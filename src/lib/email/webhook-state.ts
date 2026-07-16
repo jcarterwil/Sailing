@@ -15,7 +15,7 @@ export type DeliveryEventType = keyof typeof DELIVERY_EVENT_STATUS;
 export type DeliveryStatus = (typeof DELIVERY_EVENT_STATUS)[DeliveryEventType];
 
 export function isDeliveryEventType(value: string): value is DeliveryEventType {
-  return value in DELIVERY_EVENT_STATUS;
+  return Object.prototype.hasOwnProperty.call(DELIVERY_EVENT_STATUS, value);
 }
 
 export function deliveryStatusForEvent(eventType: DeliveryEventType): DeliveryStatus {

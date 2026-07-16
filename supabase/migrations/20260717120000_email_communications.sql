@@ -295,3 +295,148 @@ revoke all on function public.apply_email_delivery_event(
 grant execute on function public.apply_email_delivery_event(
   text, uuid, text, text, timestamptz, text
 ) to service_role;
+
+-- Resend can dispatch a webhook before the API response is persisted. Record
+-- provider acceptance under the same row lock used by delivery events and only
+-- set the local "sent" state when no newer provider event already owns it.
+create function public.record_email_provider_acceptance(
+  p_message_id uuid,
+  p_provider_email_id text,
+  p_accepted_at timestamptz
+)
+returns uuid
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  message_id uuid;
+begin
+  update public.email_messages
+  set
+    provider_email_id = coalesce(provider_email_id, p_provider_email_id),
+    status = case when last_event_at is null then 'sent' else status end,
+    sent_at = coalesce(sent_at, p_accepted_at),
+    error_message = case when last_event_at is null then null else error_message end
+  where id = p_message_id
+    and direction = 'outbound'
+    and (provider_email_id is null or provider_email_id = p_provider_email_id)
+  returning id into message_id;
+
+  return message_id;
+end;
+$$;
+
+revoke all on function public.record_email_provider_acceptance(
+  uuid, text, timestamptz
+) from public, anon, authenticated;
+grant execute on function public.record_email_provider_acceptance(
+  uuid, text, timestamptz
+) to service_role;
+
+-- Claim retries and enforce the recipient's current preferences in the same
+-- statement. This closes the gap where an opt-out could otherwise occur
+-- between an application-side preference read and the retry state change.
+create function public.claim_email_retry_messages(p_message_ids uuid[])
+returns jsonb
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  v_claimed_rows jsonb;
+begin
+  with claimed as (
+    update public.email_messages em
+    set
+      status = 'sending',
+      error_message = null
+    where em.id = any(coalesce(p_message_ids, '{}'::uuid[]))
+      and em.direction = 'outbound'
+      and em.status = 'failed'
+      and em.provider_email_id is null
+      and (
+        em.category = 'direct_reply'
+        or em.recipient_user_id is null
+        or not exists (
+          select 1
+          from public.notification_preferences np
+          where np.user_id = em.recipient_user_id
+            and (
+              not np.email_enabled
+              or np.suppressed_at is not null
+              or (
+                em.category = 'admin_announcement'
+                and not np.admin_announcements
+              )
+              or (em.category = 'boat_activity' and not np.boat_activity)
+              or (em.category = 'report_ready' and not np.report_ready)
+            )
+        )
+      )
+    returning em.*
+  )
+  select coalesce(jsonb_agg(to_jsonb(claimed)), '[]'::jsonb)
+  into v_claimed_rows
+  from claimed;
+
+  return v_claimed_rows;
+end;
+$$;
+
+revoke all on function public.claim_email_retry_messages(uuid[])
+from public, anon, authenticated;
+grant execute on function public.claim_email_retry_messages(uuid[])
+to service_role;
+
+-- Recalculate acceptance outcomes from recipient rows after a retry. Provider
+-- IDs represent messages Resend accepted even if a later webhook reports a
+-- bounce or other terminal delivery outcome.
+create function public.refresh_email_broadcast(p_broadcast_id uuid)
+returns uuid
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  v_message_count integer;
+  v_accepted_count integer;
+  v_failed_count integer;
+  v_pending_count integer;
+  v_broadcast_id uuid;
+begin
+  select
+    count(*)::integer,
+    count(*) filter (where provider_email_id is not null)::integer,
+    count(*) filter (
+      where provider_email_id is null and status = 'failed'
+    )::integer
+  into v_message_count, v_accepted_count, v_failed_count
+  from public.email_messages em
+  where em.broadcast_id = p_broadcast_id
+    and em.direction = 'outbound';
+
+  v_pending_count := v_message_count - v_accepted_count - v_failed_count;
+
+  update public.email_broadcasts eb
+  set
+    status = case
+      when v_pending_count > 0 then 'sending'
+      when v_failed_count = 0 then 'sent'
+      when v_accepted_count > 0 then 'partial'
+      else 'failed'
+    end,
+    sent_count = v_accepted_count,
+    failed_count = v_failed_count,
+    completed_at = case
+      when v_pending_count > 0 then null
+      else timezone('utc', now())
+    end
+  where eb.id = p_broadcast_id
+  returning eb.id into v_broadcast_id;
+
+  return v_broadcast_id;
+end;
+$$;
+
+revoke all on function public.refresh_email_broadcast(uuid)
+from public, anon, authenticated;
+grant execute on function public.refresh_email_broadcast(uuid)
+to service_role;
