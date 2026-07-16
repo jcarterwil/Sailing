@@ -216,12 +216,19 @@ export function ReviewPageClient({
     updateCorrections({ excludedWindSensorEntryIds: [...ids] });
   }
 
+  // The findings queue above the tabs can be very tall; a tab switch from the
+  // Review Assistant must also bring the tab content into view.
+  function goToTab(tab: string) {
+    setActiveTab(tab);
+    document.getElementById("review-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function acceptSuggestedFix(finding: ReviewFinding) {
     const fix = finding.suggestedFix;
     if (!fix) return;
     if (fix.kind === "exclude-wind-sensor") {
       toggleExclude(fix.entryId, true);
-      setActiveTab("wind");
+      goToTab("wind");
       return;
     }
     if (fix.kind === "use-inferred-result") {
@@ -234,7 +241,7 @@ export function ReviewPageClient({
           inferredResultCorrection(fix.entryId, inferred),
           fix.entryId,
         ));
-      setActiveTab("results");
+      goToTab("results");
       return;
     }
     // finish-fleet-median: spec §6.3 walked input — playhead supplies the time.
@@ -250,7 +257,7 @@ export function ReviewPageClient({
     updateCorrections({
       course: { ...corrections.course, finish: { kind: "point", position } },
     });
-    setActiveTab("start-course");
+    goToTab("start-course");
   }
 
   function apply() {
@@ -399,7 +406,7 @@ export function ReviewPageClient({
         onActivate={reviewDraft.setCursor}
         onAcceptFix={acceptSuggestedFix}
         onAdjustManually={(finding) => {
-          setActiveTab(finding.target === "start-course" ? "start-course" : finding.target);
+          goToTab(finding.target);
           reviewDraft.setCursor(finding.fingerprint);
         }}
         onDismiss={reviewDraft.dismissFinding}
@@ -407,7 +414,7 @@ export function ReviewPageClient({
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
+        <Tabs id="review-tabs" value={activeTab} onValueChange={setActiveTab} className="min-w-0 scroll-mt-4">
           <TabsList>
             <TabsTrigger value="wind">Wind</TabsTrigger>
             <TabsTrigger value="start-course">Start &amp; Course</TabsTrigger>
