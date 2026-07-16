@@ -103,7 +103,8 @@ describe("boat performance history acceptance (#176)", () => {
     expect(script).toContain("session_metadata_snapshots");
     expect(script).toContain("revision: 1");
     expect(script).toContain(".range(from, to)");
-    expect(script).toContain("IN_CHUNK_SIZE");
+    expect(script).toContain("IN_CHUNK_SIZE = 80");
+    expect(script).toContain('.order("id", { ascending: true })');
   });
 
   it("Session share does not publish boat history catalogs/snapshots", () => {

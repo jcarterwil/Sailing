@@ -27,7 +27,8 @@ import {
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 const PAGE_SIZE = 500;
-const IN_CHUNK_SIZE = 200;
+/** Keep UUID `.in()` lists under typical ~8KB reverse-proxy URI limits. */
+const IN_CHUNK_SIZE = 80;
 
 type AdminClient = SupabaseClient<Database>;
 
@@ -75,7 +76,9 @@ async function loadAllEntries(
     let query = admin
       .from("race_entries")
       .select("id, race_id, boat_id, crew, tags, boats(boat_class, owner_id, created_by)")
+      // Stable secondary key avoids OFFSET page skips/dupes on tied created_at.
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to);
     if (boatIdFilter) {
       query = query.eq("boat_id", boatIdFilter);
