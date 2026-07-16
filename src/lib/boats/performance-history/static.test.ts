@@ -36,6 +36,7 @@ describe("performance-history integration static gates", () => {
     expect(route).toContain("generatePerformanceHistoryCoachNotes");
     expect(route).toContain("assertHandoffCitationsIntact");
     expect(route).toContain("resolveMetadataFilterContext");
+    expect(route).toContain("requireBoatEditor");
   });
 
   it("retains unsupported metric-version stubs at load for mismatch reporting", () => {

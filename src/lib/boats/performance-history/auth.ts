@@ -37,3 +37,28 @@ export async function requireBoatViewer(boatId: string) {
 
   return { supabase, user } as const;
 }
+
+/** Authorize a boat write that may burn external AI tokens (`can_edit_boat`). */
+export async function requireBoatEditor(boatId: string) {
+  if (!UUID_PATTERN.test(boatId)) {
+    return { error: jsonError("Not allowed.", 403) } as const;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: jsonError("Not signed in.", 401) } as const;
+  }
+
+  const { data: canEdit, error } = await supabase.rpc("can_edit_boat", { bid: boatId });
+  if (error) {
+    return { error: jsonError("Could not verify boat access.", 500) } as const;
+  }
+  if (!canEdit) {
+    return { error: jsonError("Not allowed.", 403) } as const;
+  }
+
+  return { supabase, user } as const;
+}

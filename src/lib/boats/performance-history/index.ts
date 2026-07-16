@@ -30,7 +30,10 @@ export {
   loadBoatSessionObservations,
   OBSERVATION_ENTRY_ID_IN_CHUNK,
 } from "@/lib/boats/performance-history/load";
-export { requireBoatViewer } from "@/lib/boats/performance-history/auth";
+export {
+  requireBoatEditor,
+  requireBoatViewer,
+} from "@/lib/boats/performance-history/auth";
 export {
   filterObservationsByMetadata,
   filterSnapshotEntryIds,

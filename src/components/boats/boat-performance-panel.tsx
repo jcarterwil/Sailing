@@ -341,6 +341,7 @@ export function BoatPerformancePanel({
   catalogs,
   csv,
   csvFilename,
+  canEdit,
 }: {
   boatId: string;
   history: PerformanceHistoryQueryResultV1;
@@ -348,6 +349,7 @@ export function BoatPerformancePanel({
   catalogs: BoatMetadataCatalogs;
   csv: string;
   csvFilename: string;
+  canEdit: boolean;
 }) {
   const clearHref = boatHubHref(boatId, "performance");
   const coachQuery = new URLSearchParams();
@@ -520,7 +522,11 @@ export function BoatPerformancePanel({
       <ProvenanceChrome history={history} />
       <PracticeRaceOnlyCard history={history} />
       <AggregateCards history={history} />
-      <BoatCoachHandoffClient handoff={handoff} coachPath={coachPath} />
+      <BoatCoachHandoffClient
+        handoff={handoff}
+        coachPath={coachPath}
+        canGenerate={canEdit}
+      />
       <ObservationTable history={history} />
     </section>
   );

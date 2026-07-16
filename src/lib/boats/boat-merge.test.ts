@@ -78,6 +78,19 @@ describe("boat merge duplicates migration", () => {
     expect(followup).toContain("after update of merged_into_id on public.boats");
   });
 
+  it("remounts metadata catalogs and snapshots onto the canonical boat", () => {
+    const cleanup = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260716210000_boat_perf_history_merge_cleanup.sql",
+      ),
+      "utf8",
+    ).toLowerCase();
+    expect(cleanup).toContain("sync_session_metadata_snapshot_boat_id");
+    expect(cleanup).toContain("remount_boat_metadata_catalogs_on_merge");
+    expect(cleanup).toContain("after update of boat_id on public.race_entries");
+  });
+
   it("rejects same-race collisions, conflicting owners, and pending invitations", () => {
     expect(migration).toContain("both boats have entries in the same race");
     expect(migration).toContain("boats have different owners");
