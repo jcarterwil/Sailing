@@ -20,6 +20,7 @@ import {
   AnalyzeRaceError,
   invalidatePersistedRaceAnalysis,
 } from "@/lib/races/analyze-race";
+import { syncBoatSessionObservationTimezone } from "@/lib/boats/observations/persist";
 import {
   localDateTimeToUtc,
   localToUtcErrorMessage,
@@ -468,6 +469,9 @@ export async function updateRaceMeta(
     .update({ conditions: conditionsToJson(conditions), tags, timezone })
     .eq("id", raceId);
   if (error) throw new Error(`Could not update race metadata: ${error.message}`);
+
+  // Observation rows denormalize timezone for history queries — keep them aligned.
+  await syncBoatSessionObservationTimezone({ raceId, timezone });
 
   revalidatePath(`/races/${raceId}`);
 }

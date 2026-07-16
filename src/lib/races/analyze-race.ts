@@ -144,33 +144,13 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
 
   const analysis = analyzeRace(tracks, { corrections: loadedCorrections.corrections });
   const coursePreview = coursePreviewFromPerformance(analysis.performance!);
-  const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
-    await Promise.all([
-      admin
-        .from("race_entries")
-        .select("id, tracks(processed_path, status, updated_at)")
-        .eq("race_id", raceId),
-      loadRaceCorrections(raceId),
-    ]);
-  if (currentEntriesError) {
-    throw new AnalyzeRaceError(
-      `Could not verify analysis inputs: ${currentEntriesError.message}`,
-    );
-  }
-  const inputsUnchanged =
-    currentEntries?.length === inputVersions.size &&
-    currentEntries.every(
-      (entry) =>
-        entry.tracks?.status === "processed" &&
-        inputVersions.get(entry.id) ===
-          `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
-    );
-  if (!inputsUnchanged || currentCorrections.updatedAt !== correctionsUpdatedAt) {
-    throw new AnalyzeRaceError(
-      "Processed tracks or corrections changed while analysis was running. Retry analysis.",
-      409,
-    );
-  }
+
+  await assertAnalysisInputsUnchanged({
+    raceId,
+    inputVersions,
+    correctionsUpdatedAt,
+  });
+
   const { error: upsertError } = await admin.from("race_analyses").upsert(
     {
       race_id: raceId,
@@ -186,15 +166,28 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   }
 
   // Compact Performance V1 into boat-scoped history observations (#172).
-  // Failure here must not undo the analysis upsert — observations can recompute.
+  // Recheck inputs immediately before write so a concurrent track replacement
+  // that cleared analyses/observations cannot be overwritten with stale rows.
   if (analysis.performance) {
     try {
+      await assertAnalysisInputsUnchanged({
+        raceId,
+        inputVersions,
+        correctionsUpdatedAt,
+      });
       await persistBoatSessionObservations({
         raceId,
         performance: analysis.performance,
         sourceComputedAt: computedAt,
       });
     } catch (observationError) {
+      if (
+        observationError instanceof AnalyzeRaceError &&
+        observationError.status === 409
+      ) {
+        await invalidatePersistedRaceAnalysis(raceId);
+        throw observationError;
+      }
       console.error("Could not persist boat session observations:", observationError);
     }
   }
@@ -206,6 +199,46 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     trackCount: tracks.length,
     correctionsUpdatedAt,
   };
+}
+
+type AnalysisInputVersionMap = Map<string, string>;
+
+async function assertAnalysisInputsUnchanged(input: {
+  raceId: string;
+  inputVersions: AnalysisInputVersionMap;
+  correctionsUpdatedAt: string | null;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
+    await Promise.all([
+      admin
+        .from("race_entries")
+        .select("id, tracks(processed_path, status, updated_at)")
+        .eq("race_id", input.raceId),
+      loadRaceCorrections(input.raceId),
+    ]);
+  if (currentEntriesError) {
+    throw new AnalyzeRaceError(
+      `Could not verify analysis inputs: ${currentEntriesError.message}`,
+    );
+  }
+  const inputsUnchanged =
+    currentEntries?.length === input.inputVersions.size &&
+    currentEntries.every(
+      (entry) =>
+        entry.tracks?.status === "processed" &&
+        input.inputVersions.get(entry.id) ===
+          `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
+    );
+  if (
+    !inputsUnchanged ||
+    currentCorrections.updatedAt !== input.correctionsUpdatedAt
+  ) {
+    throw new AnalyzeRaceError(
+      "Processed tracks or corrections changed while analysis was running. Retry analysis.",
+      409,
+    );
+  }
 }
 
 /**

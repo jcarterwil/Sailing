@@ -1,5 +1,6 @@
 import "server-only";
 
+import { parseStoredPerformance } from "@/lib/analytics/performance/parse";
 import type { PerformanceAnalysisV1 } from "@/lib/analytics/performance/types";
 import { isSessionType, type SessionType } from "@/lib/sessions/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -133,4 +134,98 @@ export async function clearBoatSessionObservationsForRace(
     throw new Error(`Could not clear boat session observations: ${error.message}`);
   }
   return { cleared: true, skipped: false };
+}
+
+/**
+ * Keep denormalized observation timezone aligned when race metadata changes.
+ * Uses the service-role client — callers must authorize.
+ */
+export async function syncBoatSessionObservationTimezone(input: {
+  raceId: string;
+  timezone: string | null;
+}): Promise<{ updated: boolean; skipped: boolean }> {
+  const admin = createAdminClient();
+  const timezone = input.timezone?.trim() || "UTC";
+  const { error } = await admin
+    .from("boat_session_observations")
+    .update({
+      timezone,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("race_id", input.raceId);
+
+  if (error) {
+    if (isMissingBoatSessionObservationsRelation(error)) {
+      return { updated: false, skipped: true };
+    }
+    throw new Error(
+      `Could not sync boat session observation timezone: ${error.message}`,
+    );
+  }
+  return { updated: true, skipped: false };
+}
+
+export type BackfillObservationsResult = {
+  examined: number;
+  upserted: number;
+  skippedMissingPerformance: number;
+  skippedMissingTable: boolean;
+  errors: Array<{ raceId: string; message: string }>;
+};
+
+/**
+ * Compact existing race_analyses Performance V1 rows into boat_session_observations.
+ * Safe to re-run (upserts on entry_id). Uses the service-role client.
+ */
+export async function backfillBoatSessionObservationsFromAnalyses(options?: {
+  limit?: number;
+}): Promise<BackfillObservationsResult> {
+  const admin = createAdminClient();
+  const limit = options?.limit && options.limit > 0 ? options.limit : 500;
+
+  const { data: rows, error } = await admin
+    .from("race_analyses")
+    .select("race_id, analysis, computed_at")
+    .order("computed_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Could not load race analyses for observation backfill: ${error.message}`);
+  }
+
+  const result: BackfillObservationsResult = {
+    examined: rows?.length ?? 0,
+    upserted: 0,
+    skippedMissingPerformance: 0,
+    skippedMissingTable: false,
+    errors: [],
+  };
+
+  for (const row of rows ?? []) {
+    const parsed = parseStoredPerformance(row.analysis);
+    if (parsed.status !== "valid") {
+      result.skippedMissingPerformance += 1;
+      continue;
+    }
+    try {
+      const persisted = await persistBoatSessionObservations({
+        raceId: row.race_id,
+        performance: parsed.performance,
+        sourceComputedAt: row.computed_at,
+      });
+      if (persisted.skipped) {
+        result.skippedMissingTable = true;
+        break;
+      }
+      result.upserted += persisted.upserted;
+    } catch (persistError) {
+      result.errors.push({
+        raceId: row.race_id,
+        message:
+          persistError instanceof Error ? persistError.message : String(persistError),
+      });
+    }
+  }
+
+  return result;
 }
