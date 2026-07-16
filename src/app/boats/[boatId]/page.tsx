@@ -8,7 +8,9 @@ import {
   boatHubHref,
   parseBoatHubTab,
 } from "@/components/boats/boat-hub-nav";
+import { BoatPerformancePanel } from "@/components/boats/boat-performance-panel";
 import { BoatSessionList } from "@/components/boats/boat-session-list";
+import { BoatSetupPanel } from "@/components/boats/boat-setup-panel";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -26,15 +28,36 @@ import {
 } from "@/lib/boats/boat-sessions";
 import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
 import {
+  loadBoatMetadataCatalogs,
+  loadLatestSessionSnapshots,
+  snapshotMapByEntryId,
+} from "@/lib/boats/metadata";
+import {
   BOAT_HUB_ACTIVITY_PAGE_SIZE,
   MY_SAILING_RECENT_SESSION_LIMIT,
   boatAccessLabel,
   type ViewableBoatAccess,
 } from "@/lib/boats/my-sailing";
 import {
+  buildAggregateSummaries,
   loadBoatSessionObservations,
+  PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
   queryBoatPerformanceHistory,
 } from "@/lib/boats/performance-history";
+import {
+  buildCompactObservationCsv,
+  compactExportFilename,
+} from "@/lib/boats/performance-history/export-csv";
+import {
+  filterObservationsByMetadata,
+  hasActiveMetadataFilters,
+  parsePerformanceMetadataFilters,
+} from "@/lib/boats/performance-history/metadata-filters";
+import type {
+  PerformanceHistoryQueryFilters,
+  PerformanceHistoryQueryResultV1,
+} from "@/lib/boats/performance-history/types";
+import { isSessionType } from "@/lib/sessions/types";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -63,17 +86,122 @@ async function resolveBoatAccess(
   return "viewer";
 }
 
+function parseDateBound(
+  value: string | undefined,
+  edge: "start" | "end",
+): string | null {
+  if (!value?.trim()) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return edge === "start"
+      ? `${trimmed}T00:00:00.000Z`
+      : `${trimmed}T23:59:59.999Z`;
+  }
+  const ms = Date.parse(trimmed);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+function parseHistoryFiltersFromSearch(input: {
+  sessionType?: string;
+  from?: string;
+  to?: string;
+  metricVersion?: string;
+}): PerformanceHistoryQueryFilters {
+  const sessionType =
+    input.sessionType === "all" || isSessionType(input.sessionType)
+      ? input.sessionType
+      : undefined;
+  return {
+    sessionType,
+    from: parseDateBound(input.from, "start"),
+    to: parseDateBound(input.to, "end"),
+    metricVersion: input.metricVersion?.trim() || null,
+  };
+}
+
+function applyMetadataFiltersToHistory(
+  boatId: string,
+  history: PerformanceHistoryQueryResultV1,
+  filteredRows: ReturnType<typeof filterObservationsByMetadata>,
+): PerformanceHistoryQueryResultV1 {
+  const aggregates = buildAggregateSummaries(filteredRows, {
+    metricVersionStatus:
+      filteredRows.length === 0
+        ? "empty"
+        : history.metricVersionStatus === "mismatched"
+          ? "mismatched"
+          : "single",
+  });
+
+  const exclusionsByReason: Record<string, number> = {};
+  for (const row of filteredRows) {
+    for (const exclusion of row.observation.exclusions) {
+      exclusionsByReason[exclusion.reason] =
+        (exclusionsByReason[exclusion.reason] ?? 0) + 1;
+    }
+  }
+  const exclusionCount = Object.values(exclusionsByReason).reduce(
+    (a, b) => a + b,
+    0,
+  );
+
+  let from: string | null = null;
+  let to: string | null = null;
+  let minMs = Infinity;
+  let maxMs = -Infinity;
+  for (const row of filteredRows) {
+    if (!row.occurredAt) continue;
+    const ms = Date.parse(row.occurredAt);
+    if (!Number.isFinite(ms)) continue;
+    if (ms < minMs) {
+      minMs = ms;
+      from = row.occurredAt;
+    }
+    if (ms > maxMs) {
+      maxMs = ms;
+      to = row.occurredAt;
+    }
+  }
+
+  return {
+    ...history,
+    boatId,
+    n: filteredRows.length,
+    dateRange: { from, to },
+    coverage: {
+      observationCount: history.coverage.observationCount,
+      includedCount: filteredRows.length,
+      exclusionCount,
+      exclusionsByReason,
+    },
+    observations: filteredRows,
+    aggregates,
+    normalizationNote: PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
+  };
+}
+
 export default async function BoatHubPage({
   params,
   searchParams,
 }: {
   params: Promise<{ boatId: string }>;
-  searchParams: Promise<{ tab?: string; page?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    page?: string;
+    sessionType?: string;
+    from?: string;
+    to?: string;
+    metricVersion?: string;
+    crew?: string;
+    sail?: string;
+    setup?: string;
+    condition?: string;
+  }>;
 }) {
   const { boatId } = await params;
-  const { tab: tabParam, page: pageParam } = await searchParams;
-  const activeTab = parseBoatHubTab(tabParam);
-  const requestedPage = Number.parseInt(pageParam ?? "1", 10);
+  const search = await searchParams;
+  const activeTab = parseBoatHubTab(search.tab);
+  const requestedPage = Number.parseInt(search.page ?? "1", 10);
 
   const supabase = await createClient();
   const {
@@ -129,7 +257,7 @@ export default async function BoatHubPage({
     BOAT_HUB_ACTIVITY_PAGE_SIZE,
   );
 
-  // Thin smoke consumer for the bounded history query layer (#173). Full charts are #174.
+  // Overview smoke + Performance / Setup tab data.
   let performanceHistorySummary: {
     n: number;
     metricVersion: string | null;
@@ -137,6 +265,18 @@ export default async function BoatHubPage({
     metricVersionStatus: string;
     truncated: boolean;
   } | null = null;
+  let performanceHistory: PerformanceHistoryQueryResultV1 | null = null;
+  let performanceCsv = "";
+  let performanceCsvFilename = "performance.csv";
+  let catalogs: Awaited<ReturnType<typeof loadBoatMetadataCatalogs>> = {
+    crewPeople: [],
+    sails: [],
+    setups: [],
+    sessionTags: [],
+  };
+  let snapshots: Awaited<ReturnType<typeof loadLatestSessionSnapshots>> = [];
+  const metadataFilters = parsePerformanceMetadataFilters(search);
+
   if (activeTab === "overview") {
     try {
       const observationRows = await loadBoatSessionObservations(supabase, boat.id);
@@ -150,6 +290,59 @@ export default async function BoatHubPage({
       };
     } catch {
       performanceHistorySummary = null;
+    }
+  }
+
+  if (activeTab === "performance") {
+    try {
+      const historyFilters = parseHistoryFiltersFromSearch(search);
+      const observationRows = await loadBoatSessionObservations(
+        supabase,
+        boat.id,
+        historyFilters,
+      );
+      let history = queryBoatPerformanceHistory(
+        boat.id,
+        observationRows,
+        historyFilters,
+      );
+
+      if (hasActiveMetadataFilters(metadataFilters)) {
+        const entryIds = history.observations.map((row) => row.entryId);
+        const metaSnaps = await loadLatestSessionSnapshots(
+          supabase,
+          boat.id,
+          entryIds,
+        );
+        const filtered = filterObservationsByMetadata(
+          history.observations,
+          snapshotMapByEntryId(metaSnaps),
+          metadataFilters,
+        );
+        history = applyMetadataFiltersToHistory(boat.id, history, filtered);
+      }
+
+      performanceHistory = history;
+      performanceCsv = buildCompactObservationCsv(history.observations);
+      performanceCsvFilename = compactExportFilename(history);
+    } catch {
+      performanceHistory = null;
+    }
+  }
+
+  if (activeTab === "setup" || activeTab === "performance") {
+    try {
+      catalogs = await loadBoatMetadataCatalogs(supabase, boat.id);
+    } catch {
+      // Keep empty catalogs from the soft fallback above.
+    }
+  }
+
+  if (activeTab === "setup") {
+    try {
+      snapshots = await loadLatestSessionSnapshots(supabase, boat.id);
+    } catch {
+      snapshots = [];
     }
   }
 
@@ -238,6 +431,14 @@ export default async function BoatHubPage({
                     </Button>
                   ) : null}
                   <Button variant="outline" className="min-h-11" asChild>
+                    <Link href={boatHubHref(boat.id, "performance")}>
+                      Performance
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="min-h-11" asChild>
+                    <Link href={boatHubHref(boat.id, "setup")}>Setup</Link>
+                  </Button>
+                  <Button variant="outline" className="min-h-11" asChild>
                     <Link href={boatHubHref(boat.id, "activity")}>View activity</Link>
                   </Button>
                 </div>
@@ -301,6 +502,37 @@ export default async function BoatHubPage({
               </div>
             ) : null}
           </section>
+        ) : null}
+
+        {activeTab === "performance" ? (
+          performanceHistory ? (
+            <BoatPerformancePanel
+              boatId={boat.id}
+              history={performanceHistory}
+              catalogs={catalogs}
+              metadataFilters={metadataFilters}
+              csv={performanceCsv}
+              csvFilename={performanceCsvFilename}
+            />
+          ) : (
+            <Card className="bg-card/70">
+              <CardContent className="py-8 text-sm text-muted-foreground">
+                Performance history is unavailable right now. Observations may
+                still be processing, or the history tables are not deployed yet.
+              </CardContent>
+            </Card>
+          )
+        ) : null}
+
+        {activeTab === "setup" ? (
+          <BoatSetupPanel
+            boatId={boat.id}
+            boatClass={boat.boat_class}
+            canEdit={Boolean(canEdit)}
+            catalogs={catalogs}
+            sessions={sessions}
+            snapshots={snapshots}
+          />
         ) : null}
 
         {activeTab === "settings" ? (

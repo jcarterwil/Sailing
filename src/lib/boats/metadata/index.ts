@@ -10,6 +10,19 @@ export {
   parseSessionMetadataPayload,
 } from "@/lib/boats/metadata/payload";
 export {
+  loadBoatMetadataCatalogs,
+  type BoatCrewPersonRow,
+  type BoatMetadataCatalogs,
+  type BoatSailRow,
+  type BoatSessionTagDefRow,
+  type BoatSetupRow,
+} from "@/lib/boats/metadata/load-catalogs";
+export {
+  loadLatestSessionSnapshots,
+  snapshotMapByEntryId,
+  type LatestSessionSnapshot,
+} from "@/lib/boats/metadata/load-snapshots";
+export {
   CATALOG_BOUNDS,
   CONDITION_SOURCE_KINDS,
   SAIL_TYPES,
