@@ -18,8 +18,8 @@ Record the production deploy SHA when this acceptance PR merges to `main` and Ve
 | --- | --- | --- |
 | Owner/viewer/editor/non-member/anon authorization matrix | **PASS (schema)** | `20260715200000_boat_performance_metadata.sql` + `src/lib/boats/metadata/acceptance.test.ts` — catalogs gated by `can_view_boat` / `can_edit_*`; snapshots SELECT-only; RPC edit-gated; `revoke … from anon`; no anon policies |
 | Catalog edits do not mutate historical snapshots | **PASS** | Denormalized append-only snapshots; no authenticated UPDATE/DELETE; backfill skips existing revisions (`shouldBackfillLegacyEntryMeta`) |
-| Race-only metrics unavailable with reasons on Practices | **BLOCKED** | Needs merged #172/#173 observation contract + #174 Practice cards. Open PRs: #180, #181. Defect: #183. |
-| Queries bounded; no raw tracks returned | **BLOCKED** | Needs merged #173 (`GET /api/boats/[boatId]/performance-history`, ≤250). Acceptance suite asserts posture when route is present. Defect: #183. |
+| Race-only metrics unavailable with reasons on Practices | **PARTIAL** | Observation contract (#172 / #180) now on `main` with Practice exclusion reasons in compaction. UI Practice cards still need #174. Defect: #183. |
+| Queries bounded; no raw tracks returned | **BLOCKED** | Needs merged #173 (`GET /api/boats/[boatId]/performance-history`, ≤250). Open PR: #181. Acceptance suite asserts posture when route is present. Defect: #183. |
 | Private crew/setup metadata remains private (Session share ≠ boat history) | **PASS** | Share surfaces do not query catalogs/snapshots/observations; shared replay no longer selects/publishes entry `crew`/`tags`; public performance already omitted crew |
 | Desktop + 390px smoke on Boat Hub Performance/Setup | **BLOCKED** | Boat Hub tabs are still overview/activity/settings (`boat-hub-nav.tsx`). Performance/Setup owned by #174. Existing tabs keep `min-h-11` touch targets. Defect: #182. |
 | Legacy entry meta migration/backfill | **PASS (helper)** | `src/lib/boats/metadata/backfill.ts` + `scripts/backfill-session-metadata-snapshots.ts` (idempotent; never rewrites existing snapshots) |

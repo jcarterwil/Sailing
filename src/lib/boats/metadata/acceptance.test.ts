@@ -143,6 +143,16 @@ describe("boat performance history acceptance (#176)", () => {
       expect(source).not.toContain("boat_session_observations");
       expect(source).not.toContain("save_session_metadata_snapshot");
       expect(source).not.toContain("performance-history");
+      expect(source).not.toContain("from(\"boat_session_observations\")");
+    }
+
+    if (existsSync(resolve(root, "supabase/migrations/20260716000000_boat_session_observations.sql"))) {
+      const obsMigration = read(
+        "supabase/migrations/20260716000000_boat_session_observations.sql",
+      ).toLowerCase();
+      expect(obsMigration).toContain("revoke all on table public.boat_session_observations from anon");
+      expect(obsMigration).toContain("public.can_view_boat(boat_id)");
+      expect(obsMigration).not.toMatch(/create policy[\s\S]*?\bto anon\b/);
     }
 
     // Public performance share already omits entry crew columns.
@@ -165,25 +175,32 @@ describe("boat performance history acceptance (#176)", () => {
   });
 
   it("records query/observation acceptance posture for child issues", () => {
-    // On main, bounded history API may not have landed yet (#172/#173).
-    // When present, it must stay compact and capped; when absent, document blocked.
+    // #172 may land before #173. When the query route exists it must stay
+    // compact/capped; observation-only landings are allowed while #173 is open.
     const routePath = "src/app/api/boats/[boatId]/performance-history/route.ts";
     const queryTypesPath = "src/lib/boats/performance-history/types.ts";
     const observationsPath = "src/lib/boats/observations/types.ts";
 
-    if (existsSync(resolve(root, routePath))) {
+    const hasRoute = existsSync(resolve(root, routePath));
+    const hasObservations = existsSync(resolve(root, observationsPath));
+
+    if (hasObservations) {
+      const observationTypes = read(observationsPath);
+      expect(observationTypes).toMatch(/practice-session|exclusion/i);
+    }
+
+    if (hasRoute) {
       const route = read(routePath);
       expect(route).toContain("can_view_boat");
       expect(route.toLowerCase()).not.toContain("processed_path");
-      expect(route.toLowerCase()).not.toContain("storage");
+      expect(route).not.toMatch(/from\(["']race-tracks-/);
       if (existsSync(resolve(root, queryTypesPath))) {
         const types = read(queryTypesPath);
         expect(types).toMatch(/250/);
       }
     } else {
-      // Explicit blocked marker — keep this branch so the suite documents the gate.
-      expect(existsSync(resolve(root, routePath))).toBe(false);
-      expect(existsSync(resolve(root, observationsPath))).toBe(false);
+      // Bounded history API still open (#173 / defect #183).
+      expect(hasRoute).toBe(false);
     }
   });
 });
