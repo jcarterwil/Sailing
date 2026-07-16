@@ -219,6 +219,29 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.aggregates.status).toBe("version-mismatch");
   });
 
+  it("labels stub-only incompatible cohorts as version-mismatch, not empty", () => {
+    const rows = [
+      {
+        ...row(1, {
+          metricVersion: "boat-session-observation-v0.0.0",
+          startsAt: "2026-07-15T12:00:00.000Z",
+        }),
+        observation: null,
+      },
+      {
+        ...row(2, {
+          metricVersion: "boat-session-observation-v0.1.0",
+          startsAt: "2026-07-14T12:00:00.000Z",
+        }),
+        observation: null,
+      },
+    ];
+    const result = queryBoatPerformanceHistory(BOAT_ID, rows);
+    expect(result.metricVersionStatus).toBe("mismatched");
+    expect(result.n).toBe(0);
+    expect(result.aggregates.status).toBe("version-mismatch");
+  });
+
   it("handles version mismatch without silently pooling versions", () => {
     const rows = [
       row(1, {

@@ -181,6 +181,10 @@ function AggregateCards({ history }: { history: PerformanceHistoryQueryResultV1 
                 <p className="text-muted-foreground">
                   IQR {formatNumber(metric.q1)} – {formatNumber(metric.q3)}
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  Descriptive association across filtered Sessions — not a causal
+                  claim.
+                </p>
               </>
             ) : (
               <p className="text-muted-foreground">
@@ -188,9 +192,6 @@ function AggregateCards({ history }: { history: PerformanceHistoryQueryResultV1 
                 {PERFORMANCE_HISTORY_AGGREGATE_MIN_N}).
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Descriptive association across filtered Sessions — not a causal claim.
-            </p>
           </CardContent>
         </Card>
       ))}

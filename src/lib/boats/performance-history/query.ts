@@ -211,10 +211,10 @@ export function queryBoatPerformanceHistory(
   // no explicit filter was set, withhold trend summaries so clients must pick.
   const aggregates = buildAggregateSummaries(comparable, {
     metricVersionStatus:
-      comparable.length === 0
-        ? "empty"
-        : metricVersionStatus === "mismatched"
-          ? "mismatched"
+      metricVersionStatus === "mismatched"
+        ? "mismatched"
+        : comparable.length === 0
+          ? "empty"
           : "single",
   });
 

@@ -92,18 +92,20 @@ export function buildAggregateSummaries(
   rows: readonly CompactObservationRowV1[],
   options: { metricVersionStatus: "single" | "mismatched" | "empty" | "filtered" },
 ): PerformanceHistoryAggregatesV1 {
+  // Prefer version-mismatch over empty so stub-only incompatible cohorts are not
+  // mislabeled as “no data” for UI / Coach handoff.
+  if (options.metricVersionStatus === "mismatched") {
+    return {
+      status: "version-mismatch",
+      note: "Incompatible metric versions are present; aggregates are withheld until a single version is selected.",
+      metrics: [],
+    };
+  }
   const comparable = rows.filter((row) => row.observation != null);
   if (comparable.length === 0) {
     return {
       status: "empty",
       note: "No comparable observations in the filtered window.",
-      metrics: [],
-    };
-  }
-  if (options.metricVersionStatus === "mismatched") {
-    return {
-      status: "version-mismatch",
-      note: "Incompatible metric versions are present; aggregates are withheld until a single version is selected.",
       metrics: [],
     };
   }
