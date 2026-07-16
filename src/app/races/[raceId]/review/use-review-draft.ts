@@ -42,6 +42,8 @@ export function useReviewDraft(input: {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abort = useRef<AbortController | null>(null);
   const skipNextSave = useRef(true);
+  /** Content of the last save the server accepted; guards no-op re-saves. */
+  const lastSaved = useRef<string | null>(null);
   // Retries re-enter through a ref so `persist` need not reference itself before
   // it is declared (react-hooks/immutability).
   const persistRef = useRef<
@@ -71,6 +73,7 @@ export function useReviewDraft(input: {
       });
       if (abort.current !== controller) return; // superseded — the newer save owns saveState
       if (res.ok) {
+        lastSaved.current = JSON.stringify(draft);
         setSaveState("saved");
         return;
       }
@@ -95,8 +98,13 @@ export function useReviewDraft(input: {
       skipNextSave.current = false;
       return;
     }
-    if (timer.current) clearTimeout(timer.current);
     const draft: ReviewDraftV1 = { v: 1, corrections, dispositions, cursor };
+    // Apply & re-analyze clears the draft server-side, then router.refresh()
+    // hands down new base timestamps — which rebuilds `persist` and re-fires
+    // this effect with identical content. Saving that would resurrect the row
+    // the apply just cleared, and put a stale resume banner on the next load.
+    if (JSON.stringify(draft) === lastSaved.current) return;
+    if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void persist(draft), AUTOSAVE_DEBOUNCE_MS);
     return () => {
       if (timer.current) clearTimeout(timer.current);
