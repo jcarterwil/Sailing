@@ -1,8 +1,13 @@
 import type { ObservationMetricV1 } from "@/lib/boats/observations";
+import type { LatestSessionSnapshot } from "@/lib/boats/metadata/load-snapshots";
 import {
   buildAggregateSummaries,
   PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
 } from "@/lib/boats/performance-history/aggregate";
+import {
+  filterObservationsByMetadata,
+  hasActiveMetadataFilters,
+} from "@/lib/boats/performance-history/metadata-filters";
 import {
   BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
   PERFORMANCE_HISTORY_UNITS_V1,
@@ -12,6 +17,12 @@ import {
   type ResolvedPerformanceHistoryFilters,
 } from "@/lib/boats/performance-history/types";
 import { isSessionType } from "@/lib/sessions/types";
+
+function emptyToNull(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
 
 function resolveFilters(
   filters: PerformanceHistoryQueryFilters | undefined,
@@ -24,9 +35,13 @@ function resolveFilters(
       : "all";
   return {
     sessionType,
-    from: filters?.from ?? null,
-    to: filters?.to ?? null,
-    metricVersion: filters?.metricVersion ?? null,
+    from: emptyToNull(filters?.from),
+    to: emptyToNull(filters?.to),
+    metricVersion: emptyToNull(filters?.metricVersion),
+    crew: emptyToNull(filters?.crew),
+    sail: emptyToNull(filters?.sail),
+    setup: emptyToNull(filters?.setup),
+    condition: emptyToNull(filters?.condition),
   };
 }
 
@@ -110,6 +125,14 @@ function dateRangeOf(
   return { from: min, to: max };
 }
 
+export interface QueryBoatPerformanceHistoryOptions {
+  /**
+   * Latest Session metadata snapshots keyed by entry_id. Required when any of
+   * crew / sail / setup / condition filters are active; otherwise ignored.
+   */
+  snapshotsByEntryId?: ReadonlyMap<string, LatestSessionSnapshot>;
+}
+
 /**
  * Pure bounded history aggregation over compact observation rows.
  * Callers load rows via RLS/`can_view_boat`; this layer never touches storage paths.
@@ -117,11 +140,15 @@ function dateRangeOf(
  * Metric versions are never silently pooled: when several versions appear and no
  * `metricVersion` filter is set, the newest Session's version is preferred and
  * other versions are reported in `mismatchedVersions` (excluded from `n`).
+ *
+ * Crew / sail / setup / condition filters join latest Session metadata snapshots
+ * and run before the interactive 250-session cap (same ordering as metricVersion).
  */
 export function queryBoatPerformanceHistory(
   boatId: string,
   rows: readonly CompactObservationRowV1[],
   filters?: PerformanceHistoryQueryFilters,
+  options?: QueryBoatPerformanceHistoryOptions,
 ): PerformanceHistoryQueryResultV1 {
   const resolved = resolveFilters(filters);
 
@@ -130,6 +157,14 @@ export function queryBoatPerformanceHistory(
     working = working.filter((row) => row.sessionType === resolved.sessionType);
   }
   working = working.filter((row) => inDateRange(row, resolved.from, resolved.to));
+
+  if (hasActiveMetadataFilters(resolved)) {
+    working = filterObservationsByMetadata(
+      working,
+      options?.snapshotsByEntryId ?? new Map(),
+      resolved,
+    );
+  }
 
   // Apply an explicit metricVersion filter before the interactive session cap so
   // older matching versions are not discarded by a newest-250 pre-slice.
@@ -207,6 +242,26 @@ export function queryBoatPerformanceHistory(
   };
 }
 
+/**
+ * Normalize history date bounds so date-only UI values (`YYYY-MM-DD`) are
+ * inclusive for the whole calendar day in UTC. Full ISO timestamps pass through.
+ */
+export function parseHistoryDateBound(
+  value: string | null | undefined,
+  edge: "start" | "end",
+): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return edge === "start"
+      ? `${trimmed}T00:00:00.000Z`
+      : `${trimmed}T23:59:59.999Z`;
+  }
+  const ms = Date.parse(trimmed);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
 export function parseHistoryQueryParams(
   searchParams: URLSearchParams,
 ): PerformanceHistoryQueryFilters {
@@ -217,8 +272,12 @@ export function parseHistoryQueryParams(
       : undefined;
   return {
     sessionType,
-    from: searchParams.get("from"),
-    to: searchParams.get("to"),
-    metricVersion: searchParams.get("metricVersion"),
+    from: parseHistoryDateBound(searchParams.get("from"), "start"),
+    to: parseHistoryDateBound(searchParams.get("to"), "end"),
+    metricVersion: emptyToNull(searchParams.get("metricVersion")),
+    crew: emptyToNull(searchParams.get("crew")),
+    sail: emptyToNull(searchParams.get("sail")),
+    setup: emptyToNull(searchParams.get("setup")),
+    condition: emptyToNull(searchParams.get("condition")),
   };
 }

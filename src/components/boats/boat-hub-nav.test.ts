@@ -7,6 +7,8 @@ describe("boat hub tab URL helpers", () => {
     expect(parseBoatHubTab(undefined)).toBe("overview");
     expect(parseBoatHubTab("nope")).toBe("overview");
     expect(parseBoatHubTab("activity")).toBe("activity");
+    expect(parseBoatHubTab("performance")).toBe("performance");
+    expect(parseBoatHubTab("setup")).toBe("setup");
   });
 
   it("builds durable tab and page links", () => {
@@ -15,6 +17,16 @@ describe("boat hub tab URL helpers", () => {
     expect(boatHubHref("boat-1", "activity", 3)).toBe(
       "/boats/boat-1?tab=activity&page=3",
     );
+    expect(boatHubHref("boat-1", "performance")).toBe(
+      "/boats/boat-1?tab=performance",
+    );
+    expect(boatHubHref("boat-1", "setup")).toBe("/boats/boat-1?tab=setup");
     expect(boatHubHref("boat-1", "settings")).toBe("/boats/boat-1?tab=settings");
+    expect(
+      boatHubHref("boat-1", "performance", undefined, {
+        sessionType: "race",
+        crew: "person-1",
+      }),
+    ).toBe("/boats/boat-1?tab=performance&sessionType=race&crew=person-1");
   });
 });

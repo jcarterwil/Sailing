@@ -19,11 +19,27 @@ export {
 } from "@/lib/boats/performance-history/aggregate";
 export {
   countExclusions,
+  parseHistoryDateBound,
   parseHistoryQueryParams,
   queryBoatPerformanceHistory,
 } from "@/lib/boats/performance-history/query";
-export { loadBoatSessionObservations } from "@/lib/boats/performance-history/load";
+export type { QueryBoatPerformanceHistoryOptions } from "@/lib/boats/performance-history/query";
+export {
+  loadBoatSessionObservations,
+  OBSERVATION_ENTRY_ID_IN_CHUNK,
+} from "@/lib/boats/performance-history/load";
 export { requireBoatViewer } from "@/lib/boats/performance-history/auth";
+export {
+  filterObservationsByMetadata,
+  filterSnapshotEntryIds,
+  hasActiveMetadataFilters,
+  parsePerformanceMetadataFilters,
+} from "@/lib/boats/performance-history/metadata-filters";
+export {
+  buildCompactObservationCsv,
+  compactExportFilename,
+} from "@/lib/boats/performance-history/export-csv";
+export { resolveMetadataFilterContext } from "@/lib/boats/performance-history/resolve-metadata-context";
 
 // Re-export observation contract for consumers that import the history barrel.
 export type { BoatSessionObservationPayloadV1 } from "@/lib/boats/observations";

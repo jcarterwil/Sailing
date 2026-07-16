@@ -9,6 +9,12 @@ import {
 import { isSessionType } from "@/lib/sessions/types";
 import type { Database } from "@/lib/supabase/database.types";
 
+/**
+ * PostgREST encodes `.in(...)` into the request URL. Keep chunks small enough
+ * to stay under typical reverse-proxy URI limits (~8KB) even for UUID lists.
+ */
+export const OBSERVATION_ENTRY_ID_IN_CHUNK = 80 as const;
+
 function isMissingObservationsRelation(error: {
   code?: string;
   message?: string;
@@ -23,18 +29,31 @@ function isMissingObservationsRelation(error: {
   );
 }
 
-/**
- * Load compact observations for one boat. Relies on RLS `can_view_boat`.
- * Pushes session-type / date / metric-version filters and a hard fetch cap
- * (bound + 1) into the DB query so interactive history stays bounded.
- * Missing-table (app-before-migration) returns [] for deploy-order safety.
- */
-export async function loadBoatSessionObservations(
+function chunkIds(ids: readonly string[], size: number): string[][] {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push([...ids.slice(i, i + size)]);
+  }
+  return chunks;
+}
+
+function compareNewestFirst(a: CompactObservationRowV1, b: CompactObservationRowV1): number {
+  const aMs = Date.parse(a.startsAt);
+  const bMs = Date.parse(b.startsAt);
+  const aSafe = Number.isFinite(aMs) ? aMs : Number.NEGATIVE_INFINITY;
+  const bSafe = Number.isFinite(bMs) ? bMs : Number.NEGATIVE_INFINITY;
+  if (aSafe !== bSafe) return bSafe - aSafe;
+  return b.sessionId.localeCompare(a.sessionId);
+}
+
+async function fetchObservationChunk(
   supabase: SupabaseClient<Database>,
   boatId: string,
-  filters?: PerformanceHistoryQueryFilters,
+  filters: PerformanceHistoryQueryFilters | undefined,
+  entryIds: readonly string[] | undefined,
+  fetchLimit: number,
 ): Promise<CompactObservationRowV1[]> {
-  const fetchLimit = BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT + 1;
   let query = supabase
     .from("boat_session_observations")
     .select(
@@ -42,6 +61,9 @@ export async function loadBoatSessionObservations(
     )
     .eq("boat_id", boatId);
 
+  if (entryIds && entryIds.length > 0) {
+    query = query.in("entry_id", [...entryIds]);
+  }
   if (filters?.sessionType === "race" || filters?.sessionType === "practice") {
     query = query.eq("session_type", filters.sessionType);
   }
@@ -82,4 +104,49 @@ export async function loadBoatSessionObservations(
     });
   }
   return rows;
+}
+
+/**
+ * Load compact observations for one boat. Relies on RLS `can_view_boat`.
+ * Pushes session-type / date / metric-version filters and a hard fetch cap
+ * (bound + 1) into the DB query so interactive history stays bounded.
+ * Optional `entryIds` narrows to a candidate set (e.g. after snapshot metadata
+ * prefilter) before the interactive cap; large lists are chunked to keep
+ * PostgREST `.in(...)` URLs within reverse-proxy limits.
+ * Missing-table (app-before-migration) returns [] for deploy-order safety.
+ */
+export async function loadBoatSessionObservations(
+  supabase: SupabaseClient<Database>,
+  boatId: string,
+  filters?: PerformanceHistoryQueryFilters,
+  options?: { entryIds?: readonly string[] },
+): Promise<CompactObservationRowV1[]> {
+  const entryIds = options?.entryIds;
+  if (entryIds && entryIds.length === 0) return [];
+
+  const fetchLimit = BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT + 1;
+
+  if (!entryIds || entryIds.length <= OBSERVATION_ENTRY_ID_IN_CHUNK) {
+    return fetchObservationChunk(supabase, boatId, filters, entryIds, fetchLimit);
+  }
+
+  // Chunk large IN lists, then merge/sort/cap in memory so URI size stays safe.
+  const merged: CompactObservationRowV1[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunkIds(entryIds, OBSERVATION_ENTRY_ID_IN_CHUNK)) {
+    const rows = await fetchObservationChunk(
+      supabase,
+      boatId,
+      filters,
+      chunk,
+      fetchLimit,
+    );
+    for (const row of rows) {
+      if (seen.has(row.entryId)) continue;
+      seen.add(row.entryId);
+      merged.push(row);
+    }
+  }
+
+  return merged.sort(compareNewestFirst).slice(0, fetchLimit);
 }

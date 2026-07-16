@@ -55,6 +55,16 @@ export interface PerformanceHistoryQueryFilters {
    * version present and reports mismatches instead of silently pooling.
    */
   metricVersion?: string | null;
+  /**
+   * Latest Session metadata snapshot filters (crew / sail / setup / condition).
+   * Callers must supply snapshot rows via `queryBoatPerformanceHistory` options;
+   * observations without a matching latest snapshot are excluded when any of
+   * these filters are active.
+   */
+  crew?: string | null;
+  sail?: string | null;
+  setup?: string | null;
+  condition?: string | null;
 }
 
 export interface ResolvedPerformanceHistoryFilters {
@@ -62,6 +72,10 @@ export interface ResolvedPerformanceHistoryFilters {
   from: string | null;
   to: string | null;
   metricVersion: string | null;
+  crew: string | null;
+  sail: string | null;
+  setup: string | null;
+  condition: string | null;
 }
 
 export interface MetricAggregateV1 {
