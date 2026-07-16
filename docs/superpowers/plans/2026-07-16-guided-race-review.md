@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Node 22.x locally; npm. Fast checks: `npm run lint`, `npm run typecheck`, `npm run test`. CI owns `npm run build` — do not run a local production build.
+- Node 24 locally (matches CI and `engines`); npm. Fast checks: `npm run lint`, `npm run typecheck`, `npm run test`. CI owns `npm run build` — do not run a local production build.
 - Migrations must be additive/backward-compatible; app and schema may deploy in either order. After schema change run `npm run db:types` and commit the regenerated `src/lib/supabase/database.types.ts`.
 - The admin (service-role) client bypasses RLS — every call site must do its own authorization first (`is_race_organizer` RPC for writes; race membership / share-slug resolution for badge reads).
 - Drafts NEVER write `race_corrections` (spec §4). Only `POST /api/races/[raceId]/corrections` does.

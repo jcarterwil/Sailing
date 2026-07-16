@@ -75,7 +75,13 @@ export async function saveReviewDraft(input: {
     },
     { onConflict: "race_id" },
   );
-  if (error) throw new Error(`Could not save review draft: ${error.message}`);
+  if (error) {
+    // App-first deploy window (spec §7): the table may not exist yet. Accept
+    // the write as a no-op — like load/delete — so autosave degrades instead
+    // of putting every review edit into the error/retry state.
+    if (missingTable(error)) return { updatedAt };
+    throw new Error(`Could not save review draft: ${error.message}`);
+  }
   return { updatedAt };
 }
 

@@ -40,6 +40,7 @@ export function useReviewDraft(input: {
   const [cursor, setCursor] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<ReviewDraftSaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abort = useRef<AbortController | null>(null);
   const skipNextSave = useRef(true);
   // Retries re-enter through a ref so `persist` need not reference itself before
   // it is declared (react-hooks/immutability).
@@ -48,6 +49,11 @@ export function useReviewDraft(input: {
   >(null);
 
   const persist = useCallback(async (draft: ReviewDraftV1, options?: { flush?: boolean }) => {
+    // A newer save supersedes any in-flight one; abort it so a slow older
+    // response can never land after — and overwrite — a newer draft.
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
     setSaveState("saving");
     try {
       const res = await fetch(`/api/races/${raceId}/review-draft`, {
@@ -61,7 +67,9 @@ export function useReviewDraft(input: {
         // keepalive caps request bodies at ~64KB; only the tab-hide flush needs it,
         // so debounced autosaves and retries omit it to allow full-size drafts.
         keepalive: options?.flush === true,
+        signal: controller.signal,
       });
+      if (abort.current !== controller) return; // superseded — the newer save owns saveState
       if (res.ok) {
         setSaveState("saved");
         return;
@@ -70,6 +78,7 @@ export function useReviewDraft(input: {
       // Spec §7 disconnect handling: retry once the connection may be back.
       timer.current = setTimeout(() => persistRef.current?.(draft), RETRY_DELAY_MS);
     } catch {
+      if (abort.current !== controller) return; // aborted by a newer save — no retry
       setSaveState("error");
       timer.current = setTimeout(() => persistRef.current?.(draft), RETRY_DELAY_MS);
     }

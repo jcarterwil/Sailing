@@ -24,6 +24,7 @@ function fixLabel(finding: ReviewFinding): string | null {
 export function ReviewAssistant({
   findings,
   boatNameById,
+  fixLabels,
   activeFingerprint,
   onActivate,
   onAcceptFix,
@@ -33,6 +34,8 @@ export function ReviewAssistant({
 }: {
   findings: readonly ReviewFinding[];
   boatNameById: ReadonlyMap<string, string>;
+  /** Per-finding overrides of the default suggested-fix button label. */
+  fixLabels?: ReadonlyMap<string, string>;
   activeFingerprint: string | null;
   onActivate: (fingerprint: string) => void;
   onAcceptFix: (finding: ReviewFinding) => void;
@@ -116,7 +119,7 @@ export function ReviewAssistant({
                       <div className="mt-3 flex flex-wrap gap-2">
                         {finding.suggestedFix && (
                           <Button type="button" size="sm" onClick={() => onAcceptFix(finding)}>
-                            {fixLabel(finding)}
+                            {fixLabels?.get(finding.fingerprint) ?? fixLabel(finding)}
                           </Button>
                         )}
                         <Button

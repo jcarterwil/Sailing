@@ -190,6 +190,22 @@ export function ReviewPageClient({
       }),
     [initialAnalysis, corrections, reviewDraft.dispositions],
   );
+  // "Use inferred result" falls back to writing a DNF when the analysis has no
+  // resolved result to copy (inferredResultCorrection) — the button must say so
+  // instead of implying a real inferred finish exists.
+  const fixLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    const results = initialAnalysis?.performance?.results ?? [];
+    for (const finding of findings) {
+      const fix = finding.suggestedFix;
+      if (fix?.kind !== "use-inferred-result") continue;
+      const inferred = results.find((result) => result.entryId === fix.entryId);
+      if (!inferred || inferred.status === "unresolved") {
+        labels.set(finding.fingerprint, "Mark as DNF");
+      }
+    }
+    return labels;
+  }, [findings, initialAnalysis]);
   const previewPerformance = preview?.performance;
   const unresolvedResultCount = previewPerformance?.results.filter((result) =>
     result.status === "unresolved").length ?? 0;
@@ -245,8 +261,11 @@ export function ReviewPageClient({
       return;
     }
     // finish-fleet-median: spec §6.3 walked input — playhead supplies the time.
-    const position = processed
-      ? fleetMedianPositionAt(processed, usePlaybackStore.getState().timeMs)
+    // An untouched playhead still sits at the first sample (setBounds parks it
+    // at t0), which would silently place the finish at the race start.
+    const playback = usePlaybackStore.getState();
+    const position = processed && playback.timeMs > playback.t0
+      ? fleetMedianPositionAt(processed, playback.timeMs)
       : null;
     if (!position) {
       setApplyError(
@@ -402,6 +421,7 @@ export function ReviewPageClient({
       <ReviewAssistant
         findings={findings}
         boatNameById={boatNameById}
+        fixLabels={fixLabels}
         activeFingerprint={reviewDraft.cursor}
         onActivate={reviewDraft.setCursor}
         onAcceptFix={acceptSuggestedFix}
