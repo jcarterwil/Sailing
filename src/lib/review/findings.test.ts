@@ -6,6 +6,7 @@ import type { WindQualityReport } from "@/lib/analytics/types";
 import {
   countOpenReviewFindings,
   deriveReviewFindings,
+  reviewBadgeLabel,
   type ReviewDisposition,
 } from "@/lib/review/findings";
 
@@ -136,5 +137,13 @@ describe("deriveReviewFindings", () => {
     expect(findings.filter((finding) => finding.fingerprint === "perf:unresolved-finish:entry-1:-")).toHaveLength(1);
     const wind = findings.find((finding) => finding.fingerprint === "wind:direction-outlier:entry-2");
     expect(wind?.status).toBe("resolved");
+  });
+});
+
+describe("reviewBadgeLabel", () => {
+  it("returns the exact binding copy", () => {
+    expect(reviewBadgeLabel(0)).toBe("Reviewed ✓");
+    expect(reviewBadgeLabel(1)).toBe("1 item to review");
+    expect(reviewBadgeLabel(3)).toBe("3 items to review");
   });
 });

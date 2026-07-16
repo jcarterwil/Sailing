@@ -48,6 +48,24 @@ describe("normalizeReviewDraft", () => {
     expect(draft.dispositions[0].at).toBe("2026-07-16T00:00:00.000Z");
     expect(draft.dispositions[0].note?.length).toBe(500);
   });
+
+  it("caps fingerprint and cursor at 200 chars and dispositions at 200 entries", () => {
+    const long = "x".repeat(300);
+    const draft = normalizeReviewDraft({
+      v: 1,
+      corrections: {},
+      dispositions: Array.from({ length: 250 }, (_, index) => ({
+        fingerprint: index === 0 ? long : `f-${index}`,
+        action: "dismissed",
+        note: null,
+        at: "2026-07-16T00:00:00.000Z",
+      })),
+      cursor: long,
+    });
+    expect(draft.dispositions.length).toBe(200);
+    expect(draft.dispositions.some((row) => row.fingerprint === long.slice(0, 200))).toBe(true);
+    expect(draft.cursor).toBe(long.slice(0, 200));
+  });
 });
 
 describe("reviewDraftHasContent", () => {

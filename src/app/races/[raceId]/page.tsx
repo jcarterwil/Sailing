@@ -30,7 +30,7 @@ import { analysisIsFresh } from "@/lib/races/analysis-freshness";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
 import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import { loadReviewDispositions } from "@/lib/review/draft-store";
-import { countOpenReviewFindings } from "@/lib/review/findings";
+import { countOpenReviewFindings, reviewBadgeLabel } from "@/lib/review/findings";
 import { resolveSessionType } from "@/lib/sessions/format";
 import { summarizeSessionTrackStatuses } from "@/lib/sessions/resolve-session-primary-action";
 import {
@@ -358,11 +358,7 @@ export default async function RaceManagePage({
                   <p className="text-muted-foreground">
                     Data review:{" "}
                     <span className="font-medium text-foreground">
-                      {reviewOpenCount === 0
-                        ? "Reviewed ✓"
-                        : reviewOpenCount === 1
-                          ? "1 item to review"
-                          : `${reviewOpenCount} items to review`}
+                      {reviewBadgeLabel(reviewOpenCount)}
                     </span>
                     {canManageRace && reviewOpenCount > 0 ? (
                       <>

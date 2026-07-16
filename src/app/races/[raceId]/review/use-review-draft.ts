@@ -43,9 +43,11 @@ export function useReviewDraft(input: {
   const skipNextSave = useRef(true);
   // Retries re-enter through a ref so `persist` need not reference itself before
   // it is declared (react-hooks/immutability).
-  const persistRef = useRef<((draft: ReviewDraftV1) => void) | null>(null);
+  const persistRef = useRef<
+    ((draft: ReviewDraftV1, options?: { flush?: boolean }) => void) | null
+  >(null);
 
-  const persist = useCallback(async (draft: ReviewDraftV1) => {
+  const persist = useCallback(async (draft: ReviewDraftV1, options?: { flush?: boolean }) => {
     setSaveState("saving");
     try {
       const res = await fetch(`/api/races/${raceId}/review-draft`, {
@@ -56,7 +58,9 @@ export function useReviewDraft(input: {
           baseAnalysisComputedAt: analysisComputedAt,
           baseCorrectionsUpdatedAt: correctionsUpdatedAt,
         }),
-        keepalive: true,
+        // keepalive caps request bodies at ~64KB; only the tab-hide flush needs it,
+        // so debounced autosaves and retries omit it to allow full-size drafts.
+        keepalive: options?.flush === true,
       });
       if (res.ok) {
         setSaveState("saved");
@@ -96,7 +100,7 @@ export function useReviewDraft(input: {
       if (document.visibilityState !== "hidden") return;
       if (timer.current) {
         clearTimeout(timer.current);
-        void persist({ v: 1, corrections, dispositions, cursor });
+        void persist({ v: 1, corrections, dispositions, cursor }, { flush: true });
       }
     };
     document.addEventListener("visibilitychange", flush);
