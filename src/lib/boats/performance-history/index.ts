@@ -19,11 +19,15 @@ export {
 } from "@/lib/boats/performance-history/aggregate";
 export {
   countExclusions,
+  parseHistoryDateBound,
   parseHistoryQueryParams,
   queryBoatPerformanceHistory,
 } from "@/lib/boats/performance-history/query";
 export type { QueryBoatPerformanceHistoryOptions } from "@/lib/boats/performance-history/query";
-export { loadBoatSessionObservations } from "@/lib/boats/performance-history/load";
+export {
+  loadBoatSessionObservations,
+  OBSERVATION_ENTRY_ID_IN_CHUNK,
+} from "@/lib/boats/performance-history/load";
 export { requireBoatViewer } from "@/lib/boats/performance-history/auth";
 export {
   filterObservationsByMetadata,

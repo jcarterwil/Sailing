@@ -25,14 +25,23 @@ async function requireBoatEditor(boatId: string): Promise<EditorAuth> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Sign in required." };
 
-  const { data: canEdit } = await supabase.rpc("can_edit_boat", { bid: boatId });
+  const { data: canEdit, error: canEditError } = await supabase.rpc(
+    "can_edit_boat",
+    { bid: boatId },
+  );
+  if (canEditError) {
+    return { ok: false, error: `Could not verify boat access: ${canEditError.message}` };
+  }
   if (!canEdit) return { ok: false, error: "Editor access required." };
 
-  const { data: boat } = await supabase
+  const { data: boat, error: boatError } = await supabase
     .from("boats")
     .select("id, merged_into_id")
     .eq("id", boatId)
     .maybeSingle();
+  if (boatError) {
+    return { ok: false, error: `Could not load boat: ${boatError.message}` };
+  }
   if (!boat) return { ok: false, error: "Boat not found." };
   if (boat.merged_into_id) {
     return { ok: false, error: "This boat was merged into another boat." };

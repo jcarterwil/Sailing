@@ -9,7 +9,11 @@ import {
   type ObservationUnit,
 } from "@/lib/boats/observations";
 import { medianIqr, percentileSorted } from "@/lib/boats/performance-history/aggregate";
-import { queryBoatPerformanceHistory } from "@/lib/boats/performance-history/query";
+import {
+  parseHistoryDateBound,
+  parseHistoryQueryParams,
+  queryBoatPerformanceHistory,
+} from "@/lib/boats/performance-history/query";
 import {
   BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
   type CompactObservationRowV1,
@@ -265,5 +269,23 @@ describe("queryBoatPerformanceHistory", () => {
     ];
     const result = queryBoatPerformanceHistory(BOAT_ID, rows);
     expect(result.n).toBe(1);
+  });
+});
+
+describe("parseHistoryQueryParams date bounds", () => {
+  it("expands date-only from/to to inclusive UTC day bounds", () => {
+    expect(parseHistoryDateBound("2026-06-10", "start")).toBe(
+      "2026-06-10T00:00:00.000Z",
+    );
+    expect(parseHistoryDateBound("2026-06-10", "end")).toBe(
+      "2026-06-10T23:59:59.999Z",
+    );
+
+    const filters = parseHistoryQueryParams(
+      new URLSearchParams("from=2026-06-01&to=2026-06-10&sessionType=race"),
+    );
+    expect(filters.from).toBe("2026-06-01T00:00:00.000Z");
+    expect(filters.to).toBe("2026-06-10T23:59:59.999Z");
+    expect(filters.sessionType).toBe("race");
   });
 });

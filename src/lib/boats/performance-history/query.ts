@@ -242,6 +242,26 @@ export function queryBoatPerformanceHistory(
   };
 }
 
+/**
+ * Normalize history date bounds so date-only UI values (`YYYY-MM-DD`) are
+ * inclusive for the whole calendar day in UTC. Full ISO timestamps pass through.
+ */
+export function parseHistoryDateBound(
+  value: string | null | undefined,
+  edge: "start" | "end",
+): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return edge === "start"
+      ? `${trimmed}T00:00:00.000Z`
+      : `${trimmed}T23:59:59.999Z`;
+  }
+  const ms = Date.parse(trimmed);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
 export function parseHistoryQueryParams(
   searchParams: URLSearchParams,
 ): PerformanceHistoryQueryFilters {
@@ -252,12 +272,12 @@ export function parseHistoryQueryParams(
       : undefined;
   return {
     sessionType,
-    from: searchParams.get("from"),
-    to: searchParams.get("to"),
-    metricVersion: searchParams.get("metricVersion"),
-    crew: searchParams.get("crew"),
-    sail: searchParams.get("sail"),
-    setup: searchParams.get("setup"),
-    condition: searchParams.get("condition"),
+    from: parseHistoryDateBound(searchParams.get("from"), "start"),
+    to: parseHistoryDateBound(searchParams.get("to"), "end"),
+    metricVersion: emptyToNull(searchParams.get("metricVersion")),
+    crew: emptyToNull(searchParams.get("crew")),
+    sail: emptyToNull(searchParams.get("sail")),
+    setup: emptyToNull(searchParams.get("setup")),
+    condition: emptyToNull(searchParams.get("condition")),
   };
 }

@@ -23,18 +23,21 @@ function context(boatId = "11111111-1111-4111-8111-111111111111") {
 function observationSelectMock(rows: unknown[] = []) {
   const builder: {
     eq: ReturnType<typeof vi.fn>;
+    in: ReturnType<typeof vi.fn>;
     gte: ReturnType<typeof vi.fn>;
     lte: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
+    in: vi.fn(),
     gte: vi.fn(),
     lte: vi.fn(),
     order: vi.fn(),
     limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
   };
   builder.eq.mockReturnValue(builder);
+  builder.in.mockReturnValue(builder);
   builder.gte.mockReturnValue(builder);
   builder.lte.mockReturnValue(builder);
   builder.order.mockReturnValue(builder);

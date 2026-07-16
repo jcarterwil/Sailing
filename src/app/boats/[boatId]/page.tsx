@@ -40,6 +40,7 @@ import {
 import {
   loadBoatSessionObservations,
   queryBoatPerformanceHistory,
+  parseHistoryDateBound,
 } from "@/lib/boats/performance-history";
 import {
   buildCompactObservationCsv,
@@ -79,21 +80,6 @@ async function resolveBoatAccess(
   return "viewer";
 }
 
-function parseDateBound(
-  value: string | undefined,
-  edge: "start" | "end",
-): string | null {
-  if (!value?.trim()) return null;
-  const trimmed = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return edge === "start"
-      ? `${trimmed}T00:00:00.000Z`
-      : `${trimmed}T23:59:59.999Z`;
-  }
-  const ms = Date.parse(trimmed);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
-}
-
 function parseHistoryFiltersFromSearch(input: {
   sessionType?: string;
   from?: string;
@@ -110,8 +96,8 @@ function parseHistoryFiltersFromSearch(input: {
       : undefined;
   return {
     sessionType,
-    from: parseDateBound(input.from, "start"),
-    to: parseDateBound(input.to, "end"),
+    from: parseHistoryDateBound(input.from, "start"),
+    to: parseHistoryDateBound(input.to, "end"),
     metricVersion: input.metricVersion?.trim() || null,
     crew: input.crew?.trim() || null,
     sail: input.sail?.trim() || null,
