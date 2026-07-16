@@ -19,6 +19,7 @@ import {
   reviewDraftErrors,
   reviewDraftIsDirty,
 } from "@/app/races/[raceId]/review/review-state";
+import { useReviewDraft } from "@/app/races/[raceId]/review/use-review-draft";
 import { useReviewPreview } from "@/components/replay/use-review-preview";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
@@ -47,6 +48,7 @@ import {
 } from "@/lib/analytics/corrections";
 import type { ProcessedTrack, RaceAnalysis, RaceLegType } from "@/lib/analytics/types";
 import type { RaceMeta } from "@/lib/races/meta";
+import type { StoredReviewDraft } from "@/lib/review/draft-store";
 
 const SELECT_CLASS =
   "h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30";
@@ -68,6 +70,9 @@ export function ReviewPageClient({
   initialAnalysis,
   analysisStale,
   initialCorrections,
+  correctionsUpdatedAt,
+  initialStoredDraft,
+  analysisComputedAt,
 }: {
   raceId: string;
   raceName: string;
@@ -77,6 +82,8 @@ export function ReviewPageClient({
   analysisStale: boolean;
   initialCorrections: RaceCorrections;
   correctionsUpdatedAt: string | null;
+  initialStoredDraft: StoredReviewDraft | null;
+  analysisComputedAt: string | null;
 }) {
   const router = useRouter();
   const [corrections, setCorrections] = useState<RaceCorrections>(initialCorrections);
@@ -92,6 +99,15 @@ export function ReviewPageClient({
     corrections,
     initialAnalysis,
   );
+  const reviewDraft = useReviewDraft({
+    raceId,
+    corrections,
+    setCorrections,
+    persistedCorrections: initialCorrections,
+    initialStoredDraft,
+    analysisComputedAt,
+    correctionsUpdatedAt,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -260,14 +276,40 @@ export function ReviewPageClient({
         </div>
         {(previewing || pending) && (
           <LoaderCircle
-            className="ml-auto size-4 animate-spin text-muted-foreground"
+            className="size-4 animate-spin text-muted-foreground"
             aria-hidden="true"
           />
         )}
+        <span className="ml-auto text-xs text-muted-foreground" aria-live="polite">
+          {reviewDraft.saveState === "saving" && "Saving draft…"}
+          {reviewDraft.saveState === "saved" && "Draft saved"}
+          {reviewDraft.saveState === "error" && "Reconnecting — changes not yet saved"}
+        </span>
       </header>
 
-      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded || validationErrors.length > 0) && (
+      {(analysisStale || loadError || applyError || explainError || allSensorsExcluded || validationErrors.length > 0 || reviewDraft.resume) && (
         <section className="space-y-3" aria-live="polite">
+          {reviewDraft.resume && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+              <span>
+                Resume review draft
+                {reviewDraft.resume.updatedAt
+                  ? ` · saved ${new Date(reviewDraft.resume.updatedAt).toLocaleString()}`
+                  : ""}
+                {reviewDraft.resume.stale
+                  ? " · analysis changed since this draft (may be stale)"
+                  : ""}
+              </span>
+              <div className="ml-auto flex gap-2">
+                <Button type="button" size="sm" onClick={reviewDraft.resume.accept}>
+                  Resume
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={reviewDraft.resume.discard}>
+                  Start fresh
+                </Button>
+              </div>
+            </div>
+          )}
           {analysisStale && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
               Stored analysis is stale relative to tracks or corrections. Preview uses live

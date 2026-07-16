@@ -7,6 +7,7 @@ import {
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
 import { parseEntryMeta, parseRaceMeta } from "@/lib/races/meta";
+import { loadReviewDraft } from "@/lib/review/draft-store";
 import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
@@ -105,6 +106,7 @@ export default async function RaceReviewPage({
   const initialCorrections: RaceCorrections = correctionsRow
     ? normalizeCorrections(correctionsRow.corrections)
     : { ...EMPTY_CORRECTIONS, excludedWindSensorEntryIds: [], legRelabels: [] };
+  const storedDraft = await loadReviewDraft(raceId);
 
   return (
     <ReviewPageClient
@@ -116,6 +118,8 @@ export default async function RaceReviewPage({
       analysisStale={parsedAnalysis.status === "stale"}
       initialCorrections={initialCorrections}
       correctionsUpdatedAt={correctionsRow?.updated_at ?? null}
+      initialStoredDraft={storedDraft}
+      analysisComputedAt={analysisRow?.computed_at ?? null}
     />
   );
 }
