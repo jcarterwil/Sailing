@@ -132,6 +132,8 @@ describe("boat performance history acceptance (#176)", () => {
     expect(script).toContain("shouldBackfillLegacyEntryMeta");
     expect(script).toContain("session_metadata_snapshots");
     expect(script).toContain("revision: 1");
+    expect(script).toContain(".range(from, to)");
+    expect(script).toContain("IN_CHUNK_SIZE");
   });
 
   it("Session share does not publish boat history catalogs/snapshots", () => {

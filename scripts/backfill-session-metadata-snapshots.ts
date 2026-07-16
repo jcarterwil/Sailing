@@ -14,7 +14,7 @@
  */
 import { readFileSync } from "node:fs";
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   legacyEntryMetaToSnapshotPayload,
@@ -25,6 +25,31 @@ import {
   parseRaceMeta,
 } from "@/lib/races/meta";
 import type { Database, Json } from "@/lib/supabase/database.types";
+
+const PAGE_SIZE = 500;
+const IN_CHUNK_SIZE = 200;
+
+type AdminClient = SupabaseClient<Database>;
+
+type EntryRow = {
+  id: string;
+  race_id: string;
+  boat_id: string;
+  crew: Json | null;
+  tags: string[] | null;
+  boats:
+    | {
+        boat_class: string | null;
+        owner_id: string | null;
+        created_by: string;
+      }
+    | {
+        boat_class: string | null;
+        owner_id: string | null;
+        created_by: string;
+      }[]
+    | null;
+};
 
 function loadEnv(): Record<string, string> {
   try {
@@ -38,6 +63,77 @@ function loadEnv(): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+async function loadAllEntries(
+  admin: AdminClient,
+  boatIdFilter: string | undefined,
+): Promise<EntryRow[]> {
+  const entries: EntryRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const to = from + PAGE_SIZE - 1;
+    let query = admin
+      .from("race_entries")
+      .select("id, race_id, boat_id, crew, tags, boats(boat_class, owner_id, created_by)")
+      .order("created_at", { ascending: true })
+      .range(from, to);
+    if (boatIdFilter) {
+      query = query.eq("boat_id", boatIdFilter);
+    }
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as EntryRow[];
+    entries.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return entries;
+}
+
+async function loadRacesById(
+  admin: AdminClient,
+  raceIds: string[],
+): Promise<
+  Map<string, { conditions: Json | null; tags: string[] | null; timezone: string | null }>
+> {
+  const raceById = new Map<
+    string,
+    { conditions: Json | null; tags: string[] | null; timezone: string | null }
+  >();
+  for (let i = 0; i < raceIds.length; i += IN_CHUNK_SIZE) {
+    const chunk = raceIds.slice(i, i + IN_CHUNK_SIZE);
+    const { data: races, error } = await admin
+      .from("races")
+      .select("id, conditions, tags, timezone")
+      .in("id", chunk);
+    if (error) throw new Error(error.message);
+    for (const race of races ?? []) {
+      raceById.set(race.id, {
+        conditions: race.conditions,
+        tags: race.tags,
+        timezone: race.timezone,
+      });
+    }
+  }
+  return raceById;
+}
+
+async function loadExistingSnapshotEntryIds(
+  admin: AdminClient,
+  entryIds: string[],
+): Promise<Set<string>> {
+  const existing = new Set<string>();
+  for (let i = 0; i < entryIds.length; i += IN_CHUNK_SIZE) {
+    const chunk = entryIds.slice(i, i + IN_CHUNK_SIZE);
+    const { data: snaps, error } = await admin
+      .from("session_metadata_snapshots")
+      .select("entry_id")
+      .in("entry_id", chunk);
+    if (error) throw new Error(error.message);
+    for (const snap of snaps ?? []) {
+      existing.add(snap.entry_id);
+    }
+  }
+  return existing;
 }
 
 async function main() {
@@ -59,56 +155,13 @@ async function main() {
     auth: { persistSession: false },
   });
 
-  let entryQuery = admin
-    .from("race_entries")
-    .select("id, race_id, boat_id, crew, tags, boats(boat_class, owner_id, created_by)")
-    .order("created_at", { ascending: true })
-    .limit(5000);
-  if (boatIdFilter) {
-    entryQuery = entryQuery.eq("boat_id", boatIdFilter);
-  }
-
-  const { data: rawEntries, error: entriesError } = await entryQuery;
-  if (entriesError) throw new Error(entriesError.message);
-  const entries = rawEntries ?? [];
-
+  const entries = await loadAllEntries(admin, boatIdFilter);
   const raceIds = [...new Set(entries.map((entry) => entry.race_id))];
-  const raceById = new Map<
-    string,
-    { conditions: Json | null; tags: string[] | null; timezone: string | null }
-  >();
-  if (raceIds.length > 0) {
-    const { data: races, error: racesError } = await admin
-      .from("races")
-      .select("id, conditions, tags, timezone")
-      .in("id", raceIds);
-    if (racesError) throw new Error(racesError.message);
-    for (const race of races ?? []) {
-      raceById.set(race.id, {
-        conditions: race.conditions,
-        tags: race.tags,
-        timezone: race.timezone,
-      });
-    }
-  }
-
-  const entryIds = entries.map((entry) => entry.id);
-  const existingSnapshotEntryIds = new Set<string>();
-  if (entryIds.length > 0) {
-    // Chunk to keep PostgREST URL bounds happy.
-    const chunkSize = 200;
-    for (let i = 0; i < entryIds.length; i += chunkSize) {
-      const chunk = entryIds.slice(i, i + chunkSize);
-      const { data: snaps, error: snapsError } = await admin
-        .from("session_metadata_snapshots")
-        .select("entry_id")
-        .in("entry_id", chunk);
-      if (snapsError) throw new Error(snapsError.message);
-      for (const snap of snaps ?? []) {
-        existingSnapshotEntryIds.add(snap.entry_id);
-      }
-    }
-  }
+  const raceById = await loadRacesById(admin, raceIds);
+  const existingSnapshotEntryIds = await loadExistingSnapshotEntryIds(
+    admin,
+    entries.map((entry) => entry.id),
+  );
 
   let inserted = 0;
   let skippedExisting = 0;

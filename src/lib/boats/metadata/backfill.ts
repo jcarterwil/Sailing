@@ -89,8 +89,10 @@ export function legacyEntryMetaHasContent(
   if (input.boatClass?.trim()) return true;
   const conditions = input.conditions;
   if (!conditions) return false;
-  // Snapshot conditions only freeze sea/current/notes + provenance — not wind numbers.
-  return Boolean(conditions.seaState || conditions.notes || conditions.source);
+  // Snapshot conditions only freeze sea/current/notes (+ optional provenance).
+  // Wind-only legacy rows (even with weather evidence) do not map into payload
+  // content worth a revision on their own.
+  return Boolean(conditions.seaState || conditions.notes);
 }
 
 /**

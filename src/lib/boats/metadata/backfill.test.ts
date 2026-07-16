@@ -133,5 +133,55 @@ describe("legacy entry meta → snapshot backfill", () => {
         },
       }),
     ).toBe(false);
+
+    expect(
+      legacyEntryMetaHasContent({
+        crew: [],
+        entryTags: [],
+        conditions: {
+          windMinKts: 10,
+          windMaxKts: 14,
+          windDirDeg: 180,
+          seaState: null,
+          notes: null,
+          source: {
+            evidence: {
+              provider: "open-meteo",
+              dataset: "forecast",
+              sourceUrl: "https://api.open-meteo.com/v1/forecast",
+              marineSourceUrl: null,
+              location: {
+                name: "Bay",
+                country: null,
+                admin1: null,
+                latitude: 45,
+                longitude: -85,
+                timezone: "America/Detroit",
+              },
+              windowStart: "2026-07-07T12:00:00.000Z",
+              windowEnd: "2026-07-07T18:00:00.000Z",
+              fetchedAt: "2026-07-07T11:00:00.000Z",
+              sampleCount: 6,
+              windMinKts: 10,
+              windMaxKts: 14,
+              windDirectionDeg: 180,
+              gustMaxKts: null,
+              temperatureMinC: null,
+              temperatureMaxC: null,
+              precipitationMm: null,
+              cloudCoverPct: null,
+              pressureMslHpa: null,
+              weatherCodes: [],
+              waveHeightMinM: null,
+              waveHeightMaxM: null,
+              wavePeriodS: null,
+              waveDirectionDeg: null,
+            },
+            ai: null,
+            seaStateBasis: "model",
+          },
+        },
+      }),
+    ).toBe(false);
   });
 });
