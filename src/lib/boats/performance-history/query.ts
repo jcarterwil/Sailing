@@ -1,10 +1,11 @@
+import type { ObservationMetricV1 } from "@/lib/boats/observations";
 import {
   buildAggregateSummaries,
   PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
 } from "@/lib/boats/performance-history/aggregate";
 import {
   BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
-  OBSERVATION_UNITS_V1,
+  PERFORMANCE_HISTORY_UNITS_V1,
   type CompactObservationRowV1,
   type PerformanceHistoryQueryFilters,
   type PerformanceHistoryQueryResultV1,
@@ -29,14 +30,13 @@ function resolveFilters(
   };
 }
 
-function occurredMs(row: CompactObservationRowV1): number {
-  if (!row.occurredAt) return Number.NEGATIVE_INFINITY;
-  const ms = Date.parse(row.occurredAt);
+function startsAtMs(row: CompactObservationRowV1): number {
+  const ms = Date.parse(row.startsAt);
   return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
 }
 
 function compareNewestFirst(a: CompactObservationRowV1, b: CompactObservationRowV1): number {
-  const diff = occurredMs(b) - occurredMs(a);
+  const diff = startsAtMs(b) - startsAtMs(a);
   if (diff !== 0) return diff;
   return b.sessionId.localeCompare(a.sessionId);
 }
@@ -47,8 +47,7 @@ function inDateRange(
   to: string | null,
 ): boolean {
   if (!from && !to) return true;
-  if (!row.occurredAt) return false;
-  const ms = Date.parse(row.occurredAt);
+  const ms = Date.parse(row.startsAt);
   if (!Number.isFinite(ms)) return false;
   if (from) {
     const fromMs = Date.parse(from);
@@ -61,11 +60,29 @@ function inDateRange(
   return true;
 }
 
-function countExclusions(rows: readonly CompactObservationRowV1[]): Record<string, number> {
+function tallyMetricExclusion(
+  counts: Record<string, number>,
+  metric: ObservationMetricV1,
+): void {
+  if (metric.value !== null || !metric.exclusionReason) return;
+  counts[metric.exclusionReason] = (counts[metric.exclusionReason] ?? 0) + 1;
+}
+
+/** Count per-metric exclusion reasons across included observation payloads. */
+export function countExclusions(
+  rows: readonly CompactObservationRowV1[],
+): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const row of rows) {
-    for (const exclusion of row.observation.exclusions) {
-      counts[exclusion.reason] = (counts[exclusion.reason] ?? 0) + 1;
+    const { absolute, raceRelative, cohort } = row.observation;
+    for (const metric of Object.values(absolute)) {
+      tallyMetricExclusion(counts, metric);
+    }
+    for (const metric of Object.values(raceRelative)) {
+      tallyMetricExclusion(counts, metric);
+    }
+    if (!cohort.eligible && cohort.reason) {
+      counts[cohort.reason] = (counts[cohort.reason] ?? 0) + 1;
     }
   }
   return counts;
@@ -79,16 +96,15 @@ function dateRangeOf(
   let minMs = Infinity;
   let maxMs = -Infinity;
   for (const row of rows) {
-    if (!row.occurredAt) continue;
-    const ms = Date.parse(row.occurredAt);
+    const ms = Date.parse(row.startsAt);
     if (!Number.isFinite(ms)) continue;
     if (ms < minMs) {
       minMs = ms;
-      min = row.occurredAt;
+      min = row.startsAt;
     }
     if (ms > maxMs) {
       maxMs = ms;
-      max = row.occurredAt;
+      max = row.startsAt;
     }
   }
   return { from: min, to: max };
@@ -143,7 +159,7 @@ export function queryBoatPerformanceHistory(
     metricVersionStatus = "filtered";
   } else if (versions.length <= 1) {
     selectedVersion = versions[0] ?? null;
-    metricVersionStatus = working.length === 0 ? "empty" : "single";
+    metricVersionStatus = "single";
   } else {
     selectedVersion = working[0]?.metricVersion ?? null;
     included = working.filter((row) => row.metricVersion === selectedVersion);
@@ -181,7 +197,7 @@ export function queryBoatPerformanceHistory(
       exclusionCount,
       exclusionsByReason,
     },
-    units: OBSERVATION_UNITS_V1,
+    units: PERFORMANCE_HISTORY_UNITS_V1,
     metricVersion: selectedVersion,
     metricVersionStatus,
     mismatchedVersions,

@@ -8,7 +8,10 @@ import {
 import { coursePreviewFromPerformance } from "@/lib/analytics/performance/assemble";
 import type { PerformanceCourseBuildResult } from "@/lib/analytics/performance/course";
 import type { ProcessedTrack, RaceAnalysis } from "@/lib/analytics/types";
-import { persistBoatSessionObservations } from "@/lib/boats/performance-history/persist";
+import {
+  clearBoatSessionObservationsForRace,
+  persistBoatSessionObservations,
+} from "@/lib/boats/observations/persist";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -141,33 +144,13 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
 
   const analysis = analyzeRace(tracks, { corrections: loadedCorrections.corrections });
   const coursePreview = coursePreviewFromPerformance(analysis.performance!);
-  const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
-    await Promise.all([
-      admin
-        .from("race_entries")
-        .select("id, tracks(processed_path, status, updated_at)")
-        .eq("race_id", raceId),
-      loadRaceCorrections(raceId),
-    ]);
-  if (currentEntriesError) {
-    throw new AnalyzeRaceError(
-      `Could not verify analysis inputs: ${currentEntriesError.message}`,
-    );
-  }
-  const inputsUnchanged =
-    currentEntries?.length === inputVersions.size &&
-    currentEntries.every(
-      (entry) =>
-        entry.tracks?.status === "processed" &&
-        inputVersions.get(entry.id) ===
-          `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
-    );
-  if (!inputsUnchanged || currentCorrections.updatedAt !== correctionsUpdatedAt) {
-    throw new AnalyzeRaceError(
-      "Processed tracks or corrections changed while analysis was running. Retry analysis.",
-      409,
-    );
-  }
+
+  await assertAnalysisInputsUnchanged({
+    raceId,
+    inputVersions,
+    correctionsUpdatedAt,
+  });
+
   const { error: upsertError } = await admin.from("race_analyses").upsert(
     {
       race_id: raceId,
@@ -182,22 +165,30 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     throw new AnalyzeRaceError(`Could not store analysis: ${upsertError.message}`);
   }
 
-  // Compact comparable observations for boat Performance History (#172/#173).
-  // Analysis already succeeded — observation upsert is best-effort so a
-  // secondary write failure does not fail the analyze API response.
+  // Compact Performance V1 into boat-scoped history observations (#172).
+  // Recheck inputs immediately before write so a concurrent track replacement
+  // that cleared analyses/observations cannot be overwritten with stale rows.
   if (analysis.performance) {
     try {
+      await assertAnalysisInputsUnchanged({
+        raceId,
+        inputVersions,
+        correctionsUpdatedAt,
+      });
       await persistBoatSessionObservations({
         raceId,
         performance: analysis.performance,
-        computedAt,
+        sourceComputedAt: computedAt,
       });
-    } catch (error) {
-      console.error(
-        "[analyzeAndPersistRace] observation persist failed",
-        raceId,
-        error instanceof Error ? error.message : error,
-      );
+    } catch (observationError) {
+      if (
+        observationError instanceof AnalyzeRaceError &&
+        observationError.status === 409
+      ) {
+        await invalidatePersistedRaceAnalysis(raceId);
+        throw observationError;
+      }
+      console.error("Could not persist boat session observations:", observationError);
     }
   }
 
@@ -208,6 +199,65 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
     trackCount: tracks.length,
     correctionsUpdatedAt,
   };
+}
+
+type AnalysisInputVersionMap = Map<string, string>;
+
+async function assertAnalysisInputsUnchanged(input: {
+  raceId: string;
+  inputVersions: AnalysisInputVersionMap;
+  correctionsUpdatedAt: string | null;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const [{ data: currentEntries, error: currentEntriesError }, currentCorrections] =
+    await Promise.all([
+      admin
+        .from("race_entries")
+        .select("id, tracks(processed_path, status, updated_at)")
+        .eq("race_id", input.raceId),
+      loadRaceCorrections(input.raceId),
+    ]);
+  if (currentEntriesError) {
+    throw new AnalyzeRaceError(
+      `Could not verify analysis inputs: ${currentEntriesError.message}`,
+    );
+  }
+  const inputsUnchanged =
+    currentEntries?.length === input.inputVersions.size &&
+    currentEntries.every(
+      (entry) =>
+        entry.tracks?.status === "processed" &&
+        input.inputVersions.get(entry.id) ===
+          `${entry.tracks.processed_path}:${entry.tracks.updated_at}`,
+    );
+  if (
+    !inputsUnchanged ||
+    currentCorrections.updatedAt !== input.correctionsUpdatedAt
+  ) {
+    throw new AnalyzeRaceError(
+      "Processed tracks or corrections changed while analysis was running. Retry analysis.",
+      409,
+    );
+  }
+}
+
+/**
+ * Drop persisted fleet analysis and compacted boat observations for a race.
+ * Call whenever `race_analyses` is invalidated so history rows cannot linger.
+ * Uses the service-role client — callers must authorize.
+ */
+export async function invalidatePersistedRaceAnalysis(raceId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error: deleteAnalysisError } = await admin
+    .from("race_analyses")
+    .delete()
+    .eq("race_id", raceId);
+  if (deleteAnalysisError) {
+    throw new AnalyzeRaceError(
+      `Could not clear stale analysis: ${deleteAnalysisError.message}`,
+    );
+  }
+  await clearBoatSessionObservationsForRace(raceId);
 }
 
 /** True when every race entry has a processed track with a storage path. */

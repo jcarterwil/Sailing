@@ -1,104 +1,125 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  BOAT_SESSION_OBSERVATION_METRIC_CONTRACT,
+  BOAT_SESSION_OBSERVATION_METRIC_VERSION,
+  BOAT_SESSION_OBSERVATION_PAYLOAD_VERSION,
+  type BoatSessionObservationPayloadV1,
+  type ObservationMetricV1,
+  type ObservationUnit,
+} from "@/lib/boats/observations";
 import { medianIqr, percentileSorted } from "@/lib/boats/performance-history/aggregate";
+import { queryBoatPerformanceHistory } from "@/lib/boats/performance-history/query";
 import {
   BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT,
   type CompactObservationRowV1,
-  type BoatSessionObservationPayloadV1,
-} from "@/lib/boats/performance-history/types";
-import { queryBoatPerformanceHistory } from "@/lib/boats/performance-history/query";
-import {
-  BOAT_SESSION_OBSERVATION_CONTRACT,
-  OBSERVATION_UNITS_V1,
 } from "@/lib/boats/performance-history/types";
 
 const BOAT_ID = "11111111-1111-4111-8111-111111111111";
+const CURRENT_VERSION = BOAT_SESSION_OBSERVATION_METRIC_VERSION;
+
+function metric(
+  value: number | null,
+  unit: ObservationUnit,
+  exclusionReason: ObservationMetricV1["exclusionReason"] = null,
+): ObservationMetricV1 {
+  return {
+    value,
+    unit,
+    exclusionReason: value === null ? (exclusionReason ?? "metric-unavailable") : null,
+    coveragePct: value === null ? null : 100,
+  };
+}
+
+function practiceNull(unit: ObservationUnit): ObservationMetricV1 {
+  return metric(null, unit, "practice-session");
+}
 
 function payload(
-  overrides: Partial<BoatSessionObservationPayloadV1> & {
+  overrides: {
     metricVersion?: string;
     sessionType?: "race" | "practice";
     avgSogKts?: number | null;
   } = {},
 ): BoatSessionObservationPayloadV1 {
   const {
-    metricVersion = "performance-v1.3.0",
+    metricVersion = CURRENT_VERSION,
     sessionType = "race",
     avgSogKts = 6,
-    ...rest
   } = overrides;
+  const practice = sessionType === "practice";
   return {
-    v: 1,
-    contract: BOAT_SESSION_OBSERVATION_CONTRACT,
-    metricVersion,
-    sourceMetricContract: "performance-overview-v1",
+    v: BOAT_SESSION_OBSERVATION_PAYLOAD_VERSION,
+    metricContract: BOAT_SESSION_OBSERVATION_METRIC_CONTRACT,
+    metricVersion: metricVersion as typeof CURRENT_VERSION,
+    sourceCalculationVersion: "performance-v1.3.0",
     sessionType,
-    units: OBSERVATION_UNITS_V1,
     coverage: {
       contributingDurationSec: 600,
       sampleCount: 600,
+      excludedDurationSec: 0,
       coveragePct: 100,
       partial: false,
     },
     absolute: {
-      avgSogKts,
-      maxSogKts: 8,
-      sailedDistanceM: 3000,
-      courseDistanceM: 2800,
-      excessDistanceM: 200,
-      courseEfficiencyPct: 93,
-      upwindVmgStraightKts: 4.5,
-      downwindVmgStraightKts: 5.1,
-      avgAbsHeelDeg: 12,
-      tackCount: 4,
-      gybeCount: 2,
-      contributingDurationSec: 600,
-      sampleCount: 600,
-      partial: false,
+      avgSogKts: metric(avgSogKts, "kts"),
+      maxSogKts: metric(8, "kts"),
+      sailedDistanceM: metric(3000, "m"),
+      upwindStraightVmgKts: metric(4.5, "kts"),
+      downwindStraightVmgKts: metric(5.1, "kts"),
+      avgAbsTwaDeg: metric(88, "deg"),
+      avgAbsHeelDeg: metric(12, "deg"),
+      avgSignedTrimDeg: metric(1.5, "deg"),
+      tackCount: metric(4, "count"),
+      gybeCount: metric(2, "count"),
+      botchedManeuverCount: metric(0, "count"),
+      avgVmgRetention: metric(0.7, "ratio"),
+      best500mKts: metric(7.1, "kts"),
+      best1000mKts: metric(6.8, "kts"),
+      best1852mKts: metric(6.5, "kts"),
+      elapsedMs: metric(600_000, "ms"),
     },
     raceRelative: {
-      rank: sessionType === "practice" ? null : 2,
-      tied: sessionType === "practice" ? null : false,
-      deltaMs: sessionType === "practice" ? null : 12_000,
-      elapsedMs: sessionType === "practice" ? null : 600_000,
-      startStatus: sessionType === "practice" ? null : "legal",
-      timeToLineMs: sessionType === "practice" ? null : -5_000,
-      sogAtGunKts: sessionType === "practice" ? null : 5.2,
-      cohortEligible: sessionType === "race",
-      cohortReason:
-        sessionType === "practice"
-          ? "Practice Sessions have no race/course/fleet comparison cohort."
-          : null,
+      rank: practice ? practiceNull("count") : metric(2, "count"),
+      deltaMs: practice ? practiceNull("ms") : metric(12_000, "ms"),
+      courseEfficiencyPct: practice ? practiceNull("pct") : metric(93, "pct"),
+      startRank: practice ? practiceNull("count") : metric(1, "count"),
+      timeToLineMs: practice ? practiceNull("ms") : metric(-5_000, "ms"),
+      distanceToLineAtGunM: practice ? practiceNull("m") : metric(4, "m"),
+      sogAtGunKts: practice ? practiceNull("kts") : metric(5.2, "kts"),
+      dmg30M: practice ? practiceNull("m") : metric(80, "m"),
     },
-    exclusions:
-      sessionType === "practice"
-        ? [
-            {
-              metric: "rank",
-              reason: "practice-session",
-              detail: "Race-only metric unavailable on Practice.",
-            },
-          ]
-        : [],
-    ...rest,
+    cohort: practice
+      ? {
+          eligible: false,
+          reason: "practice-session",
+          cohortSize: 1,
+          finishedCount: 0,
+        }
+      : {
+          eligible: true,
+          reason: null,
+          cohortSize: 6,
+          finishedCount: 6,
+        },
+    warningCodes: [],
   };
 }
 
 function row(
   index: number,
-  overrides: Partial<CompactObservationRowV1> & {
+  overrides: {
     metricVersion?: string;
     sessionType?: "race" | "practice";
     avgSogKts?: number | null;
-    occurredAt?: string | null;
+    startsAt?: string;
   } = {},
 ): CompactObservationRowV1 {
   const {
-    metricVersion = "performance-v1.3.0",
+    metricVersion = CURRENT_VERSION,
     sessionType = "race",
     avgSogKts = 6 + (index % 5) * 0.2,
-    occurredAt = `2026-07-${String(15 - (index % 14)).padStart(2, "0")}T12:00:00.000Z`,
-    ...rest
+    startsAt = `2026-07-${String(15 - (index % 14)).padStart(2, "0")}T12:00:00.000Z`,
   } = overrides;
   const observation = payload({ metricVersion, sessionType, avgSogKts });
   return {
@@ -106,11 +127,13 @@ function row(
     sessionId: `session-${index}`,
     boatId: BOAT_ID,
     sessionType,
-    occurredAt,
+    startsAt,
     timezone: "UTC",
     metricVersion,
-    observation,
-    ...rest,
+    observation: {
+      ...observation,
+      metricVersion: metricVersion as typeof CURRENT_VERSION,
+    },
   };
 }
 
@@ -158,34 +181,34 @@ describe("queryBoatPerformanceHistory", () => {
     expect(result.filters.sessionType).toBe("practice");
     expect(result.coverage.exclusionsByReason["practice-session"]).toBeGreaterThan(0);
     expect(
-      result.observations.every((o) => o.observation.raceRelative.rank === null),
+      result.observations.every((o) => o.observation.raceRelative.rank.value === null),
     ).toBe(true);
   });
 
   it("handles version mismatch without silently pooling versions", () => {
     const rows = [
       row(1, {
-        metricVersion: "performance-v1.3.0",
-        occurredAt: "2026-07-15T12:00:00.000Z",
+        metricVersion: CURRENT_VERSION,
+        startsAt: "2026-07-15T12:00:00.000Z",
         avgSogKts: 7,
       }),
       row(2, {
-        metricVersion: "performance-v1.2.0",
-        occurredAt: "2026-07-14T12:00:00.000Z",
+        metricVersion: "boat-session-observation-v0.0.0",
+        startsAt: "2026-07-14T12:00:00.000Z",
         avgSogKts: 5,
       }),
       row(3, {
-        metricVersion: "performance-v1.3.0",
-        occurredAt: "2026-07-13T12:00:00.000Z",
+        metricVersion: CURRENT_VERSION,
+        startsAt: "2026-07-13T12:00:00.000Z",
         avgSogKts: 6,
       }),
     ];
     const result = queryBoatPerformanceHistory(BOAT_ID, rows);
     expect(result.metricVersionStatus).toBe("mismatched");
-    expect(result.metricVersion).toBe("performance-v1.3.0");
-    expect(result.mismatchedVersions).toContain("performance-v1.2.0");
+    expect(result.metricVersion).toBe(CURRENT_VERSION);
+    expect(result.mismatchedVersions).toContain("boat-session-observation-v0.0.0");
     expect(result.n).toBe(2);
-    expect(result.observations.every((o) => o.metricVersion === "performance-v1.3.0")).toBe(
+    expect(result.observations.every((o) => o.metricVersion === CURRENT_VERSION)).toBe(
       true,
     );
     expect(result.aggregates.status).toBe("version-mismatch");
@@ -196,12 +219,12 @@ describe("queryBoatPerformanceHistory", () => {
       ...Array.from({ length: 250 }, (_, i) =>
         row(i, {
           metricVersion: "a",
-          occurredAt: `2026-08-${String((i % 28) + 1).padStart(2, "0")}T12:00:00.000Z`,
+          startsAt: `2026-08-${String((i % 28) + 1).padStart(2, "0")}T12:00:00.000Z`,
         }),
       ),
       row(900, {
         metricVersion: "b",
-        occurredAt: "2026-01-01T12:00:00.000Z",
+        startsAt: "2026-01-01T12:00:00.000Z",
       }),
     ];
     const result = queryBoatPerformanceHistory(BOAT_ID, rows, {
@@ -215,9 +238,9 @@ describe("queryBoatPerformanceHistory", () => {
 
   it("builds median/IQR aggregates when n >= 3 on a single version", () => {
     const rows = [
-      row(1, { avgSogKts: 5, occurredAt: "2026-07-15T12:00:00.000Z" }),
-      row(2, { avgSogKts: 6, occurredAt: "2026-07-14T12:00:00.000Z" }),
-      row(3, { avgSogKts: 7, occurredAt: "2026-07-13T12:00:00.000Z" }),
+      row(1, { avgSogKts: 5, startsAt: "2026-07-15T12:00:00.000Z" }),
+      row(2, { avgSogKts: 6, startsAt: "2026-07-14T12:00:00.000Z" }),
+      row(3, { avgSogKts: 7, startsAt: "2026-07-13T12:00:00.000Z" }),
     ];
     const result = queryBoatPerformanceHistory(BOAT_ID, rows);
     expect(result.aggregates.status).toBe("ok");

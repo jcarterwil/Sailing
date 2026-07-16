@@ -86,7 +86,7 @@ describe("GET performance-history", () => {
     expect(body.n).toBe(0);
     expect(body.bound.maxSessions).toBe(250);
     expect(body.filters.sessionType).toBe("race");
-    expect(body.units.speed).toBe("kt");
+    expect(body.units.speed).toBe("kts");
     expect(rpcMock).toHaveBeenCalledWith("can_view_boat", {
       bid: "11111111-1111-4111-8111-111111111111",
     });

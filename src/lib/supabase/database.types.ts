@@ -483,14 +483,13 @@ export type Database = {
           created_at: string
           entry_id: string
           id: string
-          metric_contract: string
           metric_version: string
-          observation: Json
-          occurred_at: string | null
+          payload: Json
           race_id: string
           session_type: string
-          source_analysis_computed_at: string | null
-          timezone: string | null
+          source_computed_at: string
+          starts_at: string
+          timezone: string
           updated_at: string
         }
         Insert: {
@@ -498,14 +497,13 @@ export type Database = {
           created_at?: string
           entry_id: string
           id?: string
-          metric_contract: string
           metric_version: string
-          observation: Json
-          occurred_at?: string | null
+          payload: Json
           race_id: string
           session_type: string
-          source_analysis_computed_at?: string | null
-          timezone?: string | null
+          source_computed_at: string
+          starts_at: string
+          timezone: string
           updated_at?: string
         }
         Update: {
@@ -513,14 +511,13 @@ export type Database = {
           created_at?: string
           entry_id?: string
           id?: string
-          metric_contract?: string
           metric_version?: string
-          observation?: Json
-          occurred_at?: string | null
+          payload?: Json
           race_id?: string
           session_type?: string
-          source_analysis_computed_at?: string | null
-          timezone?: string | null
+          source_computed_at?: string
+          starts_at?: string
+          timezone?: string
           updated_at?: string
         }
         Relationships: [

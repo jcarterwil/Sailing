@@ -15,7 +15,7 @@ import {
  * - Never pool incompatible metricVersion values; callers must pre-filter.
  */
 export const PERFORMANCE_HISTORY_NORMALIZATION_NOTE =
-  "V1 aggregates use unnormalized native units (kt / m / s / deg / ms). " +
+  "V1 aggregates use unnormalized native units (kts / m / sec / deg / ms / pct). " +
   "Summaries report median and IQR (Q1–Q3); no wind-index or class scaling is applied.";
 
 /** Tukey hinges on a sorted ascending sample (inclusive midpoints for even n). */
@@ -46,54 +46,45 @@ export function medianIqr(values: readonly number[]): {
   };
 }
 
-type AbsoluteMetricKey =
-  | "avgSogKts"
-  | "maxSogKts"
-  | "sailedDistanceM"
-  | "courseEfficiencyPct"
-  | "upwindVmgStraightKts"
-  | "downwindVmgStraightKts"
-  | "avgAbsHeelDeg";
-
 const AGGREGATE_SPECS: Array<{
-  metric: AbsoluteMetricKey;
+  metric: string;
   unit: string;
   pick: (row: CompactObservationRowV1) => number | null;
 }> = [
   {
     metric: "avgSogKts",
-    unit: "kt",
-    pick: (row) => row.observation.absolute.avgSogKts,
+    unit: "kts",
+    pick: (row) => row.observation.absolute.avgSogKts.value,
   },
   {
     metric: "maxSogKts",
-    unit: "kt",
-    pick: (row) => row.observation.absolute.maxSogKts,
+    unit: "kts",
+    pick: (row) => row.observation.absolute.maxSogKts.value,
   },
   {
     metric: "sailedDistanceM",
     unit: "m",
-    pick: (row) => row.observation.absolute.sailedDistanceM,
+    pick: (row) => row.observation.absolute.sailedDistanceM.value,
   },
   {
     metric: "courseEfficiencyPct",
-    unit: "%",
-    pick: (row) => row.observation.absolute.courseEfficiencyPct,
+    unit: "pct",
+    pick: (row) => row.observation.raceRelative.courseEfficiencyPct.value,
   },
   {
-    metric: "upwindVmgStraightKts",
-    unit: "kt",
-    pick: (row) => row.observation.absolute.upwindVmgStraightKts,
+    metric: "upwindStraightVmgKts",
+    unit: "kts",
+    pick: (row) => row.observation.absolute.upwindStraightVmgKts.value,
   },
   {
-    metric: "downwindVmgStraightKts",
-    unit: "kt",
-    pick: (row) => row.observation.absolute.downwindVmgStraightKts,
+    metric: "downwindStraightVmgKts",
+    unit: "kts",
+    pick: (row) => row.observation.absolute.downwindStraightVmgKts.value,
   },
   {
     metric: "avgAbsHeelDeg",
     unit: "deg",
-    pick: (row) => row.observation.absolute.avgAbsHeelDeg,
+    pick: (row) => row.observation.absolute.avgAbsHeelDeg.value,
   },
 ];
 
