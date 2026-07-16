@@ -55,7 +55,7 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 ## Pull request flow
 
 1. Get the fast local checks green — `npm run lint`, `npm run typecheck`, and the `npm run test` cases relevant to your change. In Codex, **do not run `npm run build` locally**; a clean local production build is not required because CI runs it (see above).
-2. Open the PR against `main`. Keep work-in-progress PRs as drafts. When the PR is opened for review or marked ready, Codex and GitHub Copilot each run one automatic advisory review; they do not run on drafts or automatically re-review every push. Address or explain material findings and resolve their review conversations. Reviewer errors or exhausted quotas do not block merging.
+2. Open the PR against `main`. Keep work-in-progress PRs as drafts. When the PR is opened for review or marked ready, Codex, GitHub Copilot, and Claude (`.github/workflows/claude-review.yml`) each run one automatic advisory review; they do not run on drafts or automatically re-review every push. Address or explain material findings and resolve their review conversations. Reviewer errors or exhausted quotas do not block merging.
 3. CI runs dependency review and `npm run verify`; fix anything it flags that's attributable to your change. Keep changes additive/backward-compatible where they touch the database or shared analytics types.
 4. `main`'s rulesets enforce the gate: the branch must be current with `main`, `verify` must pass, conversations must be resolved, and contributor PRs require a code-owner review of the final push. The repo owner can self-merge their own PR once CI is green. Squash-merge only — never force-push or push directly to `main`.
 
