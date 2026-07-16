@@ -433,6 +433,7 @@ export default async function BoatHubPage({
               catalogs={catalogs}
               csv={performanceCsv}
               csvFilename={performanceCsvFilename}
+              canEdit={Boolean(canEdit)}
             />
           ) : (
             <Card className="bg-card/70">

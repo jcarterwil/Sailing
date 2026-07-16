@@ -12,6 +12,7 @@ import {
   clearBoatSessionObservationsForRace,
   persistBoatSessionObservations,
 } from "@/lib/boats/observations/persist";
+import { sameTimestamptzInstant } from "@/lib/races/timestamptz";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -166,8 +167,8 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
   }
 
   // Compact Performance V1 into boat-scoped history observations (#172).
-  // Recheck inputs immediately before write so a concurrent track replacement
-  // that cleared analyses/observations cannot be overwritten with stale rows.
+  // Recheck inputs + analysis row immediately before write so concurrent
+  // invalidate/merge cannot reintroduce orphan or stale history rows.
   if (analysis.performance) {
     try {
       await assertAnalysisInputsUnchanged({
@@ -175,6 +176,7 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
         inputVersions,
         correctionsUpdatedAt,
       });
+      await assertAnalysisRowPresent(raceId, computedAt);
       await persistBoatSessionObservations({
         raceId,
         performance: analysis.performance,
@@ -187,6 +189,15 @@ export async function analyzeAndPersistRace(raceId: string): Promise<AnalyzeRace
       ) {
         await invalidatePersistedRaceAnalysis(raceId);
         throw observationError;
+      }
+      // Prefer empty history over stale history after a successful analysis write.
+      try {
+        await clearBoatSessionObservationsForRace(raceId);
+      } catch (clearError) {
+        console.error(
+          "Could not clear boat session observations after persist failure:",
+          clearError,
+        );
       }
       console.error("Could not persist boat session observations:", observationError);
     }
@@ -236,6 +247,32 @@ async function assertAnalysisInputsUnchanged(input: {
   ) {
     throw new AnalyzeRaceError(
       "Processed tracks or corrections changed while analysis was running. Retry analysis.",
+      409,
+    );
+  }
+}
+
+/** Fail closed if a concurrent invalidate/merge removed the analysis we just wrote. */
+async function assertAnalysisRowPresent(
+  raceId: string,
+  computedAt: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  // Filter by race_id only, then compare instants in JS — PostgREST may return
+  // timestamptz as `...+00:00` while we generated `...Z` via toISOString().
+  const { data, error } = await admin
+    .from("race_analyses")
+    .select("race_id, computed_at")
+    .eq("race_id", raceId)
+    .maybeSingle();
+  if (error) {
+    throw new AnalyzeRaceError(
+      `Could not verify stored analysis before observation persist: ${error.message}`,
+    );
+  }
+  if (!data || !sameTimestamptzInstant(data.computed_at, computedAt)) {
+    throw new AnalyzeRaceError(
+      "Stored analysis changed while observations were being written. Retry analysis.",
       409,
     );
   }

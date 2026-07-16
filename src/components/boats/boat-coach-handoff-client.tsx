@@ -19,9 +19,12 @@ import Link from "next/link";
 export function BoatCoachHandoffClient({
   handoff,
   coachPath,
+  canGenerate = false,
 }: {
   handoff: CitedPerformanceHistoryHandoffV1;
   coachPath: string;
+  /** POST generation burns Anthropic tokens — owners/editors only. */
+  canGenerate?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,14 +128,20 @@ export function BoatCoachHandoffClient({
           >
             {copied ? "Copied cited JSON" : "Copy cited handoff"}
           </Button>
-          <Button
-            type="button"
-            className="min-h-11"
-            disabled={pending || handoff.n === 0}
-            onClick={requestCoachNotes}
-          >
-            {pending ? "Working…" : "Generate Coach notes"}
-          </Button>
+          {canGenerate ? (
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={pending || handoff.n === 0}
+              onClick={requestCoachNotes}
+            >
+              {pending ? "Working…" : "Generate Coach notes"}
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Owner/editor access is required to generate Coach notes.
+            </p>
+          )}
         </div>
 
         {error ? (

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { requireBoatViewer } from "@/lib/boats/performance-history/auth";
+import {
+  requireBoatEditor,
+  requireBoatViewer,
+} from "@/lib/boats/performance-history/auth";
 import {
   assertHandoffCitationsIntact,
   buildCitedPerformanceHistoryHandoff,
@@ -74,6 +77,10 @@ export async function POST(
   context: { params: Promise<{ boatId: string }> },
 ) {
   const { boatId } = await context.params;
+  // Generation burns Anthropic tokens — editors/owners only. Viewers may GET the handoff.
+  const editor = await requireBoatEditor(boatId);
+  if ("error" in editor) return editor.error;
+
   const loaded = await loadCitedHandoff(boatId, request);
   if (!loaded.ok) return loaded.response;
 
