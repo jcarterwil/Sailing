@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
+import { notifyReportReady } from "@/lib/email/notifications";
 import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import {
   analysisMatchesCurrentFleet,
@@ -231,6 +232,15 @@ export async function POST(
       .single();
     if (updateError) throw new Error(`Could not store generated report: ${updateError.message}`);
     const report = toReportSummary(completed);
+    after(async () => {
+      try {
+        await notifyReportReady(completed.id);
+      } catch (notificationError) {
+        // Report generation is authoritative; an email outage must not turn a
+        // completed dossier into an error response.
+        console.error("Report-ready email notification failed:", notificationError);
+      }
+    });
     return json({ report, latestComplete: report });
   } catch (error) {
     const errorMessage = safeErrorMessage(error);

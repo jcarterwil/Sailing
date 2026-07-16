@@ -1,6 +1,6 @@
 import { gzipSync } from "node:zlib";
 
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { parseTrackCsv } from "@/lib/analytics/parse/csv";
 import { parseVkx } from "@/lib/analytics/parse/vkx";
@@ -8,6 +8,7 @@ import { buildTrackImportDigest } from "@/lib/analytics/track/import-digest";
 import { buildProcessedTrack, summarizeTrack } from "@/lib/analytics/track/process";
 import { ParseError } from "@/lib/analytics/types";
 import { sha256HexBytes } from "@/lib/imports/hash";
+import { notifyTrackProcessed } from "@/lib/email/notifications";
 import {
   analyzeAndPersistRace,
   invalidatePersistedRaceAnalysis,
@@ -171,6 +172,16 @@ export async function POST(
       // Processing succeeded; analysis can be retried from the race page.
       console.error("Auto-analyze after process failed:", analyzeErr);
     }
+
+    after(async () => {
+      try {
+        await notifyTrackProcessed(trackId, contentSha256);
+      } catch (notificationError) {
+        // Processing is authoritative. Notification failure remains visible in
+        // server logs and must never roll a successfully processed track back.
+        console.error("Track-ready email notification failed:", notificationError);
+      }
+    });
 
     return NextResponse.json({
       status: "processed",
