@@ -20,4 +20,16 @@ describe("buildCourseSchematicModel", () => {
       expect(point.y).toBeLessThanOrEqual(280);
     }
   });
+
+  it("exposes the projector so playhead markers reuse the model's fitted bounds", () => {
+    const course = structuredClone(VALID_PERFORMANCE_V1_FIXTURE.course);
+    const model = buildCourseSchematicModel(course, course, SIX_BOAT_FIVE_LEG_FIXTURE.tracks);
+    const first = SIX_BOAT_FIVE_LEG_FIXTURE.tracks[0];
+    const projected = model!.project({ lat: first.lat[0], lon: first.lon[0] });
+    expect(Number.isFinite(projected.x) && Number.isFinite(projected.y)).toBe(true);
+    expect(projected.x).toBeGreaterThanOrEqual(0);
+    expect(projected.x).toBeLessThanOrEqual(520);
+    expect(projected.y).toBeGreaterThanOrEqual(0);
+    expect(projected.y).toBeLessThanOrEqual(280);
+  });
 });

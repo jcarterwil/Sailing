@@ -10,7 +10,7 @@ import type { LoadedTrack } from "@/components/replay/track-loader";
 const DEFAULT_STRIP_HEIGHT = 22;
 const AXIS_HEIGHT = 20;
 
-function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
+export function formatClock(timeMs: number, tzOffsetMinutes: number | null): string {
   const local = new Date(timeMs + (tzOffsetMinutes ?? 0) * 60_000);
   return Number.isFinite(local.getTime())
     ? local.toISOString().slice(11, 19)
@@ -59,10 +59,14 @@ export function Timeline({
   tracks,
   startsMs = [],
   eventMarkers = [],
+  tzOffsetMinutes,
 }: {
   tracks: LoadedTrack[];
   startsMs?: number[];
   eventMarkers?: ReplayEventMarker[];
+  /** Axis timezone. Defaults to the first track's own offset (replay); the
+   *  review page passes the race timezone so the axis matches its readout. */
+  tzOffsetMinutes?: number | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
@@ -144,7 +148,7 @@ export function Timeline({
       });
 
       // Time axis labels every ~120px.
-      const tz = tracks[0]?.tzOffsetMinutes ?? null;
+      const tz = tzOffsetMinutes ?? tracks[0]?.tzOffsetMinutes ?? null;
       ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
       ctx.font = "10px ui-monospace, monospace";
       const labelEvery = Math.max(1, Math.round(120 / (width / (span / 60_000))));
@@ -201,7 +205,7 @@ export function Timeline({
     const observer = new ResizeObserver(draw);
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, [tracks, height, startsMs, eventMarkers]);
+  }, [tracks, height, startsMs, eventMarkers, tzOffsetMinutes]);
 
   // Cursor + brush overlay, driven per-frame by transient subscription.
   useEffect(() => {
@@ -316,7 +320,7 @@ export function Timeline({
 
   const { t0, t1 } = usePlaybackStore.getState();
   const span = t1 - t0;
-  const tz = tracks[0]?.tzOffsetMinutes ?? null;
+  const tz = tzOffsetMinutes ?? tracks[0]?.tzOffsetMinutes ?? null;
 
   return (
     <div

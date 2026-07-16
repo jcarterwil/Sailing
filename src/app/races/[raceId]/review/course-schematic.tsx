@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 
+import { fleetPositionsAt } from "@/app/races/[raceId]/review/review-state";
+import { usePlaybackStore } from "@/components/replay/playback-store";
 import type { PerformanceCourseAnalysisV1 } from "@/lib/analytics/performance/types";
 import { toLocalXY } from "@/lib/analytics/geo";
 import type { ProcessedTrack, RaceCoordinate } from "@/lib/analytics/types";
@@ -17,6 +19,9 @@ export interface CourseSchematicModel {
   previewLine: [SchematicPoint, SchematicPoint] | null;
   detectedFinishLine: [SchematicPoint, SchematicPoint] | null;
   previewFinishLine: [SchematicPoint, SchematicPoint] | null;
+  /** Same fitted bounds as the geometry above — lets scrub-time markers
+   *  project without rebuilding (and re-fitting) the whole model per frame. */
+  project: (coordinate: RaceCoordinate) => SchematicPoint;
 }
 
 const WIDTH = 520;
@@ -90,6 +95,7 @@ export function buildCourseSchematicModel(
     previewLine: line(preview, 0),
     detectedFinishLine: line(detected, -1),
     previewFinishLine: line(preview, -1),
+    project,
   };
 }
 
@@ -112,6 +118,13 @@ export function CourseSchematic({
   const model = useMemo(
     () => buildCourseSchematicModel(detected, preview, tracks),
     [detected, preview, tracks],
+  );
+  // Where the fleet actually is at the playhead — the evidence an organizer
+  // needs before stamping a "= playhead" correction.
+  const playheadMs = usePlaybackStore((state) => state.timeMs);
+  const fleet = useMemo(
+    () => (model ? fleetPositionsAt(tracks, playheadMs).map(model.project) : []),
+    [model, tracks, playheadMs],
   );
   if (!model) {
     return (
@@ -152,6 +165,9 @@ export function CourseSchematic({
             <text x={point.x} y={point.y + 3} textAnchor="middle" fill="white" fontSize="9">{index + 1}</text>
           </g>
         ))}
+        {fleet.map((point, index) => (
+          <circle key={index} cx={point.x} cy={point.y} r="4" fill="#f8fafc" stroke="#0f172a" strokeWidth="1.5" />
+        ))}
         {twdDeg !== null && (
           <g>
             <line x1="478" y1="42" x2={arrowEnd.x} y2={arrowEnd.y} stroke="#f8fafc" strokeWidth="3" />
@@ -161,7 +177,7 @@ export function CourseSchematic({
         )}
       </svg>
       <div className="flex gap-4 border-t border-white/10 px-3 py-2 text-xs text-slate-300">
-        <span>Dashed: detected</span><span>Solid: preview</span><span>Faint: fleet traces</span>
+        <span>Dashed: detected</span><span>Solid: preview</span><span>Faint: fleet traces</span><span>White: fleet at playhead</span>
       </div>
     </div>
   );
