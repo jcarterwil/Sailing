@@ -104,22 +104,31 @@ export function reviewDraftErrors(
 }
 
 /**
+ * Parse an Intl offset name to minutes. Runtimes vary in what they emit —
+ * "GMT-04:00", "GMT-4", "GMT+5:30", "GMT+0530" — and a parse miss here would
+ * silently read as UTC, which is the very mismatch the playhead axis exists
+ * to avoid, so accept every shape. Bare "GMT" genuinely is UTC.
+ */
+export function parseGmtOffsetMinutes(name: string): number {
+  const match = /^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(name);
+  if (!match) return 0;
+  return (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3] ?? 0));
+}
+
+/**
  * Minutes to add to UTC for wall-clock time in `iana` at `atMs` — the form the
  * replay Timeline axis takes. Unknown zones fall back to UTC.
  */
 export function tzOffsetMinutesAt(iana: string, atMs: number): number {
-  let name: string;
   try {
-    name =
+    return parseGmtOffsetMinutes(
       new Intl.DateTimeFormat("en-US", { timeZone: iana, timeZoneName: "longOffset" })
         .formatToParts(atMs)
-        .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+        .find((part) => part.type === "timeZoneName")?.value ?? "GMT",
+    );
   } catch {
     return 0;
   }
-  const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(name);
-  if (!match) return 0; // Bare "GMT" is UTC.
-  return (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3]));
 }
 
 export function formatRaceTime(timeMs: number | null, timezone: string): string {

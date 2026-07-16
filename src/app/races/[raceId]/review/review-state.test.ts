@@ -10,6 +10,7 @@ import {
   replaceMarkCorrection,
   resetReviewDraft,
   reviewDraftIsDirty,
+  parseGmtOffsetMinutes,
   reviewDraftErrors,
   tzOffsetMinutesAt,
 } from "@/app/races/[raceId]/review/review-state";
@@ -45,7 +46,20 @@ describe("review correction state", () => {
     expect(Math.abs(Math.abs(median!.lon) - 179.999)).toBeLessThan(0.001);
   });
 
+  it("parses every GMT offset shape a runtime may emit, since a miss silently means UTC", () => {
+    expect(parseGmtOffsetMinutes("GMT-04:00")).toBe(-240);
+    expect(parseGmtOffsetMinutes("GMT-4")).toBe(-240);
+    expect(parseGmtOffsetMinutes("GMT+5:30")).toBe(330);
+    expect(parseGmtOffsetMinutes("GMT+0530")).toBe(330);
+    expect(parseGmtOffsetMinutes("GMT+12:45")).toBe(765);
+    expect(parseGmtOffsetMinutes("GMT")).toBe(0);
+    expect(parseGmtOffsetMinutes("nonsense")).toBe(0);
+  });
+
   it("resolves a race timezone's UTC offset at an instant, honouring DST", () => {
+    // Sub-hour zones prove the minutes are carried, not truncated.
+    expect(tzOffsetMinutesAt("Asia/Kolkata", Date.UTC(2026, 6, 7))).toBe(330);
+    expect(tzOffsetMinutesAt("Pacific/Chatham", Date.UTC(2026, 6, 7))).toBe(765);
     // The playhead readout and the timeline axis must agree; the axis takes
     // minutes-from-UTC, so a July race in Detroit is EDT (-240), not EST.
     expect(tzOffsetMinutesAt("America/Detroit", Date.UTC(2026, 6, 7, 22, 10))).toBe(-240);
