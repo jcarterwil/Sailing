@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { boatHubHref } from "@/components/boats/boat-hub-nav";
+import { sessionWorkspaceHref } from "@/components/sessions/session-workspace-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +18,6 @@ import {
   PERFORMANCE_HISTORY_AGGREGATE_MIN_N,
   type PerformanceHistoryQueryResultV1,
 } from "@/lib/boats/performance-history/types";
-import type { PerformanceMetadataFilters } from "@/lib/boats/performance-history/metadata-filters";
-import { sessionWorkspaceHref } from "@/components/sessions/session-workspace-nav";
 import { sessionBadgeLabel } from "@/lib/sessions/format";
 
 const METRIC_LABELS: Record<string, string> = {
@@ -26,8 +25,8 @@ const METRIC_LABELS: Record<string, string> = {
   maxSogKts: "Max SOG",
   sailedDistanceM: "Sailed distance",
   courseEfficiencyPct: "Course efficiency",
-  upwindVmgStraightKts: "Upwind VMG",
-  downwindVmgStraightKts: "Downwind VMG",
+  upwindStraightVmgKts: "Upwind VMG",
+  downwindStraightVmgKts: "Downwind VMG",
   avgAbsHeelDeg: "Avg |heel|",
 };
 
@@ -36,10 +35,7 @@ function formatNumber(value: number | null, digits = 1): string {
   return value.toFixed(digits);
 }
 
-function formatFilterSummary(
-  history: PerformanceHistoryQueryResultV1,
-  metadataFilters: PerformanceMetadataFilters,
-): string {
+function formatFilterSummary(history: PerformanceHistoryQueryResultV1): string {
   const parts: string[] = [];
   parts.push(
     history.filters.sessionType === "all"
@@ -53,21 +49,19 @@ function formatFilterSummary(
       `${history.filters.from?.slice(0, 10) ?? "…"} → ${history.filters.to?.slice(0, 10) ?? "…"}`,
     );
   }
-  if (metadataFilters.crew) parts.push(`crew=${metadataFilters.crew}`);
-  if (metadataFilters.sail) parts.push(`sail=${metadataFilters.sail}`);
-  if (metadataFilters.setup) parts.push(`setup=${metadataFilters.setup}`);
-  if (metadataFilters.condition) {
-    parts.push(`condition~${metadataFilters.condition}`);
+  if (history.filters.crew) parts.push(`crew=${history.filters.crew}`);
+  if (history.filters.sail) parts.push(`sail=${history.filters.sail}`);
+  if (history.filters.setup) parts.push(`setup=${history.filters.setup}`);
+  if (history.filters.condition) {
+    parts.push(`condition~${history.filters.condition}`);
   }
   return parts.join(" · ");
 }
 
 function ProvenanceChrome({
   history,
-  metadataFilters,
 }: {
   history: PerformanceHistoryQueryResultV1;
-  metadataFilters: PerformanceMetadataFilters;
 }) {
   const exclusionEntries = Object.entries(history.coverage.exclusionsByReason).sort(
     (a, b) => b[1] - a[1],
@@ -95,7 +89,7 @@ function ProvenanceChrome({
         </p>
         <p>
           <span className="text-muted-foreground">Filters:</span>{" "}
-          {formatFilterSummary(history, metadataFilters)}
+          {formatFilterSummary(history)}
         </p>
         <p>
           <span className="text-muted-foreground">Metric version:</span>{" "}
@@ -256,23 +250,24 @@ function ObservationTable({ history }: { history: PerformanceHistoryQueryResultV
               const abs = row.observation.absolute;
               const rel = row.observation.raceRelative;
               const practiceRaceOnly =
-                row.sessionType === "practice" &&
-                row.observation.exclusions.some(
-                  (ex) => ex.reason === "practice-session",
-                );
+                row.sessionType === "practice" ||
+                rel.rank.exclusionReason === "practice-session";
               return (
                 <tr key={row.entryId} className="border-b border-border/40">
                   <td className="py-2.5 pr-3 whitespace-nowrap">
-                    {row.occurredAt?.slice(0, 10) ?? "—"}
+                    {row.startsAt.slice(0, 10)}
                   </td>
                   <td className="py-2.5 pr-3">
                     <Badge variant="outline">
                       {sessionBadgeLabel(row.sessionType)}
                     </Badge>
                   </td>
-                  <td className="py-2.5 pr-3">{formatNumber(abs.avgSogKts)} kt</td>
                   <td className="py-2.5 pr-3">
-                    {formatNumber(abs.upwindVmgStraightKts)} kt
+                    {formatNumber(abs.avgSogKts.value)} {abs.avgSogKts.unit}
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    {formatNumber(abs.upwindStraightVmgKts.value)}{" "}
+                    {abs.upwindStraightVmgKts.unit}
                   </td>
                   <td className="py-2.5 pr-3">
                     {practiceRaceOnly ? (
@@ -280,7 +275,7 @@ function ObservationTable({ history }: { history: PerformanceHistoryQueryResultV
                         n/a
                       </span>
                     ) : (
-                      formatNumber(rel.rank, 0)
+                      formatNumber(rel.rank.value, 0)
                     )}
                   </td>
                   <td className="py-2.5">
@@ -330,14 +325,12 @@ export function BoatPerformancePanel({
   boatId,
   history,
   catalogs,
-  metadataFilters,
   csv,
   csvFilename,
 }: {
   boatId: string;
   history: PerformanceHistoryQueryResultV1;
   catalogs: BoatMetadataCatalogs;
-  metadataFilters: PerformanceMetadataFilters;
   csv: string;
   csvFilename: string;
 }) {
@@ -364,8 +357,8 @@ export function BoatPerformancePanel({
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
           <CardDescription>
-            Date, Session type, condition, crew, sail, and setup. Leg-type
-            filtering is not in compact observation V1 yet.
+            Date, Session type, condition, crew, sail, and setup (joined via latest
+            Session snapshots). Leg-type filtering is not in observation V1 yet.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,7 +406,7 @@ export function BoatPerformancePanel({
               <select
                 id="perf-crew"
                 name="crew"
-                defaultValue={metadataFilters.crew ?? ""}
+                defaultValue={history.filters.crew ?? ""}
                 className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               >
                 <option value="">Any</option>
@@ -429,7 +422,7 @@ export function BoatPerformancePanel({
               <select
                 id="perf-sail"
                 name="sail"
-                defaultValue={metadataFilters.sail ?? ""}
+                defaultValue={history.filters.sail ?? ""}
                 className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               >
                 <option value="">Any</option>
@@ -445,7 +438,7 @@ export function BoatPerformancePanel({
               <select
                 id="perf-setup"
                 name="setup"
-                defaultValue={metadataFilters.setup ?? ""}
+                defaultValue={history.filters.setup ?? ""}
                 className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               >
                 <option value="">Any</option>
@@ -462,7 +455,7 @@ export function BoatPerformancePanel({
                 id="perf-condition"
                 name="condition"
                 placeholder="Sea state / current notes substring"
-                defaultValue={metadataFilters.condition ?? ""}
+                defaultValue={history.filters.condition ?? ""}
                 className="h-11"
               />
             </div>
@@ -491,7 +484,7 @@ export function BoatPerformancePanel({
         </CardContent>
       </Card>
 
-      <ProvenanceChrome history={history} metadataFilters={metadataFilters} />
+      <ProvenanceChrome history={history} />
       <PracticeRaceOnlyCard history={history} />
       <AggregateCards history={history} />
       <ObservationTable history={history} />

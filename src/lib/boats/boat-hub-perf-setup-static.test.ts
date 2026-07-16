@@ -20,6 +20,8 @@ describe("Boat Hub Performance + Setup surfaces (#174)", () => {
     expect(panel).toContain('name="sail"');
     expect(panel).toContain('name="setup"');
     expect(panel).toContain('name="condition"');
+    expect(panel).toContain("joined via latest");
+    expect(panel).toContain("Session snapshots");
     expect(panel).toContain("Not in observation V1");
   });
 

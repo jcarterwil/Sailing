@@ -30,7 +30,6 @@ import { loadBoatSessions } from "@/lib/boats/load-boat-sessions";
 import {
   loadBoatMetadataCatalogs,
   loadLatestSessionSnapshots,
-  snapshotMapByEntryId,
 } from "@/lib/boats/metadata";
 import {
   BOAT_HUB_ACTIVITY_PAGE_SIZE,
@@ -39,20 +38,14 @@ import {
   type ViewableBoatAccess,
 } from "@/lib/boats/my-sailing";
 import {
-  buildAggregateSummaries,
   loadBoatSessionObservations,
-  PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
   queryBoatPerformanceHistory,
 } from "@/lib/boats/performance-history";
 import {
   buildCompactObservationCsv,
   compactExportFilename,
 } from "@/lib/boats/performance-history/export-csv";
-import {
-  filterObservationsByMetadata,
-  hasActiveMetadataFilters,
-  parsePerformanceMetadataFilters,
-} from "@/lib/boats/performance-history/metadata-filters";
+import { resolveMetadataFilterContext } from "@/lib/boats/performance-history/resolve-metadata-context";
 import type {
   PerformanceHistoryQueryFilters,
   PerformanceHistoryQueryResultV1,
@@ -106,6 +99,10 @@ function parseHistoryFiltersFromSearch(input: {
   from?: string;
   to?: string;
   metricVersion?: string;
+  crew?: string;
+  sail?: string;
+  setup?: string;
+  condition?: string;
 }): PerformanceHistoryQueryFilters {
   const sessionType =
     input.sessionType === "all" || isSessionType(input.sessionType)
@@ -116,67 +113,10 @@ function parseHistoryFiltersFromSearch(input: {
     from: parseDateBound(input.from, "start"),
     to: parseDateBound(input.to, "end"),
     metricVersion: input.metricVersion?.trim() || null,
-  };
-}
-
-function applyMetadataFiltersToHistory(
-  boatId: string,
-  history: PerformanceHistoryQueryResultV1,
-  filteredRows: ReturnType<typeof filterObservationsByMetadata>,
-): PerformanceHistoryQueryResultV1 {
-  const aggregates = buildAggregateSummaries(filteredRows, {
-    metricVersionStatus:
-      filteredRows.length === 0
-        ? "empty"
-        : history.metricVersionStatus === "mismatched"
-          ? "mismatched"
-          : "single",
-  });
-
-  const exclusionsByReason: Record<string, number> = {};
-  for (const row of filteredRows) {
-    for (const exclusion of row.observation.exclusions) {
-      exclusionsByReason[exclusion.reason] =
-        (exclusionsByReason[exclusion.reason] ?? 0) + 1;
-    }
-  }
-  const exclusionCount = Object.values(exclusionsByReason).reduce(
-    (a, b) => a + b,
-    0,
-  );
-
-  let from: string | null = null;
-  let to: string | null = null;
-  let minMs = Infinity;
-  let maxMs = -Infinity;
-  for (const row of filteredRows) {
-    if (!row.occurredAt) continue;
-    const ms = Date.parse(row.occurredAt);
-    if (!Number.isFinite(ms)) continue;
-    if (ms < minMs) {
-      minMs = ms;
-      from = row.occurredAt;
-    }
-    if (ms > maxMs) {
-      maxMs = ms;
-      to = row.occurredAt;
-    }
-  }
-
-  return {
-    ...history,
-    boatId,
-    n: filteredRows.length,
-    dateRange: { from, to },
-    coverage: {
-      observationCount: history.coverage.observationCount,
-      includedCount: filteredRows.length,
-      exclusionCount,
-      exclusionsByReason,
-    },
-    observations: filteredRows,
-    aggregates,
-    normalizationNote: PERFORMANCE_HISTORY_NORMALIZATION_NOTE,
+    crew: input.crew?.trim() || null,
+    sail: input.sail?.trim() || null,
+    setup: input.setup?.trim() || null,
+    condition: input.condition?.trim() || null,
   };
 }
 
@@ -275,7 +215,6 @@ export default async function BoatHubPage({
     sessionTags: [],
   };
   let snapshots: Awaited<ReturnType<typeof loadLatestSessionSnapshots>> = [];
-  const metadataFilters = parsePerformanceMetadataFilters(search);
 
   if (activeTab === "overview") {
     try {
@@ -296,31 +235,23 @@ export default async function BoatHubPage({
   if (activeTab === "performance") {
     try {
       const historyFilters = parseHistoryFiltersFromSearch(search);
-      const observationRows = await loadBoatSessionObservations(
+      const { snapshotsByEntryId, entryIds } = await resolveMetadataFilterContext(
         supabase,
         boat.id,
         historyFilters,
       );
-      let history = queryBoatPerformanceHistory(
+      const observationRows = await loadBoatSessionObservations(
+        supabase,
+        boat.id,
+        historyFilters,
+        { entryIds },
+      );
+      const history = queryBoatPerformanceHistory(
         boat.id,
         observationRows,
         historyFilters,
+        { snapshotsByEntryId: entryIds ? snapshotsByEntryId : undefined },
       );
-
-      if (hasActiveMetadataFilters(metadataFilters)) {
-        const entryIds = history.observations.map((row) => row.entryId);
-        const metaSnaps = await loadLatestSessionSnapshots(
-          supabase,
-          boat.id,
-          entryIds,
-        );
-        const filtered = filterObservationsByMetadata(
-          history.observations,
-          snapshotMapByEntryId(metaSnaps),
-          metadataFilters,
-        );
-        history = applyMetadataFiltersToHistory(boat.id, history, filtered);
-      }
 
       performanceHistory = history;
       performanceCsv = buildCompactObservationCsv(history.observations);
@@ -510,7 +441,6 @@ export default async function BoatHubPage({
               boatId={boat.id}
               history={performanceHistory}
               catalogs={catalogs}
-              metadataFilters={metadataFilters}
               csv={performanceCsv}
               csvFilename={performanceCsvFilename}
             />

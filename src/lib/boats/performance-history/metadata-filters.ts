@@ -16,7 +16,7 @@ export interface PerformanceMetadataFilters {
 }
 
 export function parsePerformanceMetadataFilters(
-  searchParams: URLSearchParams | Record<string, string | undefined>,
+  searchParams: URLSearchParams | Record<string, string | undefined | null>,
 ): PerformanceMetadataFilters {
   const get = (key: string): string | null => {
     if (searchParams instanceof URLSearchParams) {
@@ -67,47 +67,65 @@ export function filterObservationsByMetadata(
   snapshotsByEntryId: ReadonlyMap<string, LatestSessionSnapshot>,
   filters: PerformanceMetadataFilters,
 ): CompactObservationRowV1[] {
+  if (!hasActiveMetadataFilters(filters)) return [...rows];
+
+  return rows.filter((row) => {
+    const snap = snapshotsByEntryId.get(row.entryId);
+    return snap ? snapshotMatchesFilters(snap, filters) : false;
+  });
+}
+
+/** Entry IDs from latest snapshots that match crew / sail / setup / condition. */
+export function filterSnapshotEntryIds(
+  snapshots: readonly LatestSessionSnapshot[],
+  filters: PerformanceMetadataFilters,
+): string[] {
+  if (!hasActiveMetadataFilters(filters)) {
+    return snapshots.map((snap) => snap.entryId);
+  }
+  return snapshots
+    .filter((snap) => snapshotMatchesFilters(snap, filters))
+    .map((snap) => snap.entryId);
+}
+
+function snapshotMatchesFilters(
+  snap: LatestSessionSnapshot,
+  filters: PerformanceMetadataFilters,
+): boolean {
   const crew = emptyToNull(filters.crew);
   const sail = emptyToNull(filters.sail);
   const setup = emptyToNull(filters.setup);
   const condition = emptyToNull(filters.condition);
-  const active = Boolean(crew || sail || setup || condition);
-  if (!active) return [...rows];
 
-  return rows.filter((row) => {
-    const snap = snapshotsByEntryId.get(row.entryId);
-    if (!snap) return false;
+  if (crew) {
+    const hit = snap.payload.crew.some((member) =>
+      matchesToken(crew, member.personId, member.displayName),
+    );
+    if (!hit) return false;
+  }
 
-    if (crew) {
-      const hit = snap.payload.crew.some((member) =>
-        matchesToken(crew, member.personId, member.displayName),
-      );
-      if (!hit) return false;
-    }
+  if (sail) {
+    const hit = snap.payload.sails.some((item) =>
+      matchesToken(sail, item.sailId, item.label),
+    );
+    if (!hit) return false;
+  }
 
-    if (sail) {
-      const hit = snap.payload.sails.some((item) =>
-        matchesToken(sail, item.sailId, item.label),
-      );
-      if (!hit) return false;
-    }
+  if (setup) {
+    const hit = matchesToken(
+      setup,
+      snap.payload.setup.setupId,
+      snap.payload.setup.name,
+    );
+    if (!hit) return false;
+  }
 
-    if (setup) {
-      const hit = matchesToken(
-        setup,
-        snap.payload.setup.setupId,
-        snap.payload.setup.name,
-      );
-      if (!hit) return false;
-    }
+  if (condition) {
+    const blob = conditionBlob(snap);
+    if (!blob.includes(condition.toLowerCase())) return false;
+  }
 
-    if (condition) {
-      const blob = conditionBlob(snap);
-      if (!blob.includes(condition.toLowerCase())) return false;
-    }
-
-    return true;
-  });
+  return true;
 }
 
 export function hasActiveMetadataFilters(

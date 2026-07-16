@@ -27,13 +27,19 @@ function isMissingObservationsRelation(error: {
  * Load compact observations for one boat. Relies on RLS `can_view_boat`.
  * Pushes session-type / date / metric-version filters and a hard fetch cap
  * (bound + 1) into the DB query so interactive history stays bounded.
+ * Optional `entryIds` narrows to a candidate set (e.g. after snapshot metadata
+ * prefilter) before the interactive cap.
  * Missing-table (app-before-migration) returns [] for deploy-order safety.
  */
 export async function loadBoatSessionObservations(
   supabase: SupabaseClient<Database>,
   boatId: string,
   filters?: PerformanceHistoryQueryFilters,
+  options?: { entryIds?: readonly string[] },
 ): Promise<CompactObservationRowV1[]> {
+  const entryIds = options?.entryIds;
+  if (entryIds && entryIds.length === 0) return [];
+
   const fetchLimit = BOAT_PERFORMANCE_HISTORY_SESSION_LIMIT + 1;
   let query = supabase
     .from("boat_session_observations")
@@ -42,6 +48,9 @@ export async function loadBoatSessionObservations(
     )
     .eq("boat_id", boatId);
 
+  if (entryIds && entryIds.length > 0) {
+    query = query.in("entry_id", [...entryIds]);
+  }
   if (filters?.sessionType === "race" || filters?.sessionType === "practice") {
     query = query.eq("session_type", filters.sessionType);
   }
