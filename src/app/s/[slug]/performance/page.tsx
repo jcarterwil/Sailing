@@ -8,6 +8,7 @@ import {
   buildPerformanceOverviewModel,
   resolvePerformancePageState,
 } from "@/components/performance/view-model";
+import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { parseRaceMeta } from "@/lib/races/meta";
 import {
   performanceForPublicShare,
@@ -18,6 +19,8 @@ import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
 } from "@/lib/races/stored-analysis";
+import { loadReviewDispositions } from "@/lib/review/draft-store";
+import { countOpenReviewFindings } from "@/lib/review/findings";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +46,7 @@ export default async function SharedPerformancePage({
       .maybeSingle(),
     admin
       .from("race_corrections")
-      .select("updated_at")
+      .select("corrections, updated_at")
       .eq("race_id", race.id)
       .maybeSingle(),
   ]);
@@ -90,6 +93,13 @@ export default async function SharedPerformancePage({
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
   const publicPerformance = performanceForPublicShare(parsed.performance);
   const publicWind = windForPublicShare(currentAnalysis.wind);
+  const dispositions = await loadReviewDispositions(race.id);
+  const reviewOpenCount = countOpenReviewFindings({
+    warnings: parsed.performance.warnings,
+    windQuality: currentAnalysis.windQuality,
+    corrections: normalizeCorrections(correctionsResult.data?.corrections ?? null),
+    dispositions,
+  });
   const model = buildPerformanceOverviewModel({
     race: {
       id: race.id,
@@ -125,6 +135,7 @@ export default async function SharedPerformancePage({
     <HelpUiProvider glossaryLink={false}>
       <PerformanceOverview
         model={model}
+        review={{ openCount: reviewOpenCount }}
         navigation={{
           backHref: sharedReplayHref,
           backLabel: "Back to shared replay",

@@ -10,12 +10,15 @@ import {
 } from "@/components/performance/view-model";
 import { SessionHeader } from "@/components/sessions/session-header";
 import { SessionWorkspaceNav } from "@/components/sessions/session-workspace-nav";
+import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { parseRaceMeta } from "@/lib/races/meta";
 import { loadPerformanceTrackMetas } from "@/lib/races/performance-tracks";
 import {
   analysisForEntryIds,
   parseStoredRaceAnalysis,
 } from "@/lib/races/stored-analysis";
+import { loadReviewDispositions } from "@/lib/review/draft-store";
+import { countOpenReviewFindings } from "@/lib/review/findings";
 import { loadSessionWorkspaceChrome } from "@/lib/sessions/session-workspace";
 import { createClient } from "@/lib/supabase/server";
 
@@ -115,7 +118,7 @@ export default async function RacePerformancePage({
       .maybeSingle(),
     supabase
       .from("race_corrections")
-      .select("updated_at")
+      .select("corrections, updated_at")
       .eq("race_id", raceId)
       .maybeSingle(),
   ]);
@@ -182,6 +185,13 @@ export default async function RacePerformancePage({
     computedAt: analysisResult.data.computed_at,
   });
   const drilldownTracks = await loadPerformanceTrackMetas(raceId);
+  const dispositions = await loadReviewDispositions(raceId);
+  const reviewOpenCount = countOpenReviewFindings({
+    warnings: parsed.performance.warnings,
+    windQuality: currentAnalysis.windQuality,
+    corrections: normalizeCorrections(correctionsResult.data?.corrections ?? null),
+    dispositions,
+  });
 
   // Current report: document composition (race title + Print/PDF), with only a
   // thin Session tab strip above — not the workspace header CTA stack.
@@ -202,6 +212,7 @@ export default async function RacePerformancePage({
       </div>
       <PerformanceOverview
         model={model}
+        review={{ openCount: reviewOpenCount }}
         navigation={{
           backHref: `/races/${race.id}`,
           backLabel: "Back to Session",
