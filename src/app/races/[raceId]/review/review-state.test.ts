@@ -4,12 +4,14 @@ import { normalizeCorrections } from "@/lib/analytics/corrections";
 import { fromLocalXY } from "@/lib/analytics/geo";
 import {
   fleetMedianPositionAt,
+  fleetPositionsAt,
   inferredResultCorrection,
   replaceEntryResultCorrection,
   replaceMarkCorrection,
   resetReviewDraft,
   reviewDraftIsDirty,
   reviewDraftErrors,
+  tzOffsetMinutesAt,
 } from "@/app/races/[raceId]/review/review-state";
 import type { ProcessedTrack } from "@/lib/analytics/types";
 
@@ -41,6 +43,21 @@ describe("review correction state", () => {
     const median = fleetMedianPositionAt([track("a", -10), track("b", 10)], T0 + 500);
     expect(median?.lat).toBeCloseTo(0, 8);
     expect(Math.abs(Math.abs(median!.lon) - 179.999)).toBeLessThan(0.001);
+  });
+
+  it("resolves a race timezone's UTC offset at an instant, honouring DST", () => {
+    // The playhead readout and the timeline axis must agree; the axis takes
+    // minutes-from-UTC, so a July race in Detroit is EDT (-240), not EST.
+    expect(tzOffsetMinutesAt("America/Detroit", Date.UTC(2026, 6, 7, 22, 10))).toBe(-240);
+    expect(tzOffsetMinutesAt("America/Detroit", Date.UTC(2026, 0, 7, 22, 10))).toBe(-300);
+    expect(tzOffsetMinutesAt("UTC", Date.UTC(2026, 6, 7))).toBe(0);
+    expect(tzOffsetMinutesAt("Not/AZone", Date.UTC(2026, 6, 7))).toBe(0);
+  });
+
+  it("returns one playhead position per boat with data, and none outside the tracks", () => {
+    const tracks = [track("a", -10), track("b", 10)];
+    expect(fleetPositionsAt(tracks, T0 + 500)).toHaveLength(2);
+    expect(fleetPositionsAt(tracks, T0 - 60_000)).toEqual([]);
   });
 
   it("sets, edits, clears, and flags reversed mark corrections", () => {

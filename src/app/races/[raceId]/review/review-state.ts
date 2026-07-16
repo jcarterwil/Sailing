@@ -20,15 +20,23 @@ function median(values: number[]): number | null {
     : sorted[middle];
 }
 
+/** Every boat's position at an exact playhead time; boats without data are omitted. */
+export function fleetPositionsAt(
+  tracks: readonly ProcessedTrack[],
+  timeMs: number,
+): RaceCoordinate[] {
+  return tracks.flatMap((track) => {
+    const sample = interpolateTrackSample(track, timeMs);
+    return sample ? [sample.position] : [];
+  });
+}
+
 /** Median fleet position at an exact playhead time, safe across the dateline. */
 export function fleetMedianPositionAt(
   tracks: readonly ProcessedTrack[],
   timeMs: number,
 ): RaceCoordinate | null {
-  const positions = tracks.flatMap((track) => {
-    const sample = interpolateTrackSample(track, timeMs);
-    return sample ? [sample.position] : [];
-  });
+  const positions = fleetPositionsAt(tracks, timeMs);
   if (positions.length === 0) return null;
   const origin = positions[0];
   const local = positions.map((position) =>
@@ -93,6 +101,25 @@ export function reviewDraftErrors(
     }
   }
   return errors;
+}
+
+/**
+ * Minutes to add to UTC for wall-clock time in `iana` at `atMs` — the form the
+ * replay Timeline axis takes. Unknown zones fall back to UTC.
+ */
+export function tzOffsetMinutesAt(iana: string, atMs: number): number {
+  let name: string;
+  try {
+    name =
+      new Intl.DateTimeFormat("en-US", { timeZone: iana, timeZoneName: "longOffset" })
+        .formatToParts(atMs)
+        .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  } catch {
+    return 0;
+  }
+  const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(name);
+  if (!match) return 0; // Bare "GMT" is UTC.
+  return (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3]));
 }
 
 export function formatRaceTime(timeMs: number | null, timezone: string): string {

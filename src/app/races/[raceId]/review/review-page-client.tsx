@@ -15,6 +15,7 @@ import {
 import { CourseReview } from "@/app/races/[raceId]/review/course-review";
 import { ResultsReview } from "@/app/races/[raceId]/review/results-review";
 import { ReviewAssistant } from "@/app/races/[raceId]/review/review-assistant";
+import { ReviewPlayhead } from "@/app/races/[raceId]/review/review-playhead";
 import {
   fleetMedianPositionAt,
   inferredResultCorrection,
@@ -29,6 +30,7 @@ import { useReviewPreview } from "@/components/replay/use-review-preview";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
   loadReviewTracks,
+  type LoadedTrack,
   type TrackMeta,
 } from "@/components/replay/track-loader";
 import { HelpTip } from "@/components/help/help-tip";
@@ -51,6 +53,7 @@ import {
   normalizeCorrections,
   type RaceCorrections,
 } from "@/lib/analytics/corrections";
+import { fleetStarts } from "@/lib/analytics/start-line";
 import type { ProcessedTrack, RaceAnalysis, RaceLegType } from "@/lib/analytics/types";
 import type { RaceMeta } from "@/lib/races/meta";
 import type { StoredReviewDraft } from "@/lib/review/draft-store";
@@ -93,6 +96,7 @@ export function ReviewPageClient({
   const router = useRouter();
   const [corrections, setCorrections] = useState<RaceCorrections>(initialCorrections);
   const [processed, setProcessed] = useState<ProcessedTrack[] | null>(null);
+  const [loadedTracks, setLoadedTracks] = useState<LoadedTrack[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [explainError, setExplainError] = useState<string | null>(null);
@@ -132,6 +136,7 @@ export function ReviewPageClient({
           usePlaybackStore.getState().setBounds(t0, t1);
         }
         setProcessed(nextProcessed);
+        setLoadedTracks(loaded);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -149,6 +154,10 @@ export function ReviewPageClient({
     return map;
   }, [trackMetas]);
 
+  const startsMs = useMemo(
+    () => (loadedTracks ? fleetStarts(loadedTracks.map((track) => track.extras)) : []),
+    [loadedTracks],
+  );
   const detectedWind = useMemo(
     () => createReplayWindResolver(raceMeta, initialAnalysis),
     [raceMeta, initialAnalysis],
@@ -432,6 +441,14 @@ export function ReviewPageClient({
         onDismiss={reviewDraft.dismissFinding}
         onUndismiss={reviewDraft.undismissFinding}
       />
+
+      {loadedTracks && loadedTracks.length > 0 && (
+        <ReviewPlayhead
+          tracks={loadedTracks}
+          startsMs={startsMs}
+          timezone={raceMeta.timezone.iana}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <Tabs id="review-tabs" value={activeTab} onValueChange={setActiveTab} className="min-w-0 scroll-mt-4">
