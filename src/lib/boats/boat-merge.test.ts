@@ -88,6 +88,7 @@ describe("boat merge duplicates migration", () => {
     ).toLowerCase();
     expect(cleanup).toContain("sync_session_metadata_snapshot_boat_id");
     expect(cleanup).toContain("remount_boat_metadata_catalogs_on_merge");
+    expect(cleanup).toContain("boat_remount_metadata_catalogs_on_merge");
     expect(cleanup).toContain("after update of boat_id on public.race_entries");
   });
 

@@ -12,6 +12,7 @@ import {
   clearBoatSessionObservationsForRace,
   persistBoatSessionObservations,
 } from "@/lib/boats/observations/persist";
+import { sameTimestamptzInstant } from "@/lib/races/timestamptz";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -257,6 +258,8 @@ async function assertAnalysisRowPresent(
   computedAt: string,
 ): Promise<void> {
   const admin = createAdminClient();
+  // Filter by race_id only, then compare instants in JS — PostgREST may return
+  // timestamptz as `...+00:00` while we generated `...Z` via toISOString().
   const { data, error } = await admin
     .from("race_analyses")
     .select("race_id, computed_at")
@@ -267,7 +270,7 @@ async function assertAnalysisRowPresent(
       `Could not verify stored analysis before observation persist: ${error.message}`,
     );
   }
-  if (!data || data.computed_at !== computedAt) {
+  if (!data || !sameTimestamptzInstant(data.computed_at, computedAt)) {
     throw new AnalyzeRaceError(
       "Stored analysis changed while observations were being written. Retry analysis.",
       409,

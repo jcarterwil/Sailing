@@ -43,7 +43,12 @@ describe("boat performance history cleanup", () => {
     expect(migration).toContain(
       "create or replace function public.remount_boat_metadata_catalogs_on_merge",
     );
+    expect(migration).toContain("create trigger boat_remount_metadata_catalogs_on_merge");
     expect(migration).toContain("after update of merged_into_id on public.boats");
+    // Name order: boat_* runs before clear_boat_session_observations_on_boat_merge.
+    expect("boat_remount_metadata_catalogs_on_merge" < "clear_boat_session_observations_on_boat_merge").toBe(
+      true,
+    );
     expect(migration).toContain("update public.boat_crew_people");
     expect(migration).toContain("update public.boat_sails");
     expect(migration).toContain("update public.boat_setups");

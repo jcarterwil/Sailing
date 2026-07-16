@@ -169,12 +169,14 @@ $$;
 
 drop trigger if exists remount_boat_metadata_catalogs_on_merge
   on public.boats;
+drop trigger if exists boat_remount_metadata_catalogs_on_merge
+  on public.boats;
 
--- Run BEFORE the observation-clear tombstone trigger so catalog remount sees
--- the new merged_into_id; order among AFTER triggers is name-sorted, so use
--- a name that sorts before clear_boat_session_observations_on_boat_merge, or
--- attach as AFTER and rely on boat_id updates being independent of observation deletes.
-create trigger remount_boat_metadata_catalogs_on_merge
+-- AFTER triggers on the same event fire in name order. Prefix with `boat_` so
+-- this runs before `clear_boat_session_observations_on_boat_merge` (b < c).
+-- The two operations are independent (catalogs vs observations); ordering is
+-- only for predictable merge diagnostics.
+create trigger boat_remount_metadata_catalogs_on_merge
 after update of merged_into_id on public.boats
 for each row
 when (new.merged_into_id is not null)
