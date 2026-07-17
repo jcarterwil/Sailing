@@ -15,6 +15,7 @@ Production: https://sailing-performance.vercel.app
 - Supabase project, database migration, and Vercel environment integration
 - Google OAuth UI and callback code, feature-gated until Google credentials are installed
 - Resend-backed admin email, inbound replies, delivery logging, and member preferences
+- Free, Club, and User subscription enrollment with Stripe-ready annual billing
 - Codex Cloud setup and maintenance scripts
 
 ## Stack
@@ -136,6 +137,11 @@ See [docs/codex-cloud-environment.md](docs/codex-cloud-environment.md) for the e
 See [docs/email-communications.md](docs/email-communications.md) for Resend domain,
 webhook, inbound receiving, environment, and operational setup. Supabase Auth email
 configuration remains tracked in [GitHub issue #111](https://github.com/jcarterwil/Sailing/issues/111).
+
+## Billing
+
+See [docs/billing.md](docs/billing.md) for plan entitlements, split Club funding,
+Stripe environment variables, webhook events, and the payment-launch checklist.
 
 ## Project layout
 

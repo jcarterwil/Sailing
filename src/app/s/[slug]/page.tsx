@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BarChart3, FileText } from "lucide-react";
 
 import { ReplayShell } from "@/components/replay/replay-shell";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import type { TrackMeta } from "@/components/replay/track-loader";
 import {
   buildRaceAnalyzeContext,
@@ -26,6 +27,7 @@ export default async function SharedReplayPage({
   if (!race) notFound();
 
   const raceMeta = parseRaceMeta(race.conditions, race.tags, race.timezone);
+  const hasClubAi = await hasClubAiEntitlement(race.organizer_id);
 
   // Session share must not publish private entry crew/setup or boat-history
   // catalogs/snapshots (#176). Omit crew/tags columns from the public load.
@@ -121,13 +123,15 @@ export default async function SharedReplayPage({
             <BarChart3 className="size-4" aria-hidden="true" />
             Performance
           </Link>
-          <Link
-            href={`/s/${slug}/report`}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <FileText className="size-4" aria-hidden="true" />
-            Coach report
-          </Link>
+          {hasClubAi ? (
+            <Link
+              href={`/s/${slug}/report`}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <FileText className="size-4" aria-hidden="true" />
+              Coach report
+            </Link>
+          ) : null}
         </div>
       </header>
       <div className="min-h-0 flex-1">

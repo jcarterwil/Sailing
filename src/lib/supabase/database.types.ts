@@ -118,6 +118,276 @@ export type Database = {
           },
         ]
       }
+      billing_checkout_reservations: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          enrollment_id: string
+          expires_at: string
+          id: string
+          payer_user_id: string
+          race_id: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          enrollment_id: string
+          expires_at?: string
+          id?: string
+          payer_user_id: string
+          race_id?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          enrollment_id?: string
+          expires_at?: string
+          id?: string
+          payer_user_id?: string
+          race_id?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_checkout_reservations_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "billing_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_checkout_reservations_payer_user_id_fkey"
+            columns: ["payer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_checkout_reservations_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_customers: {
+        Row: {
+          created_at: string
+          stripe_customer_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          stripe_customer_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          stripe_customer_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_customers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_enrollments: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          kind: string
+          status: string
+          subject_user_id: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          kind: string
+          status?: string
+          subject_user_id: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind?: string
+          status?: string
+          subject_user_id?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_enrollments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_enrollments_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_settings: {
+        Row: {
+          club_price_cents: number
+          id: boolean
+          payments_enabled: boolean
+          trial_days: number
+          updated_at: string
+          updated_by: string | null
+          user_price_cents: number
+        }
+        Insert: {
+          club_price_cents?: number
+          id?: boolean
+          payments_enabled?: boolean
+          trial_days?: number
+          updated_at?: string
+          updated_by?: string | null
+          user_price_cents?: number
+        }
+        Update: {
+          club_price_cents?: number
+          id?: boolean
+          payments_enabled?: boolean
+          trial_days?: number
+          updated_at?: string
+          updated_by?: string | null
+          user_price_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_subscriptions: {
+        Row: {
+          amount_cents: number
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_ends_at: string | null
+          enrollment_id: string
+          id: string
+          payer_user_id: string
+          reservation_id: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_ends_at?: string | null
+          enrollment_id: string
+          id?: string
+          payer_user_id: string
+          reservation_id?: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_ends_at?: string | null
+          enrollment_id?: string
+          id?: string
+          payer_user_id?: string
+          reservation_id?: string | null
+          status?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_subscriptions_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "billing_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_subscriptions_payer_user_id_fkey"
+            columns: ["payer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_subscriptions_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "billing_checkout_reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_webhook_receipts: {
+        Row: {
+          event_type: string
+          processed_at: string | null
+          started_at: string
+          status: string
+          stripe_event_id: string
+        }
+        Insert: {
+          event_type: string
+          processed_at?: string | null
+          started_at?: string
+          status?: string
+          stripe_event_id: string
+        }
+        Update: {
+          event_type?: string
+          processed_at?: string | null
+          started_at?: string
+          status?: string
+          stripe_event_id?: string
+        }
+        Relationships: []
+      }
       boat_crew_people: {
         Row: {
           archived_at: string | null
@@ -1961,10 +2231,38 @@ export type Database = {
           entry_id: string
         }[]
       }
+      claim_billing_webhook_event: {
+        Args: { target_event_id: string; target_event_type: string }
+        Returns: string
+      }
       is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }
       is_race_organizer: { Args: { rid: string }; Returns: boolean }
       is_race_series_organizer: { Args: { sid: string }; Returns: boolean }
+      reserve_club_checkout: {
+        Args: {
+          contribution_cents: number
+          organizer: string
+          payer: string
+          target_race: string
+        }
+        Returns: {
+          amount_cents: number
+          enrollment_id: string
+          expires_at: string
+          remaining_cents: number
+          reservation_id: string
+        }[]
+      }
+      reserve_user_checkout: {
+        Args: { payer: string }
+        Returns: {
+          amount_cents: number
+          enrollment_id: string
+          expires_at: string
+          reservation_id: string
+        }[]
+      }
       join_race_with_boat: {
         Args: {
           existing_boat_id?: string | null

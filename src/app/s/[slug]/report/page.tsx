@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ReportPageClient } from "@/app/races/[raceId]/report/report-page-client";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { resolveSharedRace } from "@/lib/races/share";
 import {
   expireStaleReportGenerations,
@@ -17,6 +18,7 @@ export default async function SharedReportPage({
   const { slug } = await params;
   const { race } = await resolveSharedRace(slug);
   if (!race) notFound();
+  if (!(await hasClubAiEntitlement(race.organizer_id))) notFound();
 
   await expireStaleReportGenerations(race.id);
   const initialSnapshot = await loadReportSnapshotAdmin(race.id, {

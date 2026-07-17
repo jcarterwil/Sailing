@@ -20,11 +20,13 @@ export function BoatCoachHandoffClient({
   handoff,
   coachPath,
   canGenerate = false,
+  upgradeRequired = false,
 }: {
   handoff: CitedPerformanceHistoryHandoffV1;
   coachPath: string;
   /** POST generation incurs AI-provider cost — owners/editors only. */
   canGenerate?: boolean;
+  upgradeRequired?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +138,10 @@ export function BoatCoachHandoffClient({
               onClick={requestCoachNotes}
             >
               {pending ? "Working…" : "Generate Coach notes"}
+            </Button>
+          ) : upgradeRequired ? (
+            <Button asChild className="min-h-11">
+              <Link href="/account/billing">Activate User AI</Link>
             </Button>
           ) : (
             <p className="text-sm text-muted-foreground">

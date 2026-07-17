@@ -4,6 +4,7 @@ import {
   requireBoatEditor,
   requireBoatViewer,
 } from "@/lib/boats/performance-history/auth";
+import { hasUserAiEntitlement } from "@/lib/billing/server";
 import {
   assertHandoffCitationsIntact,
   buildCitedPerformanceHistoryHandoff,
@@ -80,6 +81,9 @@ export async function POST(
   // Generation incurs AI-provider cost — editors/owners only. Viewers may GET the handoff.
   const editor = await requireBoatEditor(boatId);
   if ("error" in editor) return editor.error;
+  if (!(await hasUserAiEntitlement(editor.user.id))) {
+    return json({ error: "A User plan is required for personal boat-performance AI." }, 402);
+  }
 
   const loaded = await loadCitedHandoff(boatId, request);
   if (!loaded.ok) return loaded.response;
