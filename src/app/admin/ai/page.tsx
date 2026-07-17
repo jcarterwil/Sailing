@@ -33,7 +33,7 @@ export default async function AdminAiPage() {
   const [settingsResult, routingResult, catalogs] = await Promise.all([
     supabase
       .from("ai_settings")
-      .select("report_system_prompt, report_thinking, report_effort")
+      .select("provider, model, report_system_prompt, report_thinking, report_effort")
       .eq("id", true)
       .maybeSingle(),
     supabase
@@ -45,15 +45,25 @@ export default async function AdminAiPage() {
   if (settingsResult.error) {
     throw new Error(`Could not load AI request settings: ${settingsResult.error.message}`);
   }
-  if (routingResult.error) {
+  const routingTableMissing =
+    routingResult.error?.code === "42P01" || routingResult.error?.code === "PGRST205";
+  if (routingResult.error && !routingTableMissing) {
     throw new Error(`Could not load AI function routes: ${routingResult.error.message}`);
   }
   const settings = settingsResult.data;
-  const routingRows = routingResult.data;
+  const routingRows = routingTableMissing ? null : routingResult.data;
+  const legacyProvider = settings?.provider === "vercel" ? "vercel" : "anthropic";
+  const legacyModel = settings?.model || DEFAULT_AI_FUNCTION_ROUTES.dossier.model;
 
   const routes: AiFunctionRoute[] = AI_FUNCTIONS.map((aiFunction) => {
     const row = routingRows?.find((candidate) => candidate.function === aiFunction);
-    if (!row) return DEFAULT_AI_FUNCTION_ROUTES[aiFunction];
+    if (!row) {
+      return {
+        ...DEFAULT_AI_FUNCTION_ROUTES[aiFunction],
+        provider: legacyProvider,
+        model: legacyModel,
+      };
+    }
     return {
       function: aiFunction,
       provider: row.provider === "vercel" ? "vercel" : "anthropic",

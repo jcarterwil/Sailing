@@ -84,7 +84,7 @@ export async function getAiFunctionRoute(aiFunction: AiFunction): Promise<AiFunc
     .select("function, provider, model, max_output_tokens")
     .eq("function", aiFunction)
     .maybeSingle();
-  if (error?.code === "42P01") {
+  if (error?.code === "42P01" || error?.code === "PGRST205") {
     const legacy = await getLegacyAiRoute();
     return { ...DEFAULT_AI_FUNCTION_ROUTES[aiFunction], ...legacy };
   }
