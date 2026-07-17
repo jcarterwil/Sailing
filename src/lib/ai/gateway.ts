@@ -141,13 +141,16 @@ export function buildAnthropicRequest(
 
 function vercelGatewayReasoning(
   reasoning: AiGenerateRequest["reasoning"],
-): { effort: AiReasoningEffort | "none" } | undefined {
-  if (!reasoning) return undefined;
-  if (reasoning.mode === "off") return { effort: "none" };
+): { effort: AiReasoningEffort } | undefined {
+  // Omit the generic field when off. Some gateway models require reasoning
+  // and reject an explicit `none`; models that support provider-specific
+  // disabling can still use the direct adapter.
+  if (!reasoning || reasoning.mode === "off") return undefined;
   return { effort: reasoning.effort ?? "medium" };
 }
 
 export function buildVercelGatewayRequest(request: AiGenerateRequest) {
+  const reasoning = vercelGatewayReasoning(request.reasoning);
   return {
     model: vercelGatewayModelId(request.route.provider, request.route.model),
     messages: [
@@ -155,7 +158,7 @@ export function buildVercelGatewayRequest(request: AiGenerateRequest) {
       ...request.messages,
     ],
     max_completion_tokens: request.maxOutputTokens,
-    ...(request.reasoning ? { reasoning: vercelGatewayReasoning(request.reasoning) } : {}),
+    ...(reasoning ? { reasoning } : {}),
     ...(request.output
       ? {
           response_format: {

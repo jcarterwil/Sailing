@@ -40,7 +40,7 @@ describe("AI gateway request normalization", () => {
 
     expect(request.model).toBe("anthropic/claude-sonnet-4.6");
     expect(request.max_completion_tokens).toBe(4000);
-    expect(request.reasoning).toEqual({ effort: "none" });
+    expect(Object.hasOwn(request, "reasoning")).toBe(false);
     expect(request.providerOptions.gateway).toMatchObject({ sort: "cost" });
   });
 
