@@ -24,9 +24,15 @@ describe("billing integration boundaries", () => {
       expect(migration).not.toMatch(
         new RegExp(`grant (?:insert|update|delete)[^;]*${table}[^;]*authenticated`),
       );
+      expect(migration).toMatch(
+        new RegExp(`revoke insert, update, delete on table public\\.${table} from authenticated`),
+      );
     }
     expect(migration).toContain("pg_advisory_xact_lock");
     expect(migration).toContain("create function public.reserve_club_checkout");
+    expect(migration).toContain("create function public.claim_billing_webhook_event");
+    expect(migration).toContain("bm.user_id = payer");
+    expect(migration).toContain("s.status in ('active', 'trialing')");
     expect(migration).toContain("to service_role");
   });
 
@@ -47,7 +53,24 @@ describe("billing integration boundaries", () => {
     expect(webhook).toContain("await request.text()");
     expect(webhook).toContain("webhooks.constructEvent");
     expect(webhook).toContain("billing_webhook_receipts");
-    expect(webhook).toContain("Stripe's retry");
+    expect(webhook).toContain("claim_billing_webhook_event");
+    expect(webhook).toContain("subscriptions.retrieve");
+    expect(webhook).toContain('status: "processed"');
+  });
+
+  it("fails closed without 500s during the migration deployment window", () => {
+    const server = source("src/lib/billing/server.ts");
+    expect(server).toContain('error?.code === "42P01"');
+    expect(server).toContain('error?.code === "PGRST205"');
+    expect(server).toContain("allowed: false");
+  });
+
+  it("uses a first-writer-wins Stripe customer mapping", () => {
+    const stripe = source("src/lib/billing/stripe.ts");
+    expect(stripe).toContain('.insert({ user_id: input.userId');
+    expect(stripe).toContain('saveError.code !== "23505"');
+    expect(stripe).toContain("customers.del(customer.id)");
+    expect(stripe).not.toContain(".upsert(");
   });
 
   it("gates shared race AI and personal boat AI independently", () => {

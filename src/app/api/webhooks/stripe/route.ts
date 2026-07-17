@@ -22,29 +22,34 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data: existing } = await admin
-    .from("billing_webhook_receipts")
-    .select("stripe_event_id")
-    .eq("stripe_event_id", event.id)
-    .maybeSingle();
-  if (existing) return NextResponse.json({ received: true });
-
-  const { error: receiptError } = await admin.from("billing_webhook_receipts").insert({
-    stripe_event_id: event.id,
-    event_type: event.type,
-  });
-  if (receiptError?.code === "23505") return NextResponse.json({ received: true });
-  if (receiptError) {
-    return NextResponse.json({ error: "Could not record Stripe event." }, { status: 500 });
+  const { data: claim, error: claimError } = await admin.rpc(
+    "claim_billing_webhook_event",
+    {
+      target_event_id: event.id,
+      target_event_type: event.type,
+    },
+  );
+  if (claimError) {
+    return NextResponse.json({ error: "Could not claim Stripe event." }, { status: 500 });
+  }
+  if (claim === "processed") return NextResponse.json({ received: true });
+  if (claim !== "claimed") {
+    // Never acknowledge a concurrent in-flight delivery as complete. Stripe
+    // will retry while the original request owns the processing claim.
+    return NextResponse.json({ error: "Stripe event is already processing." }, { status: 409 });
   }
 
   try {
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted":
-        await projectStripeSubscription(event.data.object);
+      case "customer.subscription.deleted": {
+        // Webhooks may arrive out of order. Retrieve Stripe's current state so
+        // an older event can never re-activate a canceled subscription.
+        const current = await getStripe().subscriptions.retrieve(event.data.object.id);
+        await projectStripeSubscription(current);
         break;
+      }
       case "checkout.session.expired": {
         const reservationId = event.data.object.metadata?.reservation_id;
         if (reservationId) {
@@ -59,13 +64,22 @@ export async function POST(request: Request) {
       default:
         break;
     }
+    const { error: completionError } = await admin
+      .from("billing_webhook_receipts")
+      .update({ status: "processed", processed_at: new Date().toISOString() })
+      .eq("stripe_event_id", event.id)
+      .eq("status", "processing");
+    if (completionError) {
+      throw new Error(`Could not complete Stripe receipt: ${completionError.message}`);
+    }
     return NextResponse.json({ received: true });
   } catch (error) {
-    // Remove the receipt so Stripe's retry can safely attempt projection again.
+    // Remove the claim so Stripe's retry can safely attempt projection again.
     await admin
       .from("billing_webhook_receipts")
       .delete()
-      .eq("stripe_event_id", event.id);
+      .eq("stripe_event_id", event.id)
+      .eq("status", "processing");
     console.error("Stripe webhook projection failed:", error);
     return NextResponse.json({ error: "Stripe event processing failed." }, { status: 500 });
   }

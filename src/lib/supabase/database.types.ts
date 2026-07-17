@@ -367,17 +367,23 @@ export type Database = {
       billing_webhook_receipts: {
         Row: {
           event_type: string
-          processed_at: string
+          processed_at: string | null
+          started_at: string
+          status: string
           stripe_event_id: string
         }
         Insert: {
           event_type: string
-          processed_at?: string
+          processed_at?: string | null
+          started_at?: string
+          status?: string
           stripe_event_id: string
         }
         Update: {
           event_type?: string
-          processed_at?: string
+          processed_at?: string | null
+          started_at?: string
+          status?: string
           stripe_event_id?: string
         }
         Relationships: []
@@ -2224,6 +2230,10 @@ export type Database = {
           created_boat: boolean
           entry_id: string
         }[]
+      }
+      claim_billing_webhook_event: {
+        Args: { target_event_id: string; target_event_type: string }
+        Returns: string
       }
       is_admin: { Args: never; Returns: boolean }
       is_race_member: { Args: { rid: string }; Returns: boolean }

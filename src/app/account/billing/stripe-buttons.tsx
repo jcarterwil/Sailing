@@ -80,7 +80,9 @@ export function ClubContributionButton({
               setError(null);
               try {
                 const cents = Math.round(Number(amount) * 100);
-                if (!Number.isFinite(cents)) throw new Error("Enter a contribution amount.");
+                if (!Number.isFinite(cents) || cents <= 0) {
+                  throw new Error("Enter a contribution greater than $0.");
+                }
                 await openStripe("/api/billing/checkout", {
                   kind: "club",
                   raceId,

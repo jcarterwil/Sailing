@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     } else {
       const raceId = typeof body.raceId === "string" ? body.raceId : "";
       const amountCents = Number(body.amountCents);
-      if (!raceId || !Number.isInteger(amountCents)) {
+      if (!raceId || !Number.isInteger(amountCents) || amountCents <= 0) {
         return jsonError("Choose a race and contribution amount.", 400);
       }
       // RLS-visible read proves the payer belongs to this race before the

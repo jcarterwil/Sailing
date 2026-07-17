@@ -68,8 +68,12 @@ export async function projectStripeSubscription(subscription: Stripe.Subscriptio
   const reservationId = subscription.metadata.reservation_id;
   const payerUserId = subscription.metadata.payer_user_id;
   const amountCents = Number.parseInt(subscription.metadata.amount_cents ?? "", 10);
+  const customerId = stripeId(subscription.customer);
   if (!enrollmentId || !payerUserId || !Number.isInteger(amountCents) || amountCents <= 0) {
     throw new Error(`Stripe subscription ${subscription.id} has invalid Sailing metadata.`);
+  }
+  if (!customerId) {
+    throw new Error(`Stripe subscription ${subscription.id} has no customer ID.`);
   }
 
   const periodEnds = subscription.items.data
@@ -82,7 +86,7 @@ export async function projectStripeSubscription(subscription: Stripe.Subscriptio
       reservation_id: reservationId || null,
       payer_user_id: payerUserId,
       stripe_subscription_id: subscription.id,
-      stripe_customer_id: stripeId(subscription.customer),
+      stripe_customer_id: customerId,
       amount_cents: amountCents,
       status: subscription.status,
       trial_ends_at: unixDate(subscription.trial_end),

@@ -37,16 +37,30 @@ export async function getOrCreateStripeCustomer(input: {
     email: input.email ?? undefined,
     metadata: { sailing_user_id: input.userId },
   });
-  const { data: saved, error: saveError } = await admin
+  const { error: saveError } = await admin
     .from("billing_customers")
-    .upsert(
-      { user_id: input.userId, stripe_customer_id: customer.id },
-      { onConflict: "user_id" },
-    )
+    .insert({ user_id: input.userId, stripe_customer_id: customer.id });
+  if (!saveError) return customer.id;
+  if (saveError.code !== "23505") {
+    throw new Error(`Could not save Stripe customer: ${saveError.message}`);
+  }
+
+  // Another checkout won the insert race. Both callers must use the first
+  // mapping so a user's concurrent Club/User sessions share one customer.
+  const { data: winner, error: winnerError } = await admin
+    .from("billing_customers")
     .select("stripe_customer_id")
+    .eq("user_id", input.userId)
     .single();
-  if (saveError) throw new Error(`Could not save Stripe customer: ${saveError.message}`);
-  return saved.stripe_customer_id;
+  if (winnerError) {
+    throw new Error(`Could not reload Stripe customer: ${winnerError.message}`);
+  }
+  try {
+    await getStripe().customers.del(customer.id);
+  } catch (cleanupError) {
+    console.error("Could not delete unused Stripe customer:", cleanupError);
+  }
+  return winner.stripe_customer_id;
 }
 
 export function assertSameOrigin(request: Request): boolean {

@@ -17,6 +17,10 @@ export const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   trialDays: 30,
 };
 
+function isMissingBillingSchema(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
 export async function loadBillingSettings(): Promise<BillingSettings> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -24,6 +28,7 @@ export async function loadBillingSettings(): Promise<BillingSettings> {
     .select("payments_enabled, user_price_cents, club_price_cents, trial_days")
     .eq("id", true)
     .maybeSingle();
+  if (isMissingBillingSchema(error)) return DEFAULT_BILLING_SETTINGS;
   if (error) throw new Error(`Could not load billing settings: ${error.message}`);
   if (!data) return DEFAULT_BILLING_SETTINGS;
   return {
@@ -51,6 +56,14 @@ export async function loadBillingEntitlement(
     .eq("kind", kind)
     .eq("subject_user_id", subjectUserId)
     .maybeSingle();
+  if (isMissingBillingSchema(error)) {
+    return {
+      allowed: false,
+      enrollment: null,
+      settings: await settingsPromise,
+      subscriptions: [],
+    };
+  }
   if (error) throw new Error(`Could not load billing enrollment: ${error.message}`);
 
   const enrollment: BillingEnrollment | null = row
@@ -68,6 +81,14 @@ export async function loadBillingEntitlement(
         .select("amount_cents, status")
         .eq("enrollment_id", enrollment.id)
     : { data: [], error: null };
+  if (isMissingBillingSchema(subscriptionError)) {
+    return {
+      allowed: false,
+      enrollment,
+      settings: await settingsPromise,
+      subscriptions: [],
+    };
+  }
   if (subscriptionError) {
     throw new Error(`Could not load billing subscriptions: ${subscriptionError.message}`);
   }

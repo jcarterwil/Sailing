@@ -66,7 +66,10 @@ create table public.billing_subscriptions (
 create table public.billing_webhook_receipts (
   stripe_event_id text primary key,
   event_type text not null,
-  processed_at timestamptz not null default timezone('utc', now())
+  status text not null default 'processing'
+    check (status in ('processing', 'processed')),
+  started_at timestamptz not null default timezone('utc', now()),
+  processed_at timestamptz
 );
 
 create index billing_enrollments_subject_idx
@@ -91,6 +94,13 @@ revoke all on table public.billing_customers from anon;
 revoke all on table public.billing_checkout_reservations from anon;
 revoke all on table public.billing_subscriptions from anon;
 revoke all on table public.billing_webhook_receipts from anon;
+
+revoke insert, update, delete on table public.billing_settings from authenticated;
+revoke insert, update, delete on table public.billing_enrollments from authenticated;
+revoke insert, update, delete on table public.billing_customers from authenticated;
+revoke insert, update, delete on table public.billing_checkout_reservations from authenticated;
+revoke insert, update, delete on table public.billing_subscriptions from authenticated;
+revoke insert, update, delete on table public.billing_webhook_receipts from authenticated;
 
 grant select on table public.billing_settings to authenticated;
 grant select on table public.billing_enrollments to authenticated;
@@ -199,9 +209,28 @@ begin
   ) then raise exception 'The selected race is not owned by that organizer.'; end if;
   if not exists (
     select 1 from public.races r
-    left join public.race_entries e on e.race_id = r.id
     where r.id = target_race
-      and (r.organizer_id = payer or e.added_by = payer)
+      and (
+        r.organizer_id = payer
+        or exists (
+          select 1
+          from public.race_entries e
+          left join public.boats b on b.id = e.boat_id
+          where e.race_id = r.id
+            and (
+              e.added_by = payer
+              or b.owner_id = payer
+              or exists (
+                select 1 from public.boat_memberships bm
+                where bm.boat_id = e.boat_id and bm.user_id = payer
+              )
+            )
+        )
+        or exists (
+          select 1 from public.profiles p
+          where p.id = payer and p.is_admin
+        )
+      )
   ) then raise exception 'The payer is not a member of the selected race.'; end if;
 
   select s.club_price_cents into target_cents
@@ -222,7 +251,16 @@ begin
   select coalesce(sum(r.amount_cents), 0)::integer into committed_cents
   from public.billing_checkout_reservations r
   where r.enrollment_id = target_enrollment
-    and r.status in ('pending', 'completed');
+    and (
+      r.status = 'pending'
+      or (
+        r.status = 'completed'
+        and exists (
+          select 1 from public.billing_subscriptions s
+          where s.reservation_id = r.id and s.status in ('active', 'trialing')
+        )
+      )
+    );
   remaining_before := target_cents - committed_cents;
 
   if remaining_before <= 0 then raise exception 'This Club plan is fully funded.'; end if;
@@ -242,9 +280,53 @@ begin
 end;
 $$;
 
+-- Claim each Stripe event once while distinguishing a completed receipt from
+-- a concurrent in-flight delivery. A stale processing claim can be retried.
+create function public.claim_billing_webhook_event(
+  target_event_id text,
+  target_event_type text
+)
+returns text
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  receipt_status text;
+  receipt_started_at timestamptz;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('stripe-event:' || target_event_id, 0));
+
+  select r.status, r.started_at into receipt_status, receipt_started_at
+  from public.billing_webhook_receipts r
+  where r.stripe_event_id = target_event_id;
+
+  if receipt_status = 'processed' then return 'processed'; end if;
+  if receipt_status = 'processing'
+     and receipt_started_at > timezone('utc', now()) - interval '10 minutes' then
+    return 'processing';
+  end if;
+
+  insert into public.billing_webhook_receipts (
+    stripe_event_id, event_type, status, started_at, processed_at
+  ) values (
+    target_event_id, target_event_type, 'processing', timezone('utc', now()), null
+  )
+  on conflict (stripe_event_id) do update
+    set event_type = excluded.event_type,
+        status = 'processing',
+        started_at = excluded.started_at,
+        processed_at = null;
+  return 'claimed';
+end;
+$$;
+
 revoke all on function public.reserve_user_checkout(uuid) from public, anon, authenticated;
 revoke all on function public.reserve_club_checkout(uuid, uuid, uuid, integer)
   from public, anon, authenticated;
+revoke all on function public.claim_billing_webhook_event(text, text)
+  from public, anon, authenticated;
 grant execute on function public.reserve_user_checkout(uuid) to service_role;
 grant execute on function public.reserve_club_checkout(uuid, uuid, uuid, integer)
+  to service_role;
+grant execute on function public.claim_billing_webhook_event(text, text)
   to service_role;
