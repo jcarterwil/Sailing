@@ -89,11 +89,12 @@ export default async function DashboardPage({
         ? supabase.rpc("can_edit_boat", { bid: activeBoatId })
         : Promise.resolve({ data: false as boolean | null }),
       activeBoatId ? loadBoatSessions(supabase, activeBoatId) : Promise.resolve([]),
-      // Keep organizer-only Sessions reachable (no entries / other boats).
-      // An admin typically organizes nothing and owns no boat, so filtering by
-      // organizer here left them with no route to any session at all — even
-      // though RLS (is_race_member -> is_race_organizer -> is_admin) already
-      // grants them every race. Admins list the fleet instead.
+      // Surface Sessions the active-boat list would miss. For an organizer,
+      // that is the races they run with no entries / other boats. An admin
+      // typically organizes nothing and owns no boat, so an organizer filter
+      // left them with no route to any session at all — even though RLS
+      // (is_race_member -> is_race_organizer -> is_admin) already grants them
+      // every race. Admins list the whole fleet instead.
       (isAdmin
         ? supabase.from("races").select(SESSION_LIST_COLUMNS)
         : supabase.from("races").select(SESSION_LIST_COLUMNS).eq("organizer_id", user.id)
