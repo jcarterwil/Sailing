@@ -1,8 +1,9 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 
+import type { AiProvider } from "@/lib/ai/contracts";
+import { validateAiModel } from "@/lib/ai/gateway";
 import { createClient } from "@/lib/supabase/server";
 
 export async function updateAiModel(modelInput: string): Promise<{ warning: string | null }> {
@@ -15,27 +16,39 @@ export async function updateAiModel(modelInput: string): Promise<{ warning: stri
   if (!isAdmin) throw new Error("Admin only.");
 
   const model = modelInput.trim();
-  if (!model || model.length > 120 || !/^[a-zA-Z0-9._:-]+$/.test(model)) {
-    throw new Error("Enter a valid Anthropic model ID.");
+  if (!model || model.length > 160 || !/^[a-zA-Z0-9._:/-]+$/.test(model)) {
+    throw new Error("Enter a valid AI model ID.");
   }
 
+  const { data: current, error: settingsError } = await supabase
+    .from("ai_settings")
+    .select("provider")
+    .eq("id", true)
+    .maybeSingle();
+  if (settingsError) throw new Error(`Could not read AI routing: ${settingsError.message}`);
+  const provider: AiProvider = current?.provider === "vercel" ? "vercel" : "anthropic";
+
   let warning: string | null = null;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
+  const keyName = provider === "vercel" ? "AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN" : "ANTHROPIC_API_KEY";
+  const apiKey =
+    provider === "vercel"
+      ? process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN
+      : process.env.ANTHROPIC_API_KEY;
+  if (provider === "vercel" || apiKey) {
     try {
-      const selected = await new Anthropic({ apiKey }).models.retrieve(model);
-      if (selected.capabilities?.structured_outputs?.supported === false) {
+      const selected = await validateAiModel(provider, model);
+      if (selected.structuredOutputs === false) {
         throw new Error("This model does not support structured outputs required by the weather wizard.");
       }
     } catch (error) {
       throw new Error(
         error instanceof Error
-          ? `Anthropic did not accept that model: ${error.message}`
-          : "Anthropic did not accept that model.",
+          ? `${provider} did not accept that model: ${error.message}`
+          : `${provider} did not accept that model.`,
       );
     }
   } else {
-    warning = "Saved without live validation because ANTHROPIC_API_KEY is not configured.";
+    warning = `Saved without live validation because ${keyName} is not configured.`;
   }
 
   const { data: updated, error } = await supabase
@@ -72,8 +85,8 @@ export async function updateReportAiSettings(input: {
 
   const maxTokens = Math.trunc(input.maxTokens);
   if (!Number.isFinite(maxTokens) || maxTokens < 1024 || maxTokens > 21_000) {
-    // 21000 keeps the non-streaming Anthropic request under the SDK's 10-minute
-    // timeout guard ((3_600_000 * max_tokens) / 128_000 must stay under 600_000).
+    // 21000 keeps the direct Anthropic adapter under the SDK's 10-minute timeout
+    // guard ((3_600_000 * max_tokens) / 128_000 must stay under 600_000).
     throw new Error("Max output tokens must be between 1024 and 21000.");
   }
 

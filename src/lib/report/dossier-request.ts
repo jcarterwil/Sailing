@@ -1,3 +1,4 @@
+import type { AiGenerateRequest, AiProvider } from "@/lib/ai/contracts";
 import type { DossierStats } from "@/lib/report/dossier-stats";
 
 export const DOSSIER_SYSTEM_PROMPT = `You are a precise sail-racing performance coach. Write a rigorous Race Dossier from the supplied JSON statistics only.
@@ -29,6 +30,7 @@ export const DEFAULT_DOSSIER_MAX_TOKENS = 16_000;
 export const DEFAULT_DOSSIER_THINKING: DossierThinkingMode = "off";
 
 export interface DossierAiConfig {
+  provider: AiProvider;
   model: string;
   systemPrompt: string;
   maxTokens: number;
@@ -37,32 +39,24 @@ export interface DossierAiConfig {
 }
 
 /**
- * Anthropic Messages create params for a Race Dossier.
+ * Provider-neutral request for a Race Dossier.
  *
  * - Omits `temperature` — newer Claude models reject it (see #45).
- * - Sends an explicit `thinking` config — newer models (e.g. Sonnet 5) run adaptive thinking by
- *   default when `thinking` is omitted, which spends the `max_tokens` budget on reasoning and
- *   truncates the dossier (`stop_reason: "max_tokens"`, see #52). Defaulting to disabled keeps the
- *   full output budget for the dossier itself.
- * - `output_config.effort` is only sent when thinking is adaptive.
+ * - Carries explicit reasoning intent so each gateway adapter can prevent newer
+ *   models from silently spending the output budget on thinking (#52).
+ * - Carries effort only when adaptive reasoning is enabled.
  */
-export function buildDossierCreateParams(config: DossierAiConfig, statsPayload: DossierStats) {
-  // Fable 5 / Mythos 5 always think and reject an explicit `{ type: "disabled" }` (400); for them
-  // "off" means omit the `thinking` field entirely. Every other current model must receive an
-  // explicit disabled config so newer models (e.g. Sonnet 5) do not run adaptive thinking by
-  // default and exhaust the max_tokens budget (#52).
-  const alwaysThinks = /^claude-(fable|mythos)/.test(config.model);
-  const thinking =
-    config.thinking === "adaptive"
-      ? ({ type: "adaptive" } as const)
-      : alwaysThinks
-        ? null
-        : ({ type: "disabled" } as const);
-
+export function buildDossierAiRequest(
+  config: DossierAiConfig,
+  statsPayload: DossierStats,
+): AiGenerateRequest {
   return {
-    model: config.model,
-    max_tokens: config.maxTokens,
-    ...(thinking ? { thinking } : {}),
+    route: { provider: config.provider, model: config.model },
+    maxOutputTokens: config.maxTokens,
+    reasoning: {
+      mode: config.thinking,
+      effort: config.thinking === "adaptive" ? config.effort : null,
+    },
     system: config.systemPrompt,
     messages: [
       {
@@ -70,8 +64,5 @@ export function buildDossierCreateParams(config: DossierAiConfig, statsPayload: 
         content: `Race-analysis statistics (JSON data):\n${JSON.stringify(statsPayload)}`,
       },
     ],
-    ...(config.thinking === "adaptive" && config.effort
-      ? { output_config: { effort: config.effort } }
-      : {}),
   };
 }

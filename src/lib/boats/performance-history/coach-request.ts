@@ -1,3 +1,4 @@
+import type { AiGenerateRequest, AiProvider } from "@/lib/ai/contracts";
 import type { CitedPerformanceHistoryHandoffV1 } from "@/lib/boats/performance-history/types";
 import type {
   DossierAiConfig,
@@ -27,6 +28,7 @@ List observational follow-ups only (what to inspect next), never causal setup pr
 List each claim id you relied on with its citationSessionIds.`;
 
 export interface PerformanceHistoryCoachAiConfig {
+  provider: AiProvider;
   model: string;
   systemPrompt: string;
   maxTokens: number;
@@ -37,19 +39,14 @@ export interface PerformanceHistoryCoachAiConfig {
 export function buildPerformanceHistoryCoachCreateParams(
   config: PerformanceHistoryCoachAiConfig | DossierAiConfig,
   handoff: CitedPerformanceHistoryHandoffV1,
-) {
-  const alwaysThinks = /^claude-(fable|mythos)/.test(config.model);
-  const thinking =
-    config.thinking === "adaptive"
-      ? ({ type: "adaptive" } as const)
-      : alwaysThinks
-        ? null
-        : ({ type: "disabled" } as const);
-
+): AiGenerateRequest {
   return {
-    model: config.model,
-    max_tokens: config.maxTokens,
-    ...(thinking ? { thinking } : {}),
+    route: { provider: config.provider, model: config.model },
+    maxOutputTokens: config.maxTokens,
+    reasoning: {
+      mode: config.thinking,
+      effort: config.thinking === "adaptive" ? config.effort : null,
+    },
     system: config.systemPrompt,
     messages: [
       {
@@ -59,9 +56,6 @@ export function buildPerformanceHistoryCoachCreateParams(
           JSON.stringify(handoff),
       },
     ],
-    ...(config.thinking === "adaptive" && config.effort
-      ? { output_config: { effort: config.effort } }
-      : {}),
   };
 }
 

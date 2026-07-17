@@ -9,13 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { AiModelOption } from "@/lib/ai/settings";
+import type { AiProvider } from "@/lib/ai/contracts";
 
 export function AiSettingsForm({
   initialModel,
+  provider,
   models,
   discoveryWarning,
 }: {
   initialModel: string;
+  provider: AiProvider;
   models: AiModelOption[];
   discoveryWarning: string | null;
 }) {
@@ -42,7 +45,7 @@ export function AiSettingsForm({
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="ai-model">Anthropic model</Label>
+        <Label htmlFor="ai-model">{provider === "vercel" ? "Vercel AI Gateway" : "Anthropic"} model</Label>
         <Input
           id="ai-model"
           list="anthropic-models"
@@ -60,8 +63,8 @@ export function AiSettingsForm({
           ))}
         </datalist>
         <p className="text-xs text-muted-foreground">
-          This is the global model used by AI-assisted weather metadata. API credentials remain in
-          the server environment and are never stored here.
+          This is the global model used by today&apos;s AI functions. Provider routing and API
+          credentials remain server-side; credentials are never stored here.
         </p>
       </div>
 
