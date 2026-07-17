@@ -42,6 +42,9 @@ export const dynamic = "force-dynamic";
 /** Bounded organizer list in the secondary club-tools region. */
 const ORGANIZED_SESSION_LIMIT = 12;
 
+const SESSION_LIST_COLUMNS =
+  "id, name, session_type, starts_at, starts_at_source, timezone, venue";
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -87,10 +90,14 @@ export default async function DashboardPage({
         : Promise.resolve({ data: false as boolean | null }),
       activeBoatId ? loadBoatSessions(supabase, activeBoatId) : Promise.resolve([]),
       // Keep organizer-only Sessions reachable (no entries / other boats).
-      supabase
-        .from("races")
-        .select("id, name, session_type, starts_at, starts_at_source, timezone, venue")
-        .eq("organizer_id", user.id)
+      // An admin typically organizes nothing and owns no boat, so filtering by
+      // organizer here left them with no route to any session at all — even
+      // though RLS (is_race_member -> is_race_organizer -> is_admin) already
+      // grants them every race. Admins list the fleet instead.
+      (isAdmin
+        ? supabase.from("races").select(SESSION_LIST_COLUMNS)
+        : supabase.from("races").select(SESSION_LIST_COLUMNS).eq("organizer_id", user.id)
+      )
         .order("starts_at", { ascending: false })
         .limit(ORGANIZED_SESSION_LIMIT),
     ]);
@@ -269,7 +276,7 @@ export default async function DashboardPage({
                   id="organized-sessions-heading"
                   className="text-sm font-medium text-muted-foreground"
                 >
-                  Sessions you organize
+                  {isAdmin ? "All sessions" : "Sessions you organize"}
                 </h3>
                 <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-background/60">
                   {(organizedSessions ?? []).map((session) => (
