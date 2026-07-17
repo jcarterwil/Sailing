@@ -68,6 +68,7 @@ describe("buildDossierAiRequest", () => {
     const params = buildDossierAiRequest(baseConfig, minimalStats);
 
     expect(params.reasoning).toEqual({ mode: "off", effort: null });
+    expect(params.feature).toBe("dossier");
     expect(params.route).toEqual({ provider: "anthropic", model: "claude-sonnet-5" });
     expect(params.maxOutputTokens).toBe(16_000);
     expect(params.system).toBe("CUSTOM SYSTEM PROMPT");

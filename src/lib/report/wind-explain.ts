@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { AiRoute } from "@/lib/ai/contracts";
+import type { AiFunctionRoute } from "@/lib/ai/contracts";
 import { generateAi } from "@/lib/ai/gateway";
-import { getConfiguredAiRoute } from "@/lib/ai/settings";
+import { getAiFunctionRoute } from "@/lib/ai/settings";
 import type { WindQualityReport } from "@/lib/analytics/types";
 import {
   deterministicWindExplanations,
@@ -56,9 +56,9 @@ export async function explainWindQuality(
     return { items: fallback, model: null, fallback: true };
   }
 
-  let route: AiRoute;
+  let route: AiFunctionRoute;
   try {
-    route = await getConfiguredAiRoute();
+    route = await getAiFunctionRoute("wind_explanation");
   } catch {
     return { items: fallback, model: null, fallback: true };
   }
@@ -66,7 +66,8 @@ export async function explainWindQuality(
   try {
     const response = await generateAi({
       route,
-      maxOutputTokens: 2000,
+      feature: "wind_explanation",
+      maxOutputTokens: route.maxOutputTokens,
       reasoning: { mode: "off" },
       system:
         "You explain sailboat race wind-sensor quality findings for an organizer. Use concise plain English. Do not invent numbers. Do not recommend excluding boats from fleet stats — only wind-sensor caveats. One short sentence per boat.",

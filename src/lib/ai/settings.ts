@@ -1,6 +1,12 @@
 import "server-only";
 
-import type { AiCatalogModel, AiProvider, AiRoute } from "@/lib/ai/contracts";
+import type {
+  AiCatalogModel,
+  AiFunction,
+  AiFunctionRoute,
+  AiProvider,
+  AiRoute,
+} from "@/lib/ai/contracts";
 import { generateAi, listAiModels } from "@/lib/ai/gateway";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -16,6 +22,33 @@ import type { WeatherEvidence } from "@/lib/weather/open-meteo";
 export const DEFAULT_AI_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_AI_PROVIDER: AiProvider = "anthropic";
 
+export const DEFAULT_AI_FUNCTION_ROUTES: Record<AiFunction, AiFunctionRoute> = {
+  dossier: {
+    function: "dossier",
+    provider: DEFAULT_AI_PROVIDER,
+    model: DEFAULT_AI_MODEL,
+    maxOutputTokens: DEFAULT_DOSSIER_MAX_TOKENS,
+  },
+  performance_coach: {
+    function: "performance_coach",
+    provider: DEFAULT_AI_PROVIDER,
+    model: DEFAULT_AI_MODEL,
+    maxOutputTokens: 8_000,
+  },
+  wind_explanation: {
+    function: "wind_explanation",
+    provider: DEFAULT_AI_PROVIDER,
+    model: DEFAULT_AI_MODEL,
+    maxOutputTokens: 2_000,
+  },
+  weather_interpretation: {
+    function: "weather_interpretation",
+    provider: DEFAULT_AI_PROVIDER,
+    model: DEFAULT_AI_MODEL,
+    maxOutputTokens: 350,
+  },
+};
+
 export type AiModelOption = AiCatalogModel;
 
 export interface AiWeatherInterpretation {
@@ -30,7 +63,7 @@ function normalizeProvider(value: string | null | undefined): AiProvider {
   return value === "vercel" ? "vercel" : DEFAULT_AI_PROVIDER;
 }
 
-export async function getConfiguredAiRoute(): Promise<AiRoute> {
+async function getLegacyAiRoute(): Promise<AiRoute> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ai_settings")
@@ -44,27 +77,48 @@ export async function getConfiguredAiRoute(): Promise<AiRoute> {
   };
 }
 
-export async function getConfiguredAiModel(): Promise<string> {
-  return (await getConfiguredAiRoute()).model;
+export async function getAiFunctionRoute(aiFunction: AiFunction): Promise<AiFunctionRoute> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("ai_function_routes")
+    .select("function, provider, model, max_output_tokens")
+    .eq("function", aiFunction)
+    .maybeSingle();
+  if (error?.code === "42P01") {
+    const legacy = await getLegacyAiRoute();
+    return { ...DEFAULT_AI_FUNCTION_ROUTES[aiFunction], ...legacy };
+  }
+  if (error) throw new Error(`Could not read ${aiFunction} AI routing: ${error.message}`);
+  if (!data) {
+    const legacy = await getLegacyAiRoute();
+    return { ...DEFAULT_AI_FUNCTION_ROUTES[aiFunction], ...legacy };
+  }
+  return {
+    function: aiFunction,
+    provider: normalizeProvider(data.provider),
+    model: data.model || DEFAULT_AI_FUNCTION_ROUTES[aiFunction].model,
+    maxOutputTokens:
+      typeof data.max_output_tokens === "number" && data.max_output_tokens > 0
+        ? data.max_output_tokens
+        : DEFAULT_AI_FUNCTION_ROUTES[aiFunction].maxOutputTokens,
+  };
 }
 
 const VALID_DOSSIER_EFFORTS: readonly DossierEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 export async function getDossierAiConfig(): Promise<DossierAiConfig> {
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("ai_settings")
-    .select("provider, model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
-    .eq("id", true)
-    .maybeSingle();
+  const [{ data, error }, route] = await Promise.all([
+    admin
+      .from("ai_settings")
+      .select("report_system_prompt, report_thinking, report_effort")
+      .eq("id", true)
+      .maybeSingle(),
+    getAiFunctionRoute("dossier"),
+  ]);
   if (error) throw new Error(`Could not read AI settings: ${error.message}`);
 
-  const model = data?.model || DEFAULT_AI_MODEL;
   const systemPrompt = data?.report_system_prompt?.trim() || DOSSIER_SYSTEM_PROMPT;
-  const maxTokens =
-    typeof data?.report_max_tokens === "number" && data.report_max_tokens > 0
-      ? data.report_max_tokens
-      : DEFAULT_DOSSIER_MAX_TOKENS;
   const thinking: DossierThinkingMode =
     data?.report_thinking === "adaptive" ? "adaptive" : DEFAULT_DOSSIER_THINKING;
   const effort =
@@ -75,45 +129,33 @@ export async function getDossierAiConfig(): Promise<DossierAiConfig> {
       : null;
 
   return {
-    provider: normalizeProvider(data?.provider),
-    model,
+    provider: route.provider,
+    model: route.model,
     systemPrompt,
-    maxTokens,
+    maxTokens: route.maxOutputTokens,
     thinking,
     effort,
   };
 }
 
-export async function listAvailableAiModels(): Promise<{
-  models: AiModelOption[];
-  warning: string | null;
-}> {
-  let route: AiRoute;
-  try {
-    route = await getConfiguredAiRoute();
-  } catch (error) {
-    return {
-      models: [],
-      warning:
-        error instanceof Error
-          ? `Could not read AI routing settings: ${error.message}`
-          : "Could not read AI routing settings.",
-    };
-  }
-  try {
-    return {
-      models: await listAiModels(route.provider),
-      warning: null,
-    };
-  } catch (error) {
-    return {
-      models: [],
-      warning:
-        error instanceof Error
-          ? `Could not load ${route.provider} models: ${error.message}`
-          : `Could not load ${route.provider} models.`,
-    };
-  }
+export async function listAvailableAiModelsByProvider(): Promise<
+  Record<AiProvider, { models: AiModelOption[]; warning: string | null }>
+> {
+  const load = async (provider: AiProvider) => {
+    try {
+      return { models: await listAiModels(provider), warning: null };
+    } catch (error) {
+      return {
+        models: [],
+        warning:
+          error instanceof Error
+            ? `Could not load ${provider} models: ${error.message}`
+            : `Could not load ${provider} models.`,
+      };
+    }
+  };
+  const [anthropic, vercel] = await Promise.all([load("anthropic"), load("vercel")]);
+  return { anthropic, vercel };
 }
 
 function deterministicNotes(evidence: WeatherEvidence): string {
@@ -171,9 +213,9 @@ function validateInterpretation(value: unknown): Pick<AiWeatherInterpretation, "
 export async function interpretWeatherWithAi(
   evidence: WeatherEvidence,
 ): Promise<AiWeatherInterpretation> {
-  let route: AiRoute;
+  let route: AiFunctionRoute;
   try {
-    route = await getConfiguredAiRoute();
+    route = await getAiFunctionRoute("weather_interpretation");
   } catch (error) {
     return deterministicInterpretation(
       evidence,
@@ -186,7 +228,8 @@ export async function interpretWeatherWithAi(
   try {
     const response = await generateAi({
       route,
-      maxOutputTokens: 350,
+      feature: "weather_interpretation",
+      maxOutputTokens: route.maxOutputTokens,
       reasoning: { mode: "off" },
       system:
         "You summarize structured weather evidence for a sailboat race. Never call model output a direct observation. Do not change numeric values. Use concise plain English. Only classify sea state when marine wave-height evidence is present; otherwise return null.",

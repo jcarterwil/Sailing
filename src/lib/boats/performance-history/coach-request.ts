@@ -42,6 +42,7 @@ export function buildPerformanceHistoryCoachCreateParams(
 ): AiGenerateRequest {
   return {
     route: { provider: config.provider, model: config.model },
+    feature: "performance_coach",
     maxOutputTokens: config.maxTokens,
     reasoning: {
       mode: config.thinking,

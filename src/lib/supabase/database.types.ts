@@ -39,6 +39,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_function_routes: {
+        Row: {
+          function: string
+          max_output_tokens: number
+          model: string
+          provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          function: string
+          max_output_tokens: number
+          model: string
+          provider: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          function?: string
+          max_output_tokens?: number
+          model?: string
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_function_routes_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_settings: {
         Row: {
           id: boolean
