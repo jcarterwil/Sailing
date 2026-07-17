@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Bot, Sailboat, Users } from "lucide-react";
+import { ArrowLeft, Bot, Mail, Sailboat, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/boats", label: "Boats", icon: Sailboat },
+  { href: "/admin/email", label: "Email", icon: Mail },
   { href: "/admin/ai", label: "AI settings", icon: Bot },
 ] as const;
 

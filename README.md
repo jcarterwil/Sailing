@@ -14,6 +14,7 @@ Production: https://sailing-performance.vercel.app
 - Vercel deployment linked to `jcarterwil/Sailing`
 - Supabase project, database migration, and Vercel environment integration
 - Google OAuth UI and callback code, feature-gated until Google credentials are installed
+- Resend-backed admin email, inbound replies, delivery logging, and member preferences
 - Codex Cloud setup and maintenance scripts
 
 ## Stack
@@ -129,6 +130,12 @@ vercel deploy --prod
 ## Codex Cloud
 
 See [docs/codex-cloud-environment.md](docs/codex-cloud-environment.md) for the exact environment settings and scripts. The repository intentionally keeps production database and deployment credentials out of the Codex Cloud agent environment.
+
+## Application email
+
+See [docs/email-communications.md](docs/email-communications.md) for Resend domain,
+webhook, inbound receiving, environment, and operational setup. Supabase Auth email
+configuration remains tracked in [GitHub issue #111](https://github.com/jcarterwil/Sailing/issues/111).
 
 ## Project layout
 

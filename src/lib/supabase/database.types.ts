@@ -544,6 +544,275 @@ export type Database = {
           },
         ]
       }
+      email_broadcasts: {
+        Row: {
+          audience_type: string
+          boat_id: string | null
+          body_text: string
+          category: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          cta_label: string | null
+          cta_url: string | null
+          failed_count: number
+          id: string
+          recipient_count: number
+          recipient_user_id: string | null
+          sent_count: number
+          skipped_count: number
+          status: string
+          subject: string
+        }
+        Insert: {
+          audience_type: string
+          boat_id?: string | null
+          body_text: string
+          category: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          failed_count?: number
+          id?: string
+          recipient_count?: number
+          recipient_user_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          status?: string
+          subject: string
+        }
+        Update: {
+          audience_type?: string
+          boat_id?: string | null
+          body_text?: string
+          category?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          failed_count?: number
+          id?: string
+          recipient_count?: number
+          recipient_user_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcasts_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_events: {
+        Row: {
+          email_message_id: string | null
+          event_type: string
+          id: string
+          occurred_at: string
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          provider_email_id: string | null
+          received_at: string
+          svix_id: string
+        }
+        Insert: {
+          email_message_id?: string | null
+          event_type: string
+          id?: string
+          occurred_at: string
+          payload: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider_email_id?: string | null
+          received_at?: string
+          svix_id: string
+        }
+        Update: {
+          email_message_id?: string | null
+          event_type?: string
+          id?: string
+          occurred_at?: string
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider_email_id?: string | null
+          received_at?: string
+          svix_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_events_email_message_id_fkey"
+            columns: ["email_message_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_messages: {
+        Row: {
+          attachments: Json
+          bcc_addresses: string[]
+          boat_id: string | null
+          body_html: string | null
+          body_text: string | null
+          broadcast_id: string | null
+          category: string
+          cc_addresses: string[]
+          clicked_at: string | null
+          created_at: string
+          created_by: string | null
+          delivered_at: string | null
+          direction: string
+          error_message: string | null
+          from_address: string
+          headers: Json | null
+          id: string
+          idempotency_key: string
+          in_reply_to: string | null
+          last_event_at: string | null
+          last_event_type: string | null
+          opened_at: string | null
+          provider_email_id: string | null
+          provider_message_id: string | null
+          received_at: string | null
+          recipient_user_id: string | null
+          references_header: string | null
+          reply_to_address: string | null
+          sent_at: string | null
+          source_key: string | null
+          status: string
+          subject: string
+          thread_id: string
+          to_addresses: string[]
+        }
+        Insert: {
+          attachments?: Json
+          bcc_addresses?: string[]
+          boat_id?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          broadcast_id?: string | null
+          category: string
+          cc_addresses?: string[]
+          clicked_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_at?: string | null
+          direction: string
+          error_message?: string | null
+          from_address: string
+          headers?: Json | null
+          id?: string
+          idempotency_key: string
+          in_reply_to?: string | null
+          last_event_at?: string | null
+          last_event_type?: string | null
+          opened_at?: string | null
+          provider_email_id?: string | null
+          provider_message_id?: string | null
+          received_at?: string | null
+          recipient_user_id?: string | null
+          references_header?: string | null
+          reply_to_address?: string | null
+          sent_at?: string | null
+          source_key?: string | null
+          status: string
+          subject: string
+          thread_id?: string
+          to_addresses?: string[]
+        }
+        Update: {
+          attachments?: Json
+          bcc_addresses?: string[]
+          boat_id?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          broadcast_id?: string | null
+          category?: string
+          cc_addresses?: string[]
+          clicked_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_at?: string | null
+          direction?: string
+          error_message?: string | null
+          from_address?: string
+          headers?: Json | null
+          id?: string
+          idempotency_key?: string
+          in_reply_to?: string | null
+          last_event_at?: string | null
+          last_event_type?: string | null
+          opened_at?: string | null
+          provider_email_id?: string | null
+          provider_message_id?: string | null
+          received_at?: string | null
+          recipient_user_id?: string | null
+          references_header?: string | null
+          reply_to_address?: string | null
+          sent_at?: string | null
+          source_key?: string | null
+          status?: string
+          subject?: string
+          thread_id?: string
+          to_addresses?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_boat_id_fkey"
+            columns: ["boat_id"]
+            isOneToOne: false
+            referencedRelation: "boats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_broadcast_id_fkey"
+            columns: ["broadcast_id"]
+            isOneToOne: false
+            referencedRelation: "email_broadcasts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       impersonation_events: {
         Row: {
           admin_user_id: string
@@ -590,6 +859,50 @@ export type Database = {
             foreignKeyName: "impersonation_events_target_user_id_fkey"
             columns: ["target_user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          admin_announcements: boolean
+          boat_activity: boolean
+          created_at: string
+          email_enabled: boolean
+          report_ready: boolean
+          suppressed_at: string | null
+          suppression_reason: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_announcements?: boolean
+          boat_activity?: boolean
+          created_at?: string
+          email_enabled?: boolean
+          report_ready?: boolean
+          suppressed_at?: string | null
+          suppression_reason?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_announcements?: boolean
+          boat_activity?: boolean
+          created_at?: string
+          email_enabled?: boolean
+          report_ready?: boolean
+          suppressed_at?: string | null
+          suppression_reason?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1524,6 +1837,33 @@ export type Database = {
           boat_id: string
           transferred: boolean
         }[]
+      }
+      apply_email_delivery_event: {
+        Args: {
+          p_email_message_id: string | null
+          p_error_message?: string | null
+          p_event_type: string
+          p_occurred_at: string
+          p_provider_email_id: string | null
+          p_status: string
+        }
+        Returns: string | null
+      }
+      claim_email_retry_messages: {
+        Args: { p_message_ids: string[] }
+        Returns: Json
+      }
+      record_email_provider_acceptance: {
+        Args: {
+          p_accepted_at: string
+          p_message_id: string
+          p_provider_email_id: string
+        }
+        Returns: string | null
+      }
+      refresh_email_broadcast: {
+        Args: { p_broadcast_id: string }
+        Returns: string | null
       }
       apply_race_series_score_snapshot: {
         Args: {
