@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 
 import { notifyReportReady } from "@/lib/email/notifications";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
 import {
   analysisMatchesCurrentFleet,
@@ -47,12 +48,12 @@ async function requireMember(raceId: string) {
   // RLS-visible read proves race membership before any service-role access.
   const { data: race, error } = await supabase
     .from("races")
-    .select("id")
+    .select("id, organizer_id")
     .eq("id", raceId)
     .maybeSingle();
   if (error) return { response: json({ error: "Could not load race." }, 500) } as const;
   if (!race) return { response: json({ error: "Race not found." }, 404) } as const;
-  return { supabase, user } as const;
+  return { supabase, user, race } as const;
 }
 
 export async function GET(
@@ -62,6 +63,9 @@ export async function GET(
   const { raceId } = await params;
   const access = await requireMember(raceId);
   if ("response" in access) return access.response;
+  if (!(await hasClubAiEntitlement(access.race.organizer_id))) {
+    return json({ error: "This race organizer needs a Club plan to share AI reports." }, 402);
+  }
 
   try {
     await expireStaleReportGenerations(raceId);
@@ -78,6 +82,9 @@ export async function POST(
   const { raceId } = await params;
   const access = await requireMember(raceId);
   if ("response" in access) return access.response;
+  if (!(await hasClubAiEntitlement(access.race.organizer_id))) {
+    return json({ error: "Activate Club AI before generating a Race Dossier." }, 402);
+  }
 
   const { data: canOrganize, error: organizerError } = await access.supabase.rpc(
     "is_race_organizer",

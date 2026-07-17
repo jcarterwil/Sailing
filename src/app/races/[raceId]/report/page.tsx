@@ -1,7 +1,11 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ReportPageClient } from "@/app/races/[raceId]/report/report-page-client";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { SessionHeader } from "@/components/sessions/session-header";
 import { SessionWorkspaceNav } from "@/components/sessions/session-workspace-nav";
 import {
@@ -29,10 +33,20 @@ export default async function RaceReportPage({
   if (!chrome) notFound();
   if (chrome.isPractice) redirect(`/races/${raceId}`);
 
-  await expireStaleReportGenerations(raceId);
+  const { data: race } = await supabase
+    .from("races")
+    .select("organizer_id")
+    .eq("id", raceId)
+    .maybeSingle();
+  if (!race) notFound();
+  const hasClubAi = await hasClubAiEntitlement(race.organizer_id);
+
+  if (hasClubAi) await expireStaleReportGenerations(raceId);
   const [{ data: profile }, initialSnapshot] = await Promise.all([
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
-    loadReportSnapshot(supabase, raceId, { includePreviousComplete: true }),
+    hasClubAi
+      ? loadReportSnapshot(supabase, raceId, { includePreviousComplete: true })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -61,15 +75,34 @@ export default async function RaceReportPage({
           activeTab="report"
           sessionType={chrome.sessionType}
         />
-        <ReportPageClient
-          raceId={raceId}
-          raceName={chrome.name}
-          raceVenue={chrome.venue}
-          raceDate={chrome.startsAt}
-          isOrganizer={chrome.isOrganizer}
-          initialSnapshot={initialSnapshot}
-          embedded
-        />
+        {hasClubAi && initialSnapshot ? (
+          <ReportPageClient
+            raceId={raceId}
+            raceName={chrome.name}
+            raceVenue={chrome.venue}
+            raceDate={chrome.startsAt}
+            isOrganizer={chrome.isOrganizer}
+            initialSnapshot={initialSnapshot}
+            embedded
+          />
+        ) : (
+          <Card className="bg-card/70">
+            <CardHeader>
+              <CardTitle>Club AI is not active</CardTitle>
+              <CardDescription>
+                A Club plan lets the organizer generate one shared AI Race Dossier for the fleet.
+                Racers can split the {"$100/year"} cost.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="min-h-11">
+                <Link href={`/account/billing?raceId=${raceId}`}>
+                  {chrome.isOrganizer ? "Activate Club AI" : "Help fund Club AI"}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AuthenticatedShell>
   );

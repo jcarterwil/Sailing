@@ -212,7 +212,14 @@ function validateInterpretation(value: unknown): Pick<AiWeatherInterpretation, "
 
 export async function interpretWeatherWithAi(
   evidence: WeatherEvidence,
+  options: { allowAi?: boolean } = {},
 ): Promise<AiWeatherInterpretation> {
+  if (options.allowAi === false) {
+    return deterministicInterpretation(
+      evidence,
+      "Club AI is not active; weather fields still come from Open-Meteo.",
+    );
+  }
   let route: AiFunctionRoute;
   try {
     route = await getAiFunctionRoute("weather_interpretation");

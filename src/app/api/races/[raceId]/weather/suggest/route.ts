@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { interpretWeatherWithAi } from "@/lib/ai/settings";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { normalizeIanaTimezone, type RaceConditions } from "@/lib/races/meta";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -70,7 +71,9 @@ export async function POST(
   try {
     const location = await geocodeWeatherLocation(locationQuery);
     const evidence = await fetchRaceWeatherEvidence(location, start, end);
-    const interpretation = await interpretWeatherWithAi(evidence);
+    const interpretation = await interpretWeatherWithAi(evidence, {
+      allowAi: await hasClubAiEntitlement(race.organizer_id),
+    });
     const conditions: RaceConditions = {
       windMinKts: evidence.windMinKts,
       windMaxKts: evidence.windMaxKts,

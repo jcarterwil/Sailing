@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SharedRace = {
   id: string;
+  organizer_id: string;
   name: string;
   venue: string | null;
   starts_at: string | null;
@@ -41,6 +42,7 @@ export async function resolveSharedRace(slug: string): Promise<{
     admin,
     race: {
       id: race.id,
+      organizer_id: race.organizer_id,
       name: race.name,
       venue: race.venue,
       starts_at: race.starts_at,

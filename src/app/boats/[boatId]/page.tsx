@@ -37,6 +37,7 @@ import {
   boatAccessLabel,
   type ViewableBoatAccess,
 } from "@/lib/boats/my-sailing";
+import { hasUserAiEntitlement } from "@/lib/billing/server";
 import {
   buildCitedPerformanceHistoryHandoff,
   buildCompactObservationCsv,
@@ -148,12 +149,19 @@ export default async function BoatHubPage({
     redirect(`/boats/${boatMeta.merged_into_id}${tabQuery}`);
   }
 
-  const [{ data: profile }, { data: canView }, { data: canManage }, { data: canEdit }] =
+  const [
+    { data: profile },
+    { data: canView },
+    { data: canManage },
+    { data: canEdit },
+    hasUserAi,
+  ] =
     await Promise.all([
       supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
       supabase.rpc("can_view_boat", { bid: boatId }),
       supabase.rpc("can_manage_boat", { bid: boatId }),
       supabase.rpc("can_edit_boat", { bid: boatId }),
+      hasUserAiEntitlement(user.id),
     ]);
   if (!canView) notFound();
 
@@ -434,6 +442,7 @@ export default async function BoatHubPage({
               csv={performanceCsv}
               csvFilename={performanceCsvFilename}
               canEdit={Boolean(canEdit)}
+              hasUserAi={hasUserAi}
             />
           ) : (
             <Card className="bg-card/70">

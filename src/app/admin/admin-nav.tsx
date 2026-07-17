@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Bot, Mail, Sailboat, Users } from "lucide-react";
+import { ArrowLeft, Bot, CreditCard, Mail, Sailboat, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/admin/boats", label: "Boats", icon: Sailboat },
   { href: "/admin/email", label: "Email", icon: Mail },
   { href: "/admin/ai", label: "AI settings", icon: Bot },
+  { href: "/admin/billing", label: "Billing", icon: CreditCard },
 ] as const;
 
 /** Admin section navigation — a sidebar on desktop, a scroll row on mobile. */

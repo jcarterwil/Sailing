@@ -342,6 +342,7 @@ export function BoatPerformancePanel({
   csv,
   csvFilename,
   canEdit,
+  hasUserAi,
 }: {
   boatId: string;
   history: PerformanceHistoryQueryResultV1;
@@ -350,6 +351,7 @@ export function BoatPerformancePanel({
   csv: string;
   csvFilename: string;
   canEdit: boolean;
+  hasUserAi: boolean;
 }) {
   const clearHref = boatHubHref(boatId, "performance");
   const coachQuery = new URLSearchParams();
@@ -525,7 +527,8 @@ export function BoatPerformancePanel({
       <BoatCoachHandoffClient
         handoff={handoff}
         coachPath={coachPath}
-        canGenerate={canEdit}
+        canGenerate={canEdit && hasUserAi}
+        upgradeRequired={canEdit && !hasUserAi}
       />
       <ObservationTable history={history} />
     </section>

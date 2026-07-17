@@ -50,9 +50,13 @@ function validateExplanations(
  */
 export async function explainWindQuality(
   report: WindQualityReport,
+  options: { allowAi?: boolean } = {},
 ): Promise<{ items: WindExplainItem[]; model: string | null; fallback: boolean }> {
   const fallback = deterministicWindExplanations(report);
   if (report.boats.length === 0) {
+    return { items: fallback, model: null, fallback: true };
+  }
+  if (options.allowAi === false) {
     return { items: fallback, model: null, fallback: true };
   }
 

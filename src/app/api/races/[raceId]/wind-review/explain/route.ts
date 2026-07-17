@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { WindQualityReport } from "@/lib/analytics/types";
+import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { explainWindQuality } from "@/lib/report/wind-explain";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,7 +28,7 @@ export async function POST(
 
   const { data: race } = await supabase
     .from("races")
-    .select("id")
+    .select("id, organizer_id")
     .eq("id", raceId)
     .maybeSingle();
   if (!race) {
@@ -62,6 +63,8 @@ export async function POST(
     return NextResponse.json({ error: "windQuality report is required." }, { status: 400 });
   }
 
-  const result = await explainWindQuality(report);
+  const result = await explainWindQuality(report, {
+    allowAi: await hasClubAiEntitlement(race.organizer_id),
+  });
   return NextResponse.json(result);
 }

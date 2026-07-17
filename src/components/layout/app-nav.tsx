@@ -7,6 +7,7 @@ import {
   BookOpenText,
   Bell,
   Boxes,
+  CreditCard,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -181,6 +182,11 @@ export function AppNav({
               <DropdownMenuItem asChild className="min-h-11">
                 <Link href="/account/notifications">
                   <Bell className="size-4" aria-hidden="true" /> Email notifications
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="min-h-11">
+                <Link href="/account/billing">
+                  <CreditCard className="size-4" aria-hidden="true" /> Plans & billing
                 </Link>
               </DropdownMenuItem>
               {isAdmin ? (
