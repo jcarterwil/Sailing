@@ -48,6 +48,8 @@ describe("billing integration boundaries", () => {
     expect(userReservation).toContain("r.status = 'pending'");
     expect(userReservation).toContain("s.status in ('active', 'trialing')");
     expect(userReservation).not.toContain("status in ('pending', 'completed')");
+    expect(migration).toContain("remaining_before - contribution_cents < 50");
+    expect(migration).toContain("stripe''s $0.50 minimum");
     expect(migration).toContain("to service_role");
   });
 
@@ -71,7 +73,15 @@ describe("billing integration boundaries", () => {
     expect(webhook).toContain("billing_webhook_receipts");
     expect(webhook).toContain("claim_billing_webhook_event");
     expect(webhook).toContain("subscriptions.retrieve");
+    expect(webhook).toContain('case "customer.subscription.paused"');
+    expect(webhook).toContain('case "customer.subscription.resumed"');
+    expect(webhook).toContain("isSailingSubscription(current)");
     expect(webhook).toContain('status: "processed"');
+
+    const projection = source("src/lib/billing/webhook.ts");
+    expect(projection).toContain('requireStripeProductId("user")');
+    expect(projection).toContain('requireStripeProductId("club")');
+    expect(projection).toContain("item.price.product");
   });
 
   it("fails closed without 500s during the migration deployment window", () => {

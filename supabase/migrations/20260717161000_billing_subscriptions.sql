@@ -277,8 +277,15 @@ begin
   if contribution_cents <= 0 or contribution_cents > remaining_before then
     raise exception 'Contribution must fit within the remaining Club balance.';
   end if;
+  if contribution_cents < 50 then
+    raise exception 'Club contributions must meet Stripe''s $0.50 minimum.';
+  end if;
   if contribution_cents < 500 and contribution_cents <> remaining_before then
     raise exception 'Club contributions must be at least $5 unless covering the final balance.';
+  end if;
+  if remaining_before - contribution_cents > 0
+     and remaining_before - contribution_cents < 50 then
+    raise exception 'Contribution must leave at least $0.50 or cover the final balance.';
   end if;
 
   return query

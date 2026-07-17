@@ -30,9 +30,11 @@ Subscribe it to:
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+- `customer.subscription.paused`
+- `customer.subscription.resumed`
 - `checkout.session.expired`
 
-The webhook verifies the raw request body with `STRIPE_WEBHOOK_SECRET`, records event IDs for idempotency, and projects Stripe subscription state into Postgres. Never grant browser writes to the billing projection tables.
+The webhook verifies the raw request body with `STRIPE_WEBHOOK_SECRET`, records event IDs for idempotency, ignores subscriptions for other Stripe products, and projects Sailing subscription state into Postgres. Never grant browser writes to the billing projection tables.
 
 Enable the Stripe Customer Portal for subscription cancellation and payment-method updates. Users open it from `/account/billing`.
 

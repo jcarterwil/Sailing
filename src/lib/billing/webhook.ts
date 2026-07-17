@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 
 import { entitlementTargetCents, isAccessSubscription } from "@/lib/billing/entitlements";
 import { loadBillingSettings } from "@/lib/billing/server";
+import { requireStripeProductId } from "@/lib/billing/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function stripeId(value: string | { id: string } | Stripe.DeletedCustomer | null): string {
@@ -12,6 +13,22 @@ function stripeId(value: string | { id: string } | Stripe.DeletedCustomer | null
 
 function unixDate(value: number | null | undefined): string | null {
   return value ? new Date(value * 1_000).toISOString() : null;
+}
+
+function stripeProductId(
+  value: string | Stripe.Product | Stripe.DeletedProduct,
+): string {
+  return typeof value === "string" ? value : value.id;
+}
+
+export function isSailingSubscription(subscription: Stripe.Subscription): boolean {
+  const sailingProducts = new Set([
+    requireStripeProductId("user"),
+    requireStripeProductId("club"),
+  ]);
+  return subscription.items.data.some((item) =>
+    sailingProducts.has(stripeProductId(item.price.product)),
+  );
 }
 
 export async function refreshEnrollmentStatus(enrollmentId: string): Promise<void> {

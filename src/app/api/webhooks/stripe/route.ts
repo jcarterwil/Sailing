@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { getStripe } from "@/lib/billing/stripe";
-import { projectStripeSubscription } from "@/lib/billing/webhook";
+import {
+  isSailingSubscription,
+  projectStripeSubscription,
+} from "@/lib/billing/webhook";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -43,10 +46,15 @@ export async function POST(request: Request) {
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
+      case "customer.subscription.deleted":
+      case "customer.subscription.paused":
+      case "customer.subscription.resumed": {
         // Webhooks may arrive out of order. Retrieve Stripe's current state so
         // an older event can never re-activate a canceled subscription.
         const current = await getStripe().subscriptions.retrieve(event.data.object.id);
+        // Stripe accounts may host other products. Acknowledge unrelated
+        // subscription events instead of retrying them as projection errors.
+        if (!isSailingSubscription(current)) break;
         await projectStripeSubscription(current);
         break;
       }
