@@ -52,6 +52,7 @@ export function buildDossierAiRequest(
 ): AiGenerateRequest {
   return {
     route: { provider: config.provider, model: config.model },
+    feature: "dossier",
     maxOutputTokens: config.maxTokens,
     reasoning: {
       mode: config.thinking,

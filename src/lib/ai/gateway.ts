@@ -174,7 +174,7 @@ export function buildVercelGatewayRequest(request: AiGenerateRequest) {
     providerOptions: {
       gateway: {
         sort: "cost" as const,
-        tags: ["app:sailing"],
+        tags: ["app:sailing", `feature:${request.feature ?? "unclassified"}`],
       },
     },
   };

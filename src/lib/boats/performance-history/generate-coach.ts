@@ -1,7 +1,7 @@
 import "server-only";
 
 import { generateAi } from "@/lib/ai/gateway";
-import { getDossierAiConfig } from "@/lib/ai/settings";
+import { getAiFunctionRoute, getDossierAiConfig } from "@/lib/ai/settings";
 import {
   PERFORMANCE_HISTORY_COACH_SYSTEM_PROMPT,
   buildPerformanceHistoryCoachCreateParams,
@@ -23,11 +23,16 @@ export interface GeneratedPerformanceHistoryCoachNotes {
 export async function generatePerformanceHistoryCoachNotes(
   handoff: CitedPerformanceHistoryHandoffV1,
 ): Promise<GeneratedPerformanceHistoryCoachNotes> {
-  const dossierConfig = await getDossierAiConfig();
+  const [dossierConfig, route] = await Promise.all([
+    getDossierAiConfig(),
+    getAiFunctionRoute("performance_coach"),
+  ]);
   const config = {
     ...dossierConfig,
+    provider: route.provider,
+    model: route.model,
     systemPrompt: PERFORMANCE_HISTORY_COACH_SYSTEM_PROMPT,
-    maxTokens: Math.min(dossierConfig.maxTokens, 8_000),
+    maxTokens: route.maxOutputTokens,
   };
 
   const response = await generateAi(

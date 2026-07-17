@@ -204,6 +204,7 @@ describe("coach request helpers", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-20250514",
     });
+    expect(params.feature).toBe("performance_coach");
     expect(params.system).toContain("association");
     expect(params.system).toMatch(/never.*caus/i);
     expect(params.messages[0]?.content).toContain("boat-performance-history-handoff-v1");

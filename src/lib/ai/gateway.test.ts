@@ -76,6 +76,19 @@ describe("AI gateway request normalization", () => {
     expect(request.reasoning).toEqual({ effort: "high" });
   });
 
+  it("tags gateway spend by application feature", () => {
+    const request = buildVercelGatewayRequest({
+      ...baseRequest,
+      route: { provider: "vercel", model: "anthropic/claude-sonnet-5" },
+      feature: "dossier",
+    });
+
+    expect(request.providerOptions.gateway.tags).toEqual([
+      "app:sailing",
+      "feature:dossier",
+    ]);
+  });
+
   it("keeps Anthropic reasoning effort alongside structured output", () => {
     const request = buildAnthropicRequest({
       ...baseRequest,

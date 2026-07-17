@@ -1,5 +1,14 @@
 export type AiProvider = "anthropic" | "vercel";
 
+export const AI_FUNCTIONS = [
+  "dossier",
+  "performance_coach",
+  "wind_explanation",
+  "weather_interpretation",
+] as const;
+
+export type AiFunction = (typeof AI_FUNCTIONS)[number];
+
 export type AiReasoningEffort =
   | "minimal"
   | "low"
@@ -11,6 +20,11 @@ export type AiReasoningEffort =
 export interface AiRoute {
   provider: AiProvider;
   model: string;
+}
+
+export interface AiFunctionRoute extends AiRoute {
+  function: AiFunction;
+  maxOutputTokens: number;
 }
 
 export interface AiMessage {
@@ -26,6 +40,7 @@ export interface AiJsonOutput {
 
 export interface AiGenerateRequest {
   route: AiRoute;
+  feature?: AiFunction;
   system?: string;
   messages: AiMessage[];
   maxOutputTokens: number;

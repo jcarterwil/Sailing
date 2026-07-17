@@ -6,7 +6,6 @@ import { RotateCcw, Save } from "lucide-react";
 import { updateReportAiSettings } from "@/app/admin/ai/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -18,18 +17,15 @@ const SELECT_CLASS =
 export function ReportAiSettingsForm({
   initialSystemPrompt,
   defaultSystemPrompt,
-  initialMaxTokens,
   initialThinking,
   initialEffort,
 }: {
   initialSystemPrompt: string;
   defaultSystemPrompt: string;
-  initialMaxTokens: number;
   initialThinking: "off" | "adaptive";
   initialEffort: string;
 }) {
   const [systemPrompt, setSystemPrompt] = useState(initialSystemPrompt);
-  const [maxTokens, setMaxTokens] = useState(String(initialMaxTokens));
   const [thinking, setThinking] = useState<"off" | "adaptive">(initialThinking);
   const [effort, setEffort] = useState(initialEffort);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +39,6 @@ export function ReportAiSettingsForm({
       try {
         await updateReportAiSettings({
           systemPrompt,
-          maxTokens: Number(maxTokens),
           thinking,
           effort: thinking === "adaptive" ? effort : "",
         });
@@ -83,19 +78,7 @@ export function ReportAiSettingsForm({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor="report-max-tokens">Max output tokens</Label>
-          <Input
-            id="report-max-tokens"
-            type="number"
-            min={1024}
-            max={21000}
-            step={1000}
-            value={maxTokens}
-            onChange={(event) => setMaxTokens(event.target.value)}
-          />
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="report-thinking">Thinking</Label>
           <select
@@ -127,9 +110,9 @@ export function ReportAiSettingsForm({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Some reasoning models can exhaust the output budget before the dossier finishes. Keep
-        Thinking = Off unless you also raise Max output tokens. Effort applies only when Thinking
-        is Adaptive.
+        Some reasoning models can exhaust the Race Dossier output cap before the response finishes.
+        Keep Thinking = Off unless the routing cap above leaves enough room. Effort applies only
+        when Thinking is Adaptive.
       </p>
 
       {error && (
