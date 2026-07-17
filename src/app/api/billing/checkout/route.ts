@@ -121,7 +121,9 @@ export async function POST(request: Request) {
       metadata,
       subscription_data: {
         metadata,
-        trial_period_days: settings.trialDays,
+        ...(settings.trialDays > 0
+          ? { trial_period_days: settings.trialDays }
+          : {}),
       },
       success_url: `${origin}/account/billing?checkout=success`,
       cancel_url: `${origin}/api/billing/checkout/cancel?reservation=${reservation.reservation_id}`,

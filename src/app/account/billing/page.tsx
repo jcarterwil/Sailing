@@ -14,8 +14,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatUsd } from "@/lib/billing/entitlements";
-import { loadBillingEntitlement, loadClubFunding } from "@/lib/billing/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  hasStripeBillingCustomer,
+  loadBillingEntitlement,
+  loadClubFunding,
+} from "@/lib/billing/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +37,7 @@ export default async function BillingPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: races }, userBilling, clubBilling] = await Promise.all([
+  const [{ data: profile }, { data: races }, userBilling, clubBilling, hasCustomer] = await Promise.all([
     supabase.from("profiles").select("is_admin, display_name").eq("id", user.id).maybeSingle(),
     supabase
       .from("races")
@@ -42,6 +45,7 @@ export default async function BillingPage({
       .order("created_at", { ascending: false }),
     loadBillingEntitlement("user", user.id),
     loadClubFunding(user.id),
+    hasStripeBillingCustomer(user.id),
   ]);
   const settings = userBilling.settings;
   const organizedRaces = (races ?? []).filter((race) => race.organizer_id === user.id);
@@ -55,13 +59,6 @@ export default async function BillingPage({
       ? clubBilling
       : await loadClubFunding(fundingRace.organizer_id)
     : null;
-  const admin = createAdminClient();
-  const { data: customer } = await admin
-    .from("billing_customers")
-    .select("stripe_customer_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
   return (
     <AuthenticatedShell
       email={user.email ?? ""}
@@ -135,7 +132,7 @@ export default async function BillingPage({
             </CardContent>
           </Card>
         </div>
-        {customer ? <BillingPortalButton /> : null}
+        {hasCustomer ? <BillingPortalButton /> : null}
       </div>
     </AuthenticatedShell>
   );

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -8,9 +8,17 @@ function source(path: string): string {
 }
 
 describe("billing integration boundaries", () => {
+  it("uses a unique Supabase migration version", () => {
+    const migrations = readdirSync(resolve(process.cwd(), "supabase/migrations"))
+      .filter((file) => file.endsWith(".sql"));
+    const versions = migrations.map((file) => file.split("_", 1)[0]);
+    expect(new Set(versions).size).toBe(versions.length);
+    expect(migrations).toContain("20260717161000_billing_subscriptions.sql");
+  });
+
   it("keeps billing writes server-mediated and reserves split funding atomically", () => {
     const migration = source(
-      "supabase/migrations/20260717160000_billing_subscriptions.sql",
+      "supabase/migrations/20260717161000_billing_subscriptions.sql",
     ).toLowerCase();
     for (const table of [
       "billing_enrollments",
@@ -44,6 +52,7 @@ describe("billing integration boundaries", () => {
     expect(checkout).toContain('mode: "subscription"');
     expect(checkout).toContain('payment_method_collection: "always"');
     expect(checkout).toContain('payment_method_types: ["card"]');
+    expect(checkout).toContain("settings.trialDays > 0");
     expect(checkout).toContain("trial_period_days: settings.trialDays");
     expect(checkout).toContain("/api/billing/checkout/cancel?reservation=");
   });
@@ -63,6 +72,9 @@ describe("billing integration boundaries", () => {
     expect(server).toContain('error?.code === "42P01"');
     expect(server).toContain('error?.code === "PGRST205"');
     expect(server).toContain("allowed: false");
+    expect(server).toContain("hasStripeBillingCustomer");
+    expect(server).toContain('.eq("status", "pending")');
+    expect(server).toContain('.gt("expires_at"');
   });
 
   it("uses a first-writer-wins Stripe customer mapping", () => {

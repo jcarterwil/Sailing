@@ -113,13 +113,45 @@ export async function hasClubAiEntitlement(organizerId: string): Promise<boolean
   return (await loadBillingEntitlement("club", organizerId)).allowed;
 }
 
+export async function hasStripeBillingCustomer(userId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("billing_customers")
+    .select("stripe_customer_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (isMissingBillingSchema(error)) return false;
+  if (error) throw new Error(`Could not load billing customer: ${error.message}`);
+  return Boolean(data);
+}
+
 export async function loadClubFunding(organizerId: string) {
   const result = await loadBillingEntitlement("club", organizerId);
-  const committedCents = result.subscriptions
+  const activeCents = result.subscriptions
     .filter((subscription) => isAccessSubscription(subscription.status))
     .reduce((total, subscription) => total + subscription.amountCents, 0);
+  let pendingCents = 0;
+  if (result.enrollment) {
+    const admin = createAdminClient();
+    const { data: pendingRows, error } = await admin
+      .from("billing_checkout_reservations")
+      .select("amount_cents")
+      .eq("enrollment_id", result.enrollment.id)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString());
+    if (!isMissingBillingSchema(error)) {
+      if (error) throw new Error(`Could not load pending Club funding: ${error.message}`);
+      pendingCents = (pendingRows ?? []).reduce(
+        (total, reservation) => total + reservation.amount_cents,
+        0,
+      );
+    }
+  }
+  const committedCents = activeCents + pendingCents;
   return {
     ...result,
+    activeCents,
+    pendingCents,
     committedCents,
     remainingCents: Math.max(0, result.settings.clubPriceCents - committedCents),
   };
