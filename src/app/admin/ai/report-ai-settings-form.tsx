@@ -127,9 +127,9 @@ export function ReportAiSettingsForm({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Newer Claude models run adaptive thinking by default, which can exhaust the output budget
-        before the dossier finishes. Keep Thinking = Off unless you also raise Max output tokens.
-        Effort applies only when Thinking is Adaptive.
+        Some reasoning models can exhaust the output budget before the dossier finishes. Keep
+        Thinking = Off unless you also raise Max output tokens. Effort applies only when Thinking
+        is Adaptive.
       </p>
 
       {error && (

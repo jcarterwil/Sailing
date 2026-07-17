@@ -1,7 +1,7 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
-
+import type { AiCatalogModel, AiProvider, AiRoute } from "@/lib/ai/contracts";
+import { generateAi, listAiModels } from "@/lib/ai/gateway";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_DOSSIER_MAX_TOKENS,
@@ -14,13 +14,9 @@ import {
 import type { WeatherEvidence } from "@/lib/weather/open-meteo";
 
 export const DEFAULT_AI_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_AI_PROVIDER: AiProvider = "anthropic";
 
-export interface AiModelOption {
-  id: string;
-  displayName: string;
-  createdAt: string;
-  structuredOutputs: boolean | null;
-}
+export type AiModelOption = AiCatalogModel;
 
 export interface AiWeatherInterpretation {
   notes: string;
@@ -30,16 +26,26 @@ export interface AiWeatherInterpretation {
   warning: string | null;
 }
 
-export async function getConfiguredAiModel(): Promise<string> {
+function normalizeProvider(value: string | null | undefined): AiProvider {
+  return value === "vercel" ? "vercel" : DEFAULT_AI_PROVIDER;
+}
+
+export async function getConfiguredAiRoute(): Promise<AiRoute> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ai_settings")
-    .select("model")
+    .select("provider, model")
     .eq("id", true)
     .maybeSingle();
   if (error) throw new Error(`Could not read AI settings: ${error.message}`);
-  if (!data?.model) return DEFAULT_AI_MODEL;
-  return data.model;
+  return {
+    provider: normalizeProvider(data?.provider),
+    model: data?.model || DEFAULT_AI_MODEL,
+  };
+}
+
+export async function getConfiguredAiModel(): Promise<string> {
+  return (await getConfiguredAiRoute()).model;
 }
 
 const VALID_DOSSIER_EFFORTS: readonly DossierEffort[] = ["low", "medium", "high", "xhigh", "max"];
@@ -48,7 +54,7 @@ export async function getDossierAiConfig(): Promise<DossierAiConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ai_settings")
-    .select("model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
+    .select("provider, model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
     .eq("id", true)
     .maybeSingle();
   if (error) throw new Error(`Could not read AI settings: ${error.message}`);
@@ -68,40 +74,44 @@ export async function getDossierAiConfig(): Promise<DossierAiConfig> {
       ? (data.report_effort as DossierEffort)
       : null;
 
-  return { model, systemPrompt, maxTokens, thinking, effort };
-}
-
-function anthropicClient(): Anthropic | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return {
+    provider: normalizeProvider(data?.provider),
+    model,
+    systemPrompt,
+    maxTokens,
+    thinking,
+    effort,
+  };
 }
 
 export async function listAvailableAiModels(): Promise<{
   models: AiModelOption[];
   warning: string | null;
 }> {
-  const client = anthropicClient();
-  if (!client) {
+  let route: AiRoute;
+  try {
+    route = await getConfiguredAiRoute();
+  } catch (error) {
     return {
       models: [],
-      warning: "ANTHROPIC_API_KEY is not configured, so live model discovery is unavailable.",
+      warning:
+        error instanceof Error
+          ? `Could not read AI routing settings: ${error.message}`
+          : "Could not read AI routing settings.",
     };
   }
   try {
-    const page = await client.models.list({ limit: 100 });
     return {
-      models: page.data.map((model) => ({
-        id: model.id,
-        displayName: model.display_name,
-        createdAt: model.created_at,
-        structuredOutputs: model.capabilities?.structured_outputs?.supported ?? null,
-      })),
+      models: await listAiModels(route.provider),
       warning: null,
     };
   } catch (error) {
     return {
       models: [],
-      warning: error instanceof Error ? `Could not load Anthropic models: ${error.message}` : "Could not load Anthropic models.",
+      warning:
+        error instanceof Error
+          ? `Could not load ${route.provider} models: ${error.message}`
+          : `Could not load ${route.provider} models.`,
     };
   }
 }
@@ -161,17 +171,9 @@ function validateInterpretation(value: unknown): Pick<AiWeatherInterpretation, "
 export async function interpretWeatherWithAi(
   evidence: WeatherEvidence,
 ): Promise<AiWeatherInterpretation> {
-  const client = anthropicClient();
-  if (!client) {
-    return deterministicInterpretation(
-      evidence,
-      "AI was unavailable because ANTHROPIC_API_KEY is not configured; weather fields still come from Open-Meteo.",
-    );
-  }
-
-  let model: string;
+  let route: AiRoute;
   try {
-    model = await getConfiguredAiModel();
+    route = await getConfiguredAiRoute();
   } catch (error) {
     return deterministicInterpretation(
       evidence,
@@ -182,9 +184,10 @@ export async function interpretWeatherWithAi(
   }
 
   try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: 350,
+    const response = await generateAi({
+      route,
+      maxOutputTokens: 350,
+      reasoning: { mode: "off" },
       system:
         "You summarize structured weather evidence for a sailboat race. Never call model output a direct observation. Do not change numeric values. Use concise plain English. Only classify sea state when marine wave-height evidence is present; otherwise return null.",
       messages: [
@@ -193,26 +196,23 @@ export async function interpretWeatherWithAi(
           content: `Create race-condition notes from this weather-service evidence:\n${JSON.stringify(evidence)}`,
         },
       ],
-      output_config: {
-        format: {
-          type: "json_schema",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              notes: { type: "string", maxLength: 800 },
-              seaState: { anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }] },
-              seaStateBasis: { type: "string", maxLength: 300 },
-            },
-            required: ["notes", "seaState", "seaStateBasis"],
+      output: {
+        type: "json_schema",
+        name: "race_weather_interpretation",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            notes: { type: "string", maxLength: 800 },
+            seaState: { anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }] },
+            seaStateBasis: { type: "string", maxLength: 300 },
           },
+          required: ["notes", "seaState", "seaStateBasis"],
         },
       },
     });
-    const text = response.content.find((block) => block.type === "text");
-    if (!text || text.type !== "text") throw new Error("AI returned no weather summary.");
-    const parsed = validateInterpretation(JSON.parse(text.text));
-    return { ...parsed, model, warning: null };
+    const parsed = validateInterpretation(JSON.parse(response.text));
+    return { ...parsed, model: response.model, warning: null };
   } catch (error) {
     return deterministicInterpretation(
       evidence,

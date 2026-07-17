@@ -23,7 +23,7 @@ export function BoatCoachHandoffClient({
 }: {
   handoff: CitedPerformanceHistoryHandoffV1;
   coachPath: string;
-  /** POST generation burns Anthropic tokens — owners/editors only. */
+  /** POST generation incurs AI-provider cost — owners/editors only. */
   canGenerate?: boolean;
 }) {
   const [copied, setCopied] = useState(false);

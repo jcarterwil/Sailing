@@ -77,7 +77,7 @@ export async function POST(
   context: { params: Promise<{ boatId: string }> },
 ) {
   const { boatId } = await context.params;
-  // Generation burns Anthropic tokens — editors/owners only. Viewers may GET the handoff.
+  // Generation incurs AI-provider cost — editors/owners only. Viewers may GET the handoff.
   const editor = await requireBoatEditor(boatId);
   if ("error" in editor) return editor.error;
 
@@ -90,7 +90,7 @@ export async function POST(
   } catch (error) {
     const message =
       error instanceof Error ? error.message.slice(0, 1_000) : "Coach generation failed.";
-    const status = /ANTHROPIC_API_KEY/.test(message) ? 503 : 500;
+    const status = /ANTHROPIC_API_KEY|AI_GATEWAY_API_KEY|VERCEL_OIDC_TOKEN/.test(message) ? 503 : 500;
     return json({ error: message, handoff: loaded.handoff }, status);
   }
 }

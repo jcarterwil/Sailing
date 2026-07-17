@@ -4,7 +4,11 @@ import { AiSettingsForm } from "@/app/admin/ai/ai-settings-form";
 import { ReportAiSettingsForm } from "@/app/admin/ai/report-ai-settings-form";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DEFAULT_AI_MODEL, listAvailableAiModels } from "@/lib/ai/settings";
+import {
+  DEFAULT_AI_MODEL,
+  DEFAULT_AI_PROVIDER,
+  listAvailableAiModels,
+} from "@/lib/ai/settings";
 import {
   DEFAULT_DOSSIER_MAX_TOKENS,
   DEFAULT_DOSSIER_THINKING,
@@ -30,7 +34,7 @@ export default async function AdminAiPage() {
   const [{ data: settings }, available] = await Promise.all([
     supabase
       .from("ai_settings")
-      .select("model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
+      .select("provider, model, report_system_prompt, report_max_tokens, report_thinking, report_effort")
       .eq("id", true)
       .maybeSingle(),
     listAvailableAiModels(),
@@ -48,13 +52,14 @@ export default async function AdminAiPage() {
           <CardHeader>
             <CardTitle>Model routing</CardTitle>
             <CardDescription>
-              Anthropic is the configured provider. The selected model is validated against the
-              live Models API when a server key is available.
+              The selected model is validated against the configured provider&apos;s live catalog
+              when a server key is available.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <AiSettingsForm
               initialModel={settings?.model ?? DEFAULT_AI_MODEL}
+              provider={settings?.provider === "vercel" ? "vercel" : DEFAULT_AI_PROVIDER}
               models={available.models}
               discoveryWarning={available.warning}
             />

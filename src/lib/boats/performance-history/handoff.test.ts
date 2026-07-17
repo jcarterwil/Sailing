@@ -191,6 +191,7 @@ describe("coach request helpers", () => {
     const handoff = buildCitedPerformanceHistoryHandoff(history);
     const params = buildPerformanceHistoryCoachCreateParams(
       {
+        provider: "anthropic",
         model: "claude-sonnet-4-20250514",
         systemPrompt: PERFORMANCE_HISTORY_COACH_SYSTEM_PROMPT,
         maxTokens: 4000,
@@ -199,6 +200,10 @@ describe("coach request helpers", () => {
       },
       handoff,
     );
+    expect(params.route).toEqual({
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+    });
     expect(params.system).toContain("association");
     expect(params.system).toMatch(/never.*caus/i);
     expect(params.messages[0]?.content).toContain("boat-performance-history-handoff-v1");

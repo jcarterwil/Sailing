@@ -1,7 +1,6 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
-
+import { generateAi } from "@/lib/ai/gateway";
 import { getDossierAiConfig } from "@/lib/ai/settings";
 import {
   PERFORMANCE_HISTORY_COACH_SYSTEM_PROMPT,
@@ -17,14 +16,6 @@ export interface GeneratedPerformanceHistoryCoachNotes {
   outputTokens: number;
 }
 
-function textFromContent(content: Anthropic.Message["content"]): string {
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("\n")
-    .trim();
-}
-
 /**
  * Optional Coach generation from a cited compact handoff only.
  * Never accepts raw tracks or uncited free-form claims.
@@ -32,11 +23,6 @@ function textFromContent(content: Anthropic.Message["content"]): string {
 export async function generatePerformanceHistoryCoachNotes(
   handoff: CitedPerformanceHistoryHandoffV1,
 ): Promise<GeneratedPerformanceHistoryCoachNotes> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not configured.");
-  }
-
   const dossierConfig = await getDossierAiConfig();
   const config = {
     ...dossierConfig,
@@ -44,26 +30,25 @@ export async function generatePerformanceHistoryCoachNotes(
     maxTokens: Math.min(dossierConfig.maxTokens, 8_000),
   };
 
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create(
+  const response = await generateAi(
     buildPerformanceHistoryCoachCreateParams(config, handoff),
   );
 
-  if (response.stop_reason === "max_tokens") {
+  if (response.finishReason === "max_tokens" || response.finishReason === "length") {
     throw new Error(
-      "Anthropic reached the output-token limit before finishing coach notes.",
+      "The AI provider reached the output-token limit before finishing coach notes.",
     );
   }
 
-  const markdown = textFromContent(response.content);
+  const markdown = response.text;
   if (!validatePerformanceHistoryCoachMarkdown(markdown)) {
-    throw new Error("Anthropic returned incomplete Performance History coach notes.");
+    throw new Error("The AI provider returned incomplete Performance History coach notes.");
   }
 
   return {
     markdown,
-    model: config.model,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    model: response.model,
+    inputTokens: response.inputTokens,
+    outputTokens: response.outputTokens,
   };
 }
