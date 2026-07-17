@@ -41,6 +41,13 @@ describe("billing integration boundaries", () => {
     expect(migration).toContain("create function public.claim_billing_webhook_event");
     expect(migration).toContain("bm.user_id = payer");
     expect(migration).toContain("s.status in ('active', 'trialing')");
+    const userReservation = migration.slice(
+      migration.indexOf("create function public.reserve_user_checkout"),
+      migration.indexOf("create function public.reserve_club_checkout"),
+    );
+    expect(userReservation).toContain("r.status = 'pending'");
+    expect(userReservation).toContain("s.status in ('active', 'trialing')");
+    expect(userReservation).not.toContain("status in ('pending', 'completed')");
     expect(migration).toContain("to service_role");
   });
 

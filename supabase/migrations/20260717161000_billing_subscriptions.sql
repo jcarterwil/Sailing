@@ -161,8 +161,18 @@ begin
     and expires_at <= timezone('utc', now());
 
   if exists (
-    select 1 from public.billing_checkout_reservations
-    where enrollment_id = target_enrollment and status in ('pending', 'completed')
+    select 1 from public.billing_checkout_reservations r
+    where r.enrollment_id = target_enrollment
+      and (
+        r.status = 'pending'
+        or (
+          r.status = 'completed'
+          and exists (
+            select 1 from public.billing_subscriptions s
+            where s.reservation_id = r.id and s.status in ('active', 'trialing')
+          )
+        )
+      )
   ) then
     raise exception 'A User subscription is already active or awaiting checkout.';
   end if;
