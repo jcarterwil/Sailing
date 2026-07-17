@@ -195,6 +195,7 @@ async function generateWithAnthropic(request: AiGenerateRequest): Promise<AiGene
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n")
     .trim();
+  if (!text) throw new Error("Anthropic returned no text content.");
   return {
     text,
     model: response.model,
