@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Save } from "lucide-react";
 
 import { updateAiFunctionRoute } from "@/app/admin/ai/actions";
+import { ModelCombobox } from "@/app/admin/ai/model-combobox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,6 @@ function FunctionRouteEditor({
   const [pending, startTransition] = useTransition();
   const catalog = catalogs[provider];
   const labels = FUNCTION_LABELS[initialRoute.function];
-  const listId = `${initialRoute.function}-${provider}-models`;
 
   function save() {
     setError(null);
@@ -92,20 +92,13 @@ function FunctionRouteEditor({
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${initialRoute.function}-model`}>Model</Label>
-          <Input
+          <ModelCombobox
             id={`${initialRoute.function}-model`}
-            list={listId}
             value={model}
-            onChange={(event) => setModel(event.target.value)}
+            onChange={setModel}
+            options={catalog.models}
             placeholder={provider === "vercel" ? "anthropic/claude-sonnet-4.6" : "claude-sonnet-4-6"}
-            spellCheck={false}
-            autoComplete="off"
           />
-          <datalist id={listId}>
-            {catalog.models.map((option) => (
-              <option key={option.id} value={option.id}>{option.displayName}</option>
-            ))}
-          </datalist>
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${initialRoute.function}-tokens`}>Output cap</Label>
