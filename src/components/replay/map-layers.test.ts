@@ -9,7 +9,34 @@ import {
   applyBoatHullIconMode,
   needsReplayMapLayers,
   shouldAddReplayMapLayers,
+  trackOverlayPaint,
 } from "@/components/replay/map-layers";
+
+describe("trackOverlayPaint", () => {
+  it("uses normal fleet styling for all boats or a missing selection", () => {
+    const fleet = {
+      color: ["get", "color"],
+      width: 3,
+      opacity: 0.9,
+    };
+    expect(trackOverlayPaint("all", "alpha")).toEqual(fleet);
+    expect(trackOverlayPaint("selected", null)).toEqual(fleet);
+  });
+
+  it("emphasizes the selected track and mutes fleet context", () => {
+    const selected = ["==", ["get", "entryId"], "alpha"];
+    expect(trackOverlayPaint("selected", "alpha")).toEqual({
+      color: [
+        "case",
+        selected,
+        ["get", "color"],
+        "#94a3b8",
+      ],
+      width: ["case", selected, 4, 1.5],
+      opacity: ["case", selected, 0.95, 0.18],
+    });
+  });
+});
 
 describe("needsReplayMapLayers", () => {
   it("is true when trails have not been added yet", () => {

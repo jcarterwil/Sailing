@@ -1,4 +1,36 @@
 import { boatIconOpacityExpression } from "@/components/replay/boats-3d-state";
+import type { TrackScope } from "@/components/replay/replay-display-preferences";
+
+export interface TrackOverlayPaint {
+  color: string | unknown[];
+  width: number | unknown[];
+  opacity: number | unknown[];
+}
+
+export function trackOverlayPaint(
+  scope: TrackScope,
+  selectedEntryId: string | null,
+): TrackOverlayPaint {
+  const selectedOnly = scope === "selected" && selectedEntryId !== null;
+  if (!selectedOnly) {
+    return {
+      color: ["get", "color"],
+      width: 3,
+      opacity: 0.9,
+    };
+  }
+  const selected = ["==", ["get", "entryId"], selectedEntryId];
+  return {
+    color: [
+      "case",
+      selected,
+      ["get", "color"],
+      "#94a3b8",
+    ],
+    width: ["case", selected, 4, 1.5],
+    opacity: ["case", selected, 0.95, 0.18],
+  };
+}
 
 /**
  * Whether replay map sources/layers still need to be added for the current style.

@@ -225,8 +225,8 @@ export function PlaybackControls({
 }) {
   const playing = usePlaybackStore((state) => state.playing);
   const speed = usePlaybackStore((state) => state.speed);
-  const trailMode = usePlaybackStore(
-    (state) => state.trailMode,
+  const trackLength = usePlaybackStore(
+    (state) => state.trackLength,
   );
   const rangeSelection = usePlaybackStore(
     (state) => state.rangeSel,
@@ -243,8 +243,8 @@ export function PlaybackControls({
   const setSpeed = usePlaybackStore(
     (state) => state.setSpeed,
   );
-  const setTrailMode = usePlaybackStore(
-    (state) => state.setTrailMode,
+  const setTrackLength = usePlaybackStore(
+    (state) => state.setTrackLength,
   );
   const setRange = usePlaybackStore(
     (state) => state.setRange,
@@ -317,8 +317,8 @@ export function PlaybackControls({
     <ViewSettingsFields
       preferences={displayPreferences}
       onPreferencesChange={onDisplayPreferencesChange}
-      trailMode={trailMode}
-      onTrailModeChange={setTrailMode}
+      trackLength={trackLength}
+      onTrackLengthChange={setTrackLength}
       cameraMode={cameraMode}
       onCameraModeChange={setCameraMode}
       hasSelection={hasSelection}

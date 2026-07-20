@@ -11,6 +11,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { Instruments } from "@/components/replay/panels/instruments";
 import { Maneuvers } from "@/components/replay/panels/maneuvers";
+import type { ManeuverFocusTarget } from "@/components/replay/map-focus";
 import { resolveMobileSheetGesture } from "@/components/replay/panels/mobile-sheet";
 import { Performance } from "@/components/replay/panels/performance";
 import { Polars } from "@/components/replay/panels/polars";
@@ -23,9 +24,11 @@ import type { RaceAnalysis } from "@/lib/analytics/types";
 export function PanelTabs({
   tracks,
   analysis = null,
+  onManeuverFocus,
 }: {
   tracks: LoadedTrack[];
   analysis?: RaceAnalysis | null;
+  onManeuverFocus?: (target: ManeuverFocusTarget) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -186,7 +189,11 @@ export function PanelTabs({
             <Performance tracks={tracks} />
           </TabsContent>
           <TabsContent value="maneuvers" className="min-h-0 overflow-y-auto">
-            <Maneuvers tracks={tracks} analysis={analysis} />
+            <Maneuvers
+              tracks={tracks}
+              analysis={analysis}
+              onFocus={onManeuverFocus}
+            />
           </TabsContent>
           <TabsContent value="polars" className="min-h-0 overflow-y-auto">
             <Polars tracks={tracks} analysis={analysis} />

@@ -5,6 +5,8 @@ import { DEFAULT_NAUTICAL_CHART_OPACITY } from "@/components/replay/nautical-cha
 export type ReplayBaseStyle = "map" | "satellite";
 export type ReplayViewMode = "tactical" | "broadcast";
 export type BroadcastCamera = "chase" | "aerial";
+export type TrackMetric = "boat" | "speed" | "vmg" | "pointing";
+export type TrackScope = "all" | "selected";
 
 export interface ReplayDisplayPreferences {
   baseStyle: ReplayBaseStyle;
@@ -13,6 +15,8 @@ export interface ReplayDisplayPreferences {
   broadcastCamera: BroadcastCamera;
   nauticalChart: boolean;
   chartOpacity: number;
+  trackMetric: TrackMetric;
+  trackScope: TrackScope;
 }
 
 export interface ReplayPreferencesStorage {
@@ -31,6 +35,8 @@ export const DEFAULT_REPLAY_DISPLAY_PREFERENCES: Readonly<ReplayDisplayPreferenc
     broadcastCamera: "chase",
     nauticalChart: false,
     chartOpacity: DEFAULT_NAUTICAL_CHART_OPACITY,
+    trackMetric: "boat",
+    trackScope: "all",
   });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,6 +53,19 @@ function isViewMode(value: unknown): value is ReplayViewMode {
 
 function isBroadcastCamera(value: unknown): value is BroadcastCamera {
   return value === "chase" || value === "aerial";
+}
+
+function isTrackMetric(value: unknown): value is TrackMetric {
+  return (
+    value === "boat" ||
+    value === "speed" ||
+    value === "vmg" ||
+    value === "pointing"
+  );
+}
+
+function isTrackScope(value: unknown): value is TrackScope {
+  return value === "all" || value === "selected";
 }
 
 function isChartOpacity(value: unknown): value is number {
@@ -68,7 +87,9 @@ export function isReplayDisplayPreferences(
     isViewMode(value.viewMode) &&
     isBroadcastCamera(value.broadcastCamera) &&
     typeof value.nauticalChart === "boolean" &&
-    isChartOpacity(value.chartOpacity)
+    isChartOpacity(value.chartOpacity) &&
+    isTrackMetric(value.trackMetric) &&
+    isTrackScope(value.trackScope)
   );
 }
 
@@ -104,6 +125,12 @@ export function parseReplayDisplayPreferences(
     chartOpacity: isChartOpacity(value.chartOpacity)
       ? value.chartOpacity
       : DEFAULT_REPLAY_DISPLAY_PREFERENCES.chartOpacity,
+    trackMetric: isTrackMetric(value.trackMetric)
+      ? value.trackMetric
+      : DEFAULT_REPLAY_DISPLAY_PREFERENCES.trackMetric,
+    trackScope: isTrackScope(value.trackScope)
+      ? value.trackScope
+      : DEFAULT_REPLAY_DISPLAY_PREFERENCES.trackScope,
   };
 }
 

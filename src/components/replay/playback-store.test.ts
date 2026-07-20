@@ -56,4 +56,11 @@ describe("playback camera defaults", () => {
       playing: true,
     });
   });
+
+  it("keeps track length independent from metric display preferences", () => {
+    usePlaybackStore.getState().setTrackLength("full");
+
+    expect(usePlaybackStore.getState().trackLength).toBe("full");
+    expect(usePlaybackStore.getState()).not.toHaveProperty("trailMode");
+  });
 });

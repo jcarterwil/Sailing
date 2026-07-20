@@ -19,6 +19,10 @@ import dynamic, {
 import type { Broadcast3dFailure } from "@/components/replay/broadcast-3d";
 import { broadcastFailureFromCause } from "@/components/replay/broadcast-runtime-boundary";
 import { Leaderboard } from "@/components/replay/leaderboard";
+import type {
+  ManeuverFocusTarget,
+  ReplayMapFocusRequest,
+} from "@/components/replay/map-focus";
 import { MapView } from "@/components/replay/map-view";
 import { PanelTabs } from "@/components/replay/panels/panel-tabs";
 import { PlaybackControls } from "@/components/replay/playback-controls";
@@ -246,6 +250,9 @@ export function RaceReplay({
     );
   const [rendererNotice, setRendererNotice] =
     useState<string | null>(null);
+  const [mapFocusRequest, setMapFocusRequest] =
+    useState<ReplayMapFocusRequest | null>(null);
+  const mapFocusRequestIdRef = useRef(0);
   const broadcastRetryRef = useRef<(() => void) | null>(
     null,
   );
@@ -275,6 +282,10 @@ export function RaceReplay({
           : null;
     };
   }, [analysis?.race.legs]);
+  const replayLegs = useMemo(
+    () => analysis?.race.legs ?? [],
+    [analysis?.race.legs],
+  );
   const startsMs = useMemo(
     () =>
       tracks
@@ -331,6 +342,7 @@ export function RaceReplay({
   const updateDisplayPreferences = useCallback(
     (patch: Partial<ReplayDisplayPreferences>) => {
       if (patch.viewMode === "broadcast") {
+        setMapFocusRequest(null);
         const retry = broadcastRetryRef.current;
         broadcastRetryRef.current = null;
         retry?.();
@@ -353,6 +365,18 @@ export function RaceReplay({
         "). The base map remains available.",
     );
   }, []);
+
+  const handleManeuverFocus = useCallback(
+    (target: ManeuverFocusTarget) => {
+      updateDisplayPreferences({ viewMode: "tactical" });
+      mapFocusRequestIdRef.current += 1;
+      setMapFocusRequest({
+        ...target,
+        requestId: mapFocusRequestIdRef.current,
+      });
+    },
+    [updateDisplayPreferences],
+  );
 
   useEffect(() => {
     saveReplayDisplayPreferences(displayPreferences);
@@ -495,6 +519,15 @@ export function RaceReplay({
               chartOpacity={
                 displayPreferences.chartOpacity
               }
+              trackMetric={
+                displayPreferences.trackMetric
+              }
+              trackScope={
+                displayPreferences.trackScope
+              }
+              legs={replayLegs}
+              twdAt={twdAt}
+              focusRequest={mapFocusRequest}
               onChartError={handleChartError}
             />
           )}
@@ -524,6 +557,7 @@ export function RaceReplay({
         <PanelTabs
           tracks={tracks}
           analysis={analysis}
+          onManeuverFocus={handleManeuverFocus}
         />
       </div>
 
