@@ -289,13 +289,9 @@ export function useReplayVoiceCommentary(options: {
       speed: playback.speed,
     });
 
-    if (!allowed) {
-      return () => {
-        stopAudio();
-      };
-    }
+    if (!allowed) return;
 
-    const unsubscribe = usePlaybackStore.subscribe((state, previous) => {
+    return usePlaybackStore.subscribe((state, previous) => {
       if (state.playing === previous.playing && state.speed === previous.speed) {
         return;
       }
@@ -307,11 +303,27 @@ export function useReplayVoiceCommentary(options: {
         speed: state.speed,
       });
     });
-    return () => {
-      unsubscribe();
-      stopAudio();
-    };
+    // Intentionally do not stopAudio() on effect re-run: activeItemText can
+    // change while the same itemId is still active; cleanup would abort TTS
+    // and spokenItemRef would prevent a retry. Interruptions are driven by
+    // shouldStopReplaySpeech inside apply(); unmount cleanup is separate.
   }, [activeItemId, activeItemText, allowed, enabled, raceId, voiceControlRef]);
+
+  useEffect(() => {
+    return () => {
+      playGenerationRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      const audio = audioRef.current;
+      if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+    };
+  }, []);
 
   return {
     enabled,
