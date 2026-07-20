@@ -181,16 +181,19 @@ export function ReplayCommentary({
     () => filterReplayCommentaryItems(items, filter),
     [filter, items],
   );
-  const activeId = useActiveCommentaryId(items);
+  // Banner + voice follow the same filtered crawler stream (Normal vs Verbose).
+  const activeId = useActiveCommentaryId(visibleItems);
   const activeItem = useMemo(
-    () => items.find((item) => item.id === activeId) ?? null,
-    [activeId, items],
+    () => visibleItems.find((item) => item.id === activeId) ?? null,
+    [activeId, visibleItems],
   );
   const voiceAllowed = voiceAvailable && !readOnly;
   const voice = useReplayVoiceCommentary({
     raceId,
     activeItemId: activeId,
     activeItemText: activeItem?.text ?? null,
+    // Keep Voice preference alive across Normal/Verbose; an empty filtered
+    // stream simply has no active line to speak (and stops in-flight audio).
     allowed: voiceAllowed && status === "valid" && items.length > 0,
   });
 
@@ -251,8 +254,41 @@ export function ReplayCommentary({
             aria-live="polite"
             aria-atomic="true"
           >
-            {activeItem?.text ?? "Waiting for the first race event."}
+            {activeItem?.text ??
+              (filter === "key"
+                ? "Waiting for the first key call."
+                : "Waiting for the first race event.")}
           </p>
+        </div>
+        <div
+          className="flex rounded-lg border bg-muted/40 p-0.5"
+          role="group"
+          aria-label="Play-by-play detail"
+        >
+          {([
+            { value: "key" as const, label: "Normal" },
+            { value: "all" as const, label: "Verbose" },
+          ]).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={cn(
+                "min-h-11 rounded-md px-2.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3",
+                filter === value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={filter === value}
+              title={
+                value === "key"
+                  ? "Normal: key race calls only"
+                  : "Verbose: every detected call"
+              }
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         {voiceAllowed ? (
           <Button
@@ -267,8 +303,8 @@ export function ReplayCommentary({
             }
             title={
               voice.enabled
-                ? "Voice play-by-play on — press play to hear calls"
-                : "Hear OpenAI voice play-by-play while playing"
+                ? "Voice repeats the crawler line while playing"
+                : "Hear the crawler play-by-play spoken aloud"
             }
             data-replay-voice={voice.enabled ? "on" : "off"}
             data-replay-voice-speaking={voice.speaking}
@@ -314,28 +350,9 @@ export function ReplayCommentary({
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               Commentary feed
             </h3>
-            <div
-              className="flex rounded-lg border bg-muted/40 p-0.5"
-              role="group"
-              aria-label="Commentary filter"
-            >
-              {(["key", "all"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={cn(
-                    "min-h-11 rounded-md px-3 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    filter === value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-pressed={filter === value}
-                  onClick={() => setFilter(value)}
-                >
-                  {value === "key" ? "Key events" : "All events"}
-                </button>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {filter === "key" ? "Normal · key calls" : "Verbose · all calls"}
+            </p>
           </div>
 
           <ol className="max-h-[min(18rem,30dvh)] overflow-y-auto overscroll-contain p-1.5">
