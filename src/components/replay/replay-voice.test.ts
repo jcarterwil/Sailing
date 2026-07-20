@@ -75,33 +75,65 @@ describe("replay voice sync", () => {
     expect(shouldStopReplaySpeech(base, base)).toBe(false);
   });
 
-  it("refuses stale TTS play after abort, pause, or a newer active item", () => {
+  it("refuses stale TTS play after abort, pause, speed-up, or a newer active item", () => {
     expect(
       shouldCommitReplaySpeechPlay({
         aborted: true,
         intendedItemId: "event:a",
-        current: { itemId: "event:a", playing: true, enabled: true },
+        current: {
+          itemId: "event:a",
+          playing: true,
+          enabled: true,
+          speed: 1,
+        },
       }),
     ).toBe(false);
     expect(
       shouldCommitReplaySpeechPlay({
         aborted: false,
         intendedItemId: "event:a",
-        current: { itemId: "event:b", playing: true, enabled: true },
+        current: {
+          itemId: "event:b",
+          playing: true,
+          enabled: true,
+          speed: 1,
+        },
       }),
     ).toBe(false);
     expect(
       shouldCommitReplaySpeechPlay({
         aborted: false,
         intendedItemId: "event:a",
-        current: { itemId: "event:a", playing: false, enabled: true },
+        current: {
+          itemId: "event:a",
+          playing: false,
+          enabled: true,
+          speed: 1,
+        },
       }),
     ).toBe(false);
     expect(
       shouldCommitReplaySpeechPlay({
         aborted: false,
         intendedItemId: "event:a",
-        current: { itemId: "event:a", playing: true, enabled: true },
+        current: {
+          itemId: "event:a",
+          playing: true,
+          enabled: true,
+          speed: REPLAY_SPEECH_MAX_SPEED + 1,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldCommitReplaySpeechPlay({
+        aborted: false,
+        intendedItemId: "event:a",
+        current: {
+          itemId: "event:a",
+          playing: true,
+          enabled: true,
+          speed: REPLAY_SPEECH_MAX_SPEED,
+        },
       }),
     ).toBe(true);
   });

@@ -42,14 +42,19 @@ export function shouldSpeakReplayCommentary(
  * Whether an async TTS fetch may still assign `src` / call `play()`.
  * Prevents a stale request from resurrecting audio after a newer line (or
  * pause/disable) already stopped the shared element — the overlap bug.
+ * Also refuses commit once playback exceeds {@link REPLAY_SPEECH_MAX_SPEED}.
  */
 export function shouldCommitReplaySpeechPlay(options: {
   aborted: boolean;
   intendedItemId: string;
-  current: Pick<ReplayVoiceSpeakRequest, "itemId" | "playing" | "enabled">;
+  current: Pick<
+    ReplayVoiceSpeakRequest,
+    "itemId" | "playing" | "enabled" | "speed"
+  >;
 }): boolean {
   if (options.aborted) return false;
   if (!options.current.enabled || !options.current.playing) return false;
+  if (options.current.speed > REPLAY_SPEECH_MAX_SPEED) return false;
   if (!options.current.itemId) return false;
   return options.current.itemId === options.intendedItemId;
 }

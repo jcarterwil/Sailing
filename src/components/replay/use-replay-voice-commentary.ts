@@ -162,16 +162,20 @@ export function useReplayVoiceCommentary(options: {
         spokenItemRef.current = null;
       }
 
-      // Fast scrubbing / 10×+: mark the line seen without fetching so we do not
-      // queue overlapping TTS work that stalls MapLibre boat updates.
+      // Fast scrubbing / 10×+: stop any in-flight clip and mark the line seen
+      // without fetching so TTS work does not stall MapLibre boat updates.
       if (
         next.enabled &&
         next.playing &&
         next.itemId &&
-        next.speed > REPLAY_SPEECH_MAX_SPEED &&
-        next.itemId !== spokenItemRef.current
+        next.speed > REPLAY_SPEECH_MAX_SPEED
       ) {
-        spokenItemRef.current = next.itemId;
+        if (previous.speed <= REPLAY_SPEECH_MAX_SPEED) {
+          stopAudio();
+        }
+        if (next.itemId !== spokenItemRef.current) {
+          spokenItemRef.current = next.itemId;
+        }
         requestRef.current = next;
         return;
       }
@@ -209,6 +213,7 @@ export function useReplayVoiceCommentary(options: {
                   itemId: current.itemId ?? "",
                   playing: current.playing,
                   enabled: current.enabled,
+                  speed: current.speed,
                 },
               })
             ) {
@@ -236,6 +241,7 @@ export function useReplayVoiceCommentary(options: {
                   itemId: requestRef.current.itemId ?? "",
                   playing: requestRef.current.playing,
                   enabled: requestRef.current.enabled,
+                  speed: requestRef.current.speed,
                 },
               })
             ) {
