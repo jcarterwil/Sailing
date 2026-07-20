@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AI_BUDGET_CONTRIBUTION_AMOUNTS_CENTS } from "@/lib/billing/contributions";
+import { formatUsd } from "@/lib/billing/entitlements";
 
 async function openStripe(path: string, body?: object) {
   const response = await fetch(path, {
@@ -15,6 +17,72 @@ async function openStripe(path: string, body?: object) {
   const result = (await response.json()) as { url?: string; error?: string };
   if (!response.ok || !result.url) throw new Error(result.error ?? "Could not open Stripe.");
   window.location.assign(result.url);
+}
+
+export function AiBudgetContributionButtons({
+  enabled,
+  mode,
+}: {
+  enabled: boolean;
+  mode: "live" | "test" | "unknown";
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pendingAmount, setPendingAmount] = useState<number | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!enabled) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        One-time contributions are temporarily unavailable.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        {AI_BUDGET_CONTRIBUTION_AMOUNTS_CENTS.map((amountCents) => (
+          <Button
+            key={amountCents}
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                setError(null);
+                setPendingAmount(amountCents);
+                try {
+                  await openStripe("/api/billing/contributions/checkout", {
+                    amountCents,
+                  });
+                } catch (checkoutError) {
+                  setError(
+                    checkoutError instanceof Error
+                      ? checkoutError.message
+                      : "Contribution checkout failed.",
+                  );
+                  setPendingAmount(null);
+                }
+              })
+            }
+          >
+            {pendingAmount === amountCents ? "Opening…" : formatUsd(amountCents)}
+          </Button>
+        ))}
+      </div>
+      {mode === "test" ? (
+        <p className="text-xs text-muted-foreground">
+          Stripe test mode is active; no real payment will be collected.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function UserCheckoutButton({ trialDays }: { trialDays: number }) {

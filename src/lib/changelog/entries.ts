@@ -9,6 +9,14 @@ import type { ChangelogEntry } from "@/lib/changelog/types";
  */
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
+    id: "2026-07-20-ai-budget-contributions",
+    date: "2026-07-20",
+    title: "Support the AI budget",
+    summary:
+      "Make a one-time $25, $50, or $100 contribution from Plans & billing to help fund Sailing's model and voice usage without changing your plan.",
+    prs: [213],
+  },
+  {
     id: "2026-07-20-whats-new",
     date: "2026-07-20",
     title: "What's new in the header",
