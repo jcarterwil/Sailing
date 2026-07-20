@@ -255,7 +255,7 @@ export function Maneuvers({
                   : "";
               return (
                 <TableRow
-                  key={`${row.entryId}-${row.tMs}-${row.type}`}
+                  key={`${row.entryId}-${row.tMs}-${row.type}-${row.window.startMs}-${row.window.endMs}`}
                   style={{
                     backgroundColor: isSelected
                       ? `${row.color}1f`
