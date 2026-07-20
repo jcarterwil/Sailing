@@ -46,3 +46,34 @@ export function shouldStopReplaySpeech(
 export function replaySpeechUrl(raceId: string): string {
   return `/api/races/${encodeURIComponent(raceId)}/replay/speech`;
 }
+
+/** Cache key includes spoken text so renamed boats do not replay stale audio. */
+export function replaySpeechCacheKey(
+  raceId: string,
+  itemId: string,
+  text: string,
+): string {
+  return `${raceId}:${itemId}:${text}`;
+}
+
+/**
+ * Minimal silent WAV used to unlock HTMLAudioElement playback during a user
+ * gesture so later async TTS play() calls are allowed.
+ */
+export const REPLAY_SPEECH_UNLOCK_WAV =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
+export async function unlockReplaySpeechAudio(
+  audio: HTMLAudioElement,
+): Promise<void> {
+  audio.src = REPLAY_SPEECH_UNLOCK_WAV;
+  try {
+    await audio.play();
+  } catch {
+    // Gesture unlock is best-effort; later play() may still succeed.
+  } finally {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }
+}

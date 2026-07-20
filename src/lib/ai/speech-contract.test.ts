@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  clipReplaySpeechText,
   isReplaySpeechVoice,
   normalizeReplaySpeechText,
   parseReplaySpeechRequest,
@@ -20,6 +21,14 @@ describe("replay speech contract", () => {
     expect(normalizeReplaySpeechText("  Boat One\ntakes  the lead  ")).toBe(
       "Boat One takes the lead",
     );
+  });
+
+  it("clips long grouped commentary instead of rejecting it", () => {
+    const long = Array.from({ length: 80 }, (_, index) => `Boat${index}`).join(" ");
+    const clipped = clipReplaySpeechText(long);
+    expect(clipped.length).toBeLessThanOrEqual(REPLAY_SPEECH_MAX_CHARS);
+    expect(clipped.endsWith("…")).toBe(true);
+    expect(clipReplaySpeechText("Short call.")).toBe("Short call.");
   });
 
   it("parses speech requests with a default voice", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  replaySpeechCacheKey,
   replaySpeechUrl,
   shouldSpeakReplayCommentary,
   shouldStopReplaySpeech,
@@ -48,5 +49,11 @@ describe("replay voice sync", () => {
 
   it("builds the race-scoped speech endpoint", () => {
     expect(replaySpeechUrl("race/1")).toBe("/api/races/race%2F1/replay/speech");
+  });
+
+  it("includes commentary text in the audio cache key", () => {
+    expect(replaySpeechCacheKey("race", "event:a", "Alpha leads")).not.toBe(
+      replaySpeechCacheKey("race", "event:a", "Beta leads"),
+    );
   });
 });

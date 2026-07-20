@@ -190,6 +190,7 @@ export function ReplayCommentary({
   const voice = useReplayVoiceCommentary({
     raceId,
     activeItemId: activeId,
+    activeItemText: activeItem?.text ?? null,
     allowed: voiceAllowed && status === "valid" && items.length > 0,
   });
 

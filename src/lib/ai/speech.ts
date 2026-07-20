@@ -1,14 +1,14 @@
 import "server-only";
 
 import {
-  normalizeReplaySpeechText,
-  REPLAY_SPEECH_MAX_CHARS,
+  clipReplaySpeechText,
   REPLAY_SPEECH_MODEL,
   REPLAY_SPEECH_DEFAULT_VOICE,
   type ReplaySpeechVoice,
 } from "@/lib/ai/speech-contract";
 
 export {
+  clipReplaySpeechText,
   isReplaySpeechVoice,
   normalizeReplaySpeechText,
   parseReplaySpeechRequest,
@@ -46,11 +46,8 @@ export async function generateReplaySpeech(options: {
   voice?: ReplaySpeechVoice;
   signal?: AbortSignal;
 }): Promise<{ audio: Uint8Array; contentType: "audio/mpeg" }> {
-  const text = normalizeReplaySpeechText(options.text);
+  const text = clipReplaySpeechText(options.text);
   if (!text) throw new Error("Speech text is empty.");
-  if (text.length > REPLAY_SPEECH_MAX_CHARS) {
-    throw new Error(`Speech text exceeds ${REPLAY_SPEECH_MAX_CHARS} characters.`);
-  }
 
   const voice = options.voice ?? REPLAY_SPEECH_DEFAULT_VOICE;
   const response = await fetch(VERCEL_AI_GATEWAY_SPEECH_URL, {

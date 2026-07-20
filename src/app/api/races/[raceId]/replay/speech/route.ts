@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 
 import { buildReplayCommentaryItems } from "@/components/replay/replay-commentary-model";
 import {
+  clipReplaySpeechText,
   generateReplaySpeech,
   parseReplaySpeechRequest,
-  REPLAY_SPEECH_MAX_CHARS,
 } from "@/lib/ai/speech";
 import { hasClubAiEntitlement } from "@/lib/billing/server";
 import { parseStoredRaceAnalysis } from "@/lib/races/stored-analysis";
@@ -114,13 +114,11 @@ export async function POST(
   if (!item) {
     return json({ error: "Commentary item not found." }, 404);
   }
-  if (item.text.length > REPLAY_SPEECH_MAX_CHARS) {
-    return json({ error: "Commentary line is too long to speak." }, 422);
-  }
 
   try {
     const spoken = await generateReplaySpeech({
-      text: item.text,
+      // Long mark-rounding clusters are clipped to the TTS budget.
+      text: clipReplaySpeechText(item.text),
       voice: parsed.voice,
       signal: request.signal,
     });

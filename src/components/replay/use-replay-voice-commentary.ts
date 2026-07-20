@@ -5,9 +5,11 @@ import { toast } from "sonner";
 
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
+  replaySpeechCacheKey,
   replaySpeechUrl,
   shouldSpeakReplayCommentary,
   shouldStopReplaySpeech,
+  unlockReplaySpeechAudio,
 } from "@/components/replay/replay-voice";
 import { REPLAY_SPEECH_DEFAULT_VOICE } from "@/lib/ai/speech-contract";
 
@@ -16,9 +18,10 @@ const audioCache = new Map<string, string>();
 async function fetchSpeechBlob(
   raceId: string,
   itemId: string,
+  text: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const cacheKey = `${raceId}:${itemId}`;
+  const cacheKey = replaySpeechCacheKey(raceId, itemId, text);
   const cached = audioCache.get(cacheKey);
   if (cached) return cached;
 
@@ -58,6 +61,7 @@ async function fetchSpeechBlob(
 
 type VoiceRequest = {
   itemId: string | null;
+  itemText: string | null;
   playing: boolean;
   enabled: boolean;
 };
@@ -70,21 +74,30 @@ type VoiceRequest = {
 export function useReplayVoiceCommentary(options: {
   raceId: string;
   activeItemId: string | null;
+  /** Current on-screen commentary text — used only for cache identity. */
+  activeItemText: string | null;
   /** Public share / read-only replay never spends Club AI credits. */
   allowed: boolean;
 }) {
-  const { raceId, activeItemId, allowed } = options;
+  const { raceId, activeItemId, activeItemText, allowed } = options;
   const [wantEnabled, setWantEnabled] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const enabled = allowed && wantEnabled;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const spokenItemRef = useRef<string | null>(null);
+  const unlockedRef = useRef(false);
   const requestRef = useRef<VoiceRequest>({
     itemId: activeItemId,
+    itemText: activeItemText,
     playing: false,
     enabled: false,
   });
+
+  const ensureAudio = () => {
+    if (!audioRef.current) audioRef.current = new Audio();
+    return audioRef.current;
+  };
 
   const stopAudio = () => {
     abortRef.current?.abort();
@@ -131,19 +144,21 @@ export function useReplayVoiceCommentary(options: {
         })
       ) {
         const itemId = next.itemId!;
+        const itemText = next.itemText ?? "";
         spokenItemRef.current = itemId;
         const controller = new AbortController();
         abortRef.current?.abort();
         abortRef.current = controller;
         void (async () => {
           try {
-            const url = await fetchSpeechBlob(raceId, itemId, controller.signal);
+            const url = await fetchSpeechBlob(
+              raceId,
+              itemId,
+              itemText,
+              controller.signal,
+            );
             if (controller.signal.aborted) return;
-            let audio = audioRef.current;
-            if (!audio) {
-              audio = new Audio();
-              audioRef.current = audio;
-            }
+            const audio = ensureAudio();
             audio.onended = () => setSpeaking(false);
             audio.onerror = () => setSpeaking(false);
             audio.src = url;
@@ -155,9 +170,19 @@ export function useReplayVoiceCommentary(options: {
             spokenItemRef.current = null;
             const message =
               error instanceof Error ? error.message : "Could not play voice commentary.";
-            toast.error(message);
-            if (/Club AI|AI_GATEWAY|not configured|402|503/i.test(message)) {
+            const autoplayBlocked =
+              error instanceof DOMException && error.name === "NotAllowedError";
+            toast.error(
+              autoplayBlocked
+                ? "Browser blocked voice audio. Toggle Voice off and on, then press play."
+                : message,
+            );
+            if (
+              autoplayBlocked ||
+              /Club AI|AI_GATEWAY|not configured|402|503/i.test(message)
+            ) {
               setWantEnabled(false);
+              unlockedRef.current = false;
             }
           }
         })();
@@ -168,6 +193,7 @@ export function useReplayVoiceCommentary(options: {
 
     apply({
       itemId: activeItemId,
+      itemText: activeItemText,
       playing: usePlaybackStore.getState().playing,
       enabled,
     });
@@ -176,11 +202,12 @@ export function useReplayVoiceCommentary(options: {
       if (state.playing === previous.playing) return;
       apply({
         itemId: activeItemId,
+        itemText: activeItemText,
         playing: state.playing,
         enabled,
       });
     });
-  }, [activeItemId, allowed, enabled, raceId]);
+  }, [activeItemId, activeItemText, allowed, enabled, raceId]);
 
   useEffect(() => {
     return () => {
@@ -193,11 +220,20 @@ export function useReplayVoiceCommentary(options: {
     speaking,
     setEnabled: (value: boolean) => {
       if (!allowed) return;
-      setWantEnabled(value);
-      if (!value) {
-        stopAudio();
-        spokenItemRef.current = null;
+      if (value) {
+        // Unlock HTMLAudioElement during this click so later async TTS play()
+        // is not rejected after the user-activation window expires.
+        const audio = ensureAudio();
+        void unlockReplaySpeechAudio(audio).then(() => {
+          unlockedRef.current = true;
+        });
+        setWantEnabled(true);
+        return;
       }
+      setWantEnabled(false);
+      unlockedRef.current = false;
+      stopAudio();
+      spokenItemRef.current = null;
     },
   };
 }

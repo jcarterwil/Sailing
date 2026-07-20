@@ -30,6 +30,24 @@ export function normalizeReplaySpeechText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Fit long grouped commentary into the TTS budget without failing the request.
+ * Prefer a word boundary; fall back to a hard cut.
+ */
+export function clipReplaySpeechText(
+  text: string,
+  maxChars = REPLAY_SPEECH_MAX_CHARS,
+): string {
+  const normalized = normalizeReplaySpeechText(text);
+  if (normalized.length <= maxChars) return normalized;
+  const budget = Math.max(1, maxChars - 1);
+  const slice = normalized.slice(0, budget);
+  const boundary = slice.lastIndexOf(" ");
+  const clipped = (boundary >= Math.floor(budget * 0.6) ? slice.slice(0, boundary) : slice)
+    .trimEnd();
+  return `${clipped}…`;
+}
+
 export function parseReplaySpeechRequest(body: unknown): {
   itemId: string;
   voice: ReplaySpeechVoice;
