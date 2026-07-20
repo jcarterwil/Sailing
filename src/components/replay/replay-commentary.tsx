@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronUp, MessageSquareText } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  MessageSquareText,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 
 import {
@@ -13,6 +19,7 @@ import {
 } from "@/components/replay/replay-commentary-model";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import type { LoadedTrack } from "@/components/replay/track-loader";
+import { useReplayVoiceCommentary } from "@/components/replay/use-replay-voice-commentary";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ReplayEventTimelineV1 } from "@/lib/analytics/replay-events/types";
@@ -30,6 +37,8 @@ export interface ReplayCommentaryProps {
   raceId: string;
   gunTimeMs?: number | null;
   readOnly?: boolean;
+  /** Club AI entitlement — OpenAI TTS play-by-play (authenticated replay only). */
+  voiceAvailable?: boolean;
 }
 
 function useActiveCommentaryId(
@@ -151,6 +160,7 @@ export function ReplayCommentary({
   raceId,
   gunTimeMs = null,
   readOnly = false,
+  voiceAvailable = false,
 }: ReplayCommentaryProps) {
   const panelId = useId();
   const [expanded, setExpanded] = useState(false);
@@ -176,6 +186,13 @@ export function ReplayCommentary({
     () => items.find((item) => item.id === activeId) ?? null,
     [activeId, items],
   );
+  const voiceAllowed = voiceAvailable && !readOnly;
+  const voice = useReplayVoiceCommentary({
+    raceId,
+    activeItemId: activeId,
+    activeItemText: activeItem?.text ?? null,
+    allowed: voiceAllowed && status === "valid" && items.length > 0,
+  });
 
   if (status !== "valid" || !timeline) {
     return (
@@ -237,6 +254,39 @@ export function ReplayCommentary({
             {activeItem?.text ?? "Waiting for the first race event."}
           </p>
         </div>
+        {voiceAllowed ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11 shrink-0 px-3"
+            aria-pressed={voice.enabled}
+            aria-label={
+              voice.enabled
+                ? "Turn off OpenAI voice play-by-play"
+                : "Turn on OpenAI voice play-by-play"
+            }
+            title={
+              voice.enabled
+                ? "Voice play-by-play on — press play to hear calls"
+                : "Hear OpenAI voice play-by-play while playing"
+            }
+            data-replay-voice={voice.enabled ? "on" : "off"}
+            data-replay-voice-speaking={voice.speaking}
+            onClick={() => voice.setEnabled(!voice.enabled)}
+          >
+            {voice.enabled ? (
+              <Volume2
+                className={cn("size-4", voice.speaking && "text-sky-600")}
+                aria-hidden="true"
+              />
+            ) : (
+              <VolumeX className="size-4" aria-hidden="true" />
+            )}
+            <span className="hidden sm:inline">
+              {voice.enabled ? "Voice on" : "Voice"}
+            </span>
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="ghost"

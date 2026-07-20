@@ -214,6 +214,7 @@ export function RaceReplay({
   analysis = null,
   commentaryStatus,
   readOnly = false,
+  voiceAvailable = false,
 }: {
   raceId: string;
   raceName: string;
@@ -229,6 +230,8 @@ export function RaceReplay({
   /** Parse state for the optional replay-event sub-contract. */
   commentaryStatus?: ReplayCommentaryStatus;
   readOnly?: boolean;
+  /** Club AI entitlement for OpenAI voice play-by-play. */
+  voiceAvailable?: boolean;
 }) {
   const [tracks, setTracks] =
     useState<LoadedTrack[] | null>(null);
@@ -560,6 +563,7 @@ export function RaceReplay({
               null
             }
             readOnly={readOnly}
+            voiceAvailable={voiceAvailable}
           />
         </div>
         <div className="-mx-2 mt-2 sm:mx-0 sm:mt-3">
