@@ -112,8 +112,6 @@ export function useReplayVoiceCommentary(options: {
   };
 
   useEffect(() => {
-    if (!allowed) return;
-
     const apply = (next: VoiceRequest) => {
       const previous = requestRef.current;
       if (
@@ -132,7 +130,7 @@ export function useReplayVoiceCommentary(options: {
       ) {
         stopAudio();
       }
-      if (!next.enabled) {
+      if (!next.enabled || !next.itemId) {
         spokenItemRef.current = null;
       }
 
@@ -191,12 +189,16 @@ export function useReplayVoiceCommentary(options: {
       requestRef.current = next;
     };
 
+    // When allowed drops (or Normal has no active line), still sync a disabled
+    // request so in-flight TTS is stopped without leaving orphan audio.
     apply({
       itemId: activeItemId,
       itemText: activeItemText,
       playing: usePlaybackStore.getState().playing,
-      enabled,
+      enabled: allowed && enabled,
     });
+
+    if (!allowed) return;
 
     return usePlaybackStore.subscribe((state, previous) => {
       if (state.playing === previous.playing) return;

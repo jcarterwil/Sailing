@@ -44,6 +44,7 @@ describe("replay voice sync", () => {
     expect(shouldStopReplaySpeech(base, { ...base, playing: false })).toBe(true);
     expect(shouldStopReplaySpeech(base, { ...base, enabled: false })).toBe(true);
     expect(shouldStopReplaySpeech(base, { ...base, itemId: "event:b" })).toBe(true);
+    expect(shouldStopReplaySpeech(base, { ...base, itemId: "" })).toBe(true);
     expect(shouldStopReplaySpeech(base, base)).toBe(false);
   });
 

@@ -192,7 +192,9 @@ export function ReplayCommentary({
     raceId,
     activeItemId: activeId,
     activeItemText: activeItem?.text ?? null,
-    allowed: voiceAllowed && status === "valid" && visibleItems.length > 0,
+    // Keep Voice preference alive across Normal/Verbose; an empty filtered
+    // stream simply has no active line to speak (and stops in-flight audio).
+    allowed: voiceAllowed && status === "valid" && items.length > 0,
   });
 
   if (status !== "valid" || !timeline) {

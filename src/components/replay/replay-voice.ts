@@ -14,6 +14,7 @@ export type ReplayVoiceSpeakRequest = {
 /**
  * Decide whether a newly active commentary item should be spoken.
  * Speak only while enabled + playing, and only when the active item changes.
+ * An empty itemId means the filtered crawler has nothing to say yet.
  */
 export function shouldSpeakReplayCommentary(
   previousItemId: string | null,
@@ -31,11 +32,15 @@ export function shouldStopReplaySpeech(
 ): boolean {
   if (previous.enabled && !next.enabled) return true;
   if (previous.playing && !next.playing) return true;
+  if (previous.enabled && next.enabled && previous.itemId && !next.itemId) {
+    // Filtered crawler went idle (e.g. Verbose → Normal with no key calls).
+    return true;
+  }
   if (
     previous.enabled &&
     next.enabled &&
     previous.itemId !== next.itemId &&
-    previous.itemId !== null
+    previous.itemId !== ""
   ) {
     // A new event is active — interrupt the previous call even if still playing.
     return true;
