@@ -22,6 +22,7 @@ import {
   isAppNavItemActive,
   type AppNavIcon,
 } from "@/components/layout/app-nav-model";
+import { WhatsNewNotice } from "@/components/layout/whats-new-notice";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,7 @@ export function AppNav({
               </nav>
             </SheetContent>
           </Sheet>
+          <WhatsNewNotice />
           <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

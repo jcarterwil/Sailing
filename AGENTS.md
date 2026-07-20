@@ -40,10 +40,21 @@ Package manager: npm. Path alias `@/*` → `src/*`. No test runner beyond Vitest
 - `src/app` — routes. Auth under `src/app/auth/*`; races under `src/app/races/*`; API route handlers under `src/app/api/*`.
 - `src/app/races/actions.ts` — server actions (create/join race, request upload, etc.). Files upload **direct to Storage** via signed URLs — never through a server action (1MB body cap).
 - `src/lib/analytics` — pure, dependency-free domain engine (parsers, cleaning, and the wind/maneuver/race algorithms as they land).
+- `src/lib/changelog` — product “What’s new” entries shown in the authenticated header (`WhatsNewNotice` in `AppNav`). Summarize sailor-facing work from merged PRs here.
 - `src/lib/supabase` — three clients: `client.ts` (browser), `server.ts` (RSC/route handlers), `admin.ts` (service role, server-only), plus `proxy.ts` (session refresh).
 - `src/components/replay` — the client-only race replay (map, playback, timeline).
 - `supabase/migrations` — schema history; `supabase/config.toml` — local/project config.
 - `Examples/` — real fleet track files and reference PDFs. **Git-ignored (personal correspondence); never commit.**
+
+## Product changelog
+
+When a PR ships **sailor-facing** product changes, prepend a short entry to `src/lib/changelog/entries.ts` (newest first):
+
+1. Summarize the merged GitHub work in plain language (title + 1–2 sentence summary). Prefer one digest entry for a multi-PR epic over listing every child PR.
+2. Set `id` to `YYYY-MM-DD-slug`, `date` to the merge day (UTC), and `prs` to the merged PR number(s).
+3. Skip CI, docs-only, dependency, and admin-tooling-only changes unless they change something sailors see in the app.
+
+The header unread dot clears when a user opens What’s new (localStorage).
 
 ## How changes reach production
 
