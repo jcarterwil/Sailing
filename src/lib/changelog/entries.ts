@@ -9,6 +9,14 @@ import type { ChangelogEntry } from "@/lib/changelog/types";
  */
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
+    id: "2026-07-20-whats-new",
+    date: "2026-07-20",
+    title: "What's new in the header",
+    summary:
+      "A sparkles control in the top bar lists recent product changes, summarized from shipped GitHub work, with an unread indicator until you open it.",
+    prs: [207],
+  },
+  {
     id: "2026-07-17-plans-billing",
     date: "2026-07-17",
     title: "Plans & billing",
