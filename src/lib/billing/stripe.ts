@@ -5,6 +5,15 @@ import Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 let stripeClient: Stripe | null = null;
+let contributionStripeClient: Stripe | null = null;
+
+export type StripeMode = "live" | "test" | "unknown";
+
+function detectStripeMode(apiKey: string | undefined): StripeMode {
+  if (apiKey?.startsWith("sk_live_") || apiKey?.startsWith("rk_live_")) return "live";
+  if (apiKey?.startsWith("sk_test_") || apiKey?.startsWith("rk_test_")) return "test";
+  return "unknown";
+}
 
 export function getStripe(): Stripe {
   const apiKey = process.env.STRIPE_SECRET_KEY;
@@ -17,6 +26,34 @@ export function requireStripeProductId(kind: "user" | "club"): string {
   const key = kind === "user" ? "STRIPE_USER_PRODUCT_ID" : "STRIPE_CLUB_PRODUCT_ID";
   const value = process.env[key];
   if (!value) throw new Error(`${key} is not configured.`);
+  return value;
+}
+
+export function getAiBudgetContributionConfiguration() {
+  const apiKey = process.env.STRIPE_CONTRIBUTION_SECRET_KEY;
+  const productId = process.env.STRIPE_CONTRIBUTION_PRODUCT_ID;
+  const webhookSecret = process.env.STRIPE_CONTRIBUTION_WEBHOOK_SECRET;
+  const enabled = process.env.STRIPE_CONTRIBUTIONS_ENABLED === "true";
+  const configured = Boolean(apiKey && productId && webhookSecret);
+
+  return {
+    enabled,
+    configured,
+    checkoutEnabled: enabled && configured,
+    mode: detectStripeMode(apiKey),
+  } as const;
+}
+
+export function getContributionStripe(): Stripe {
+  const apiKey = process.env.STRIPE_CONTRIBUTION_SECRET_KEY;
+  if (!apiKey) throw new Error("STRIPE_CONTRIBUTION_SECRET_KEY is not configured.");
+  contributionStripeClient ??= new Stripe(apiKey, { typescript: true });
+  return contributionStripeClient;
+}
+
+export function requireContributionProductId(): string {
+  const value = process.env.STRIPE_CONTRIBUTION_PRODUCT_ID;
+  if (!value) throw new Error("STRIPE_CONTRIBUTION_PRODUCT_ID is not configured.");
   return value;
 }
 

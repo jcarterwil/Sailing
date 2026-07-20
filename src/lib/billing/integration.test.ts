@@ -66,6 +66,27 @@ describe("billing integration boundaries", () => {
     expect(checkout).toContain("/api/billing/checkout/cancel?reservation=");
   });
 
+  it("keeps one-time AI budget contributions fixed and independent", () => {
+    const checkout = source(
+      "src/app/api/billing/contributions/checkout/route.ts",
+    );
+    const amounts = source("src/lib/billing/contributions.ts");
+    const buttons = source("src/app/account/billing/stripe-buttons.tsx");
+
+    expect(amounts).toContain("2_500");
+    expect(amounts).toContain("5_000");
+    expect(amounts).toContain("10_000");
+    expect(checkout).toContain("assertSameOrigin(request)");
+    expect(checkout).toContain("isAiBudgetContributionAmount(body.amountCents)");
+    expect(checkout).toContain('mode: "payment"');
+    expect(checkout).toContain('payment_method_types: ["card"]');
+    expect(checkout).toContain("requireContributionProductId()");
+    expect(checkout).toContain("sailing_payment_kind");
+    expect(checkout).not.toContain("paymentsEnabled");
+    expect(checkout).not.toContain("billing_enrollments");
+    expect(buttons).toContain("/api/billing/contributions/checkout");
+  });
+
   it("verifies Stripe signatures against the raw body and is retry-safe", () => {
     const webhook = source("src/app/api/webhooks/stripe/route.ts");
     expect(webhook).toContain("await request.text()");
@@ -75,6 +96,10 @@ describe("billing integration boundaries", () => {
     expect(webhook).toContain("subscriptions.retrieve");
     expect(webhook).toContain('case "customer.subscription.paused"');
     expect(webhook).toContain('case "customer.subscription.resumed"');
+    expect(webhook).toContain("STRIPE_CONTRIBUTION_WEBHOOK_SECRET");
+    expect(webhook).toContain('case "checkout.session.completed"');
+    expect(webhook).toContain("validateAiBudgetContribution");
+    expect(webhook).toContain("isAiBudgetContributionAmount(amountCents)");
     expect(webhook).toContain("isSailingSubscription(current)");
     expect(webhook).toContain('status: "processed"');
 

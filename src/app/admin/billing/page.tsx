@@ -4,12 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BillingSettingsForm } from "@/app/admin/billing/billing-settings-form";
 import { formatUsd } from "@/lib/billing/entitlements";
 import { loadBillingSettings } from "@/lib/billing/server";
+import { getAiBudgetContributionConfiguration } from "@/lib/billing/stripe";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin · Billing" };
 
 export default async function AdminBillingPage() {
   const settings = await loadBillingSettings();
+  const contributions = getAiBudgetContributionConfiguration();
   const environment = [
     ["Stripe secret key", !!process.env.STRIPE_SECRET_KEY],
     ["Webhook signing secret", !!process.env.STRIPE_WEBHOOK_SECRET],
@@ -17,6 +19,14 @@ export default async function AdminBillingPage() {
     ["Club product", !!process.env.STRIPE_CLUB_PRODUCT_ID],
   ] as const;
   const ready = environment.every(([, configured]) => configured);
+  const contributionEnvironment = [
+    ["Contribution secret key", !!process.env.STRIPE_CONTRIBUTION_SECRET_KEY],
+    [
+      "Contribution webhook signing secret",
+      !!process.env.STRIPE_CONTRIBUTION_WEBHOOK_SECRET,
+    ],
+    ["Contribution product", !!process.env.STRIPE_CONTRIBUTION_PRODUCT_ID],
+  ] as const;
 
   return (
     <div className="max-w-3xl">
@@ -29,6 +39,51 @@ export default async function AdminBillingPage() {
             <p className="text-sm">User {formatUsd(settings.userPriceCents)}/year · Club {formatUsd(settings.clubPriceCents)}/year</p>
             {!ready ? <p className="text-sm text-destructive">Configure every Stripe environment value before enabling payments.</p> : null}
             <BillingSettingsForm enabled={settings.paymentsEnabled} canEnable={ready} />
+          </CardContent>
+        </Card>
+        <Card className="bg-card/70">
+          <CardHeader>
+            <CardTitle>AI budget contributions</CardTitle>
+            <CardDescription>
+              Independent one-time $25, $50, or $100 payments. Contributions never
+              grant a subscription entitlement.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Badge
+              variant={
+                contributions.checkoutEnabled
+                  ? "default"
+                  : contributions.configured
+                    ? "secondary"
+                    : "destructive"
+              }
+            >
+              {contributions.checkoutEnabled
+                ? "Active · " + contributions.mode + " mode"
+                : contributions.configured
+                  ? "Configured · disabled"
+                  : "Not configured"}
+            </Badge>
+            <ul className="space-y-2 text-sm">
+              {contributionEnvironment.map(([label, configured]) => (
+                <li
+                  key={label}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <span>{label}</span>
+                  <Badge variant={configured ? "secondary" : "destructive"}>
+                    {configured ? "Configured" : "Missing"}
+                  </Badge>
+                </li>
+              ))}
+              <li className="flex items-center justify-between gap-4">
+                <span>Contribution checkout switch</span>
+                <Badge variant={contributions.enabled ? "secondary" : "destructive"}>
+                  {contributions.enabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </li>
+            </ul>
           </CardContent>
         </Card>
         <Card className="bg-card/70">
