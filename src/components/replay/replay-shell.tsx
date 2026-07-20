@@ -38,6 +38,8 @@ export function ReplayShell(props: {
   commentaryStatus?: ReplayCommentaryStatus;
   /** Public share view — hide manage-race links. */
   readOnly?: boolean;
+  /** Club AI: enable OpenAI TTS play-by-play controls. */
+  voiceAvailable?: boolean;
 }) {
   return <RaceReplay {...props} />;
 }

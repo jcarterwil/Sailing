@@ -276,6 +276,7 @@ export default async function ReplayPage({
           commentaryStatus={
             replayAnalysis ? parsedAnalysis.replayEventsStatus : "missing"
           }
+          voiceAvailable
         />
       </div>
     </main>
