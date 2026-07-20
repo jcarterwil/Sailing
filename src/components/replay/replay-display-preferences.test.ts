@@ -18,6 +18,8 @@ const CUSTOM_PREFERENCES: ReplayDisplayPreferences = {
   broadcastCamera: "aerial",
   nauticalChart: true,
   chartOpacity: 0.45,
+  trackMetric: "vmg",
+  trackScope: "selected",
 };
 
 class MemoryStorage implements ReplayPreferencesStorage {
@@ -53,6 +55,8 @@ describe("replay display preference validation", () => {
         broadcastCamera: "orbit",
         nauticalChart: true,
         chartOpacity: 4,
+        trackMetric: "cadence",
+        trackScope: "nearby",
       }),
     ).toEqual({
       ...DEFAULT_REPLAY_DISPLAY_PREFERENCES,
@@ -63,6 +67,23 @@ describe("replay display preference validation", () => {
     expect(isReplayDisplayPreferences({ ...CUSTOM_PREFERENCES, chartOpacity: Number.NaN })).toBe(
       false,
     );
+  });
+
+  it("adds safe overlay defaults to preferences saved before issue 205", () => {
+    const legacy = {
+      baseStyle: "satellite",
+      showTacticalHulls: true,
+      viewMode: "tactical",
+      broadcastCamera: "aerial",
+      nauticalChart: true,
+      chartOpacity: 0.4,
+    };
+
+    expect(parseReplayDisplayPreferences(legacy)).toEqual({
+      ...legacy,
+      trackMetric: "boat",
+      trackScope: "all",
+    });
   });
 
   it("returns independent defaults for non-object input", () => {

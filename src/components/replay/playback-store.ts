@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type TrailMode = "tail" | "full" | "speed";
+export type TrackLength = "tail" | "full";
 export type CameraMode = "fleet" | "north" | "follow" | "chase";
 
 interface PlaybackState {
@@ -10,7 +10,7 @@ interface PlaybackState {
   timeMs: number;
   playing: boolean;
   speed: number;
-  trailMode: TrailMode;
+  trackLength: TrackLength;
   rangeSel: [number, number] | null;
   // The entry the user tapped/owns — drives halo, dimming, instruments highlight.
   selectedEntryId: string | null;
@@ -19,7 +19,7 @@ interface PlaybackState {
   seek: (timeMs: number) => void;
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: number) => void;
-  setTrailMode: (mode: TrailMode) => void;
+  setTrackLength: (length: TrackLength) => void;
   setRange: (range: [number, number] | null) => void;
   setSelectedEntryId: (id: string | null) => void;
   setCameraMode: (mode: CameraMode) => void;
@@ -35,7 +35,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   timeMs: 0,
   playing: false,
   speed: 10,
-  trailMode: "tail",
+  trackLength: "tail",
   rangeSel: null,
   selectedEntryId: null,
   cameraMode: "fleet",
@@ -46,7 +46,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   },
   setPlaying: (playing) => set({ playing }),
   setSpeed: (speed) => set({ speed }),
-  setTrailMode: (trailMode) => set({ trailMode }),
+  setTrackLength: (trackLength) => set({ trackLength }),
   setRange: (rangeSel) => set({ rangeSel }),
   setSelectedEntryId: (selectedEntryId) =>
     set((state) => {

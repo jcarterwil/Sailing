@@ -9,7 +9,7 @@ import { Settings2 } from "lucide-react";
 
 import type {
   CameraMode,
-  TrailMode,
+  TrackLength,
 } from "@/components/replay/playback-store";
 import { isCompactReplayChrome as matchesCompactReplayChrome } from "@/components/replay/replay-safe-zones";
 import type { ReplayDisplayPreferences } from "@/components/replay/replay-display-preferences";
@@ -36,8 +36,8 @@ type DisplayPreferencesPatch =
 export function ViewSettingsFields({
   preferences,
   onPreferencesChange,
-  trailMode,
-  onTrailModeChange,
+  trackLength,
+  onTrackLengthChange,
   cameraMode,
   onCameraModeChange,
   hasSelection,
@@ -46,8 +46,8 @@ export function ViewSettingsFields({
   onPreferencesChange: (
     patch: DisplayPreferencesPatch,
   ) => void;
-  trailMode: TrailMode;
-  onTrailModeChange: (mode: TrailMode) => void;
+  trackLength: TrackLength;
+  onTrackLengthChange: (length: TrackLength) => void;
   cameraMode: CameraMode;
   onCameraModeChange: (mode: CameraMode) => void;
   hasSelection: boolean;
@@ -86,26 +86,85 @@ export function ViewSettingsFields({
         <>
           <div className="grid gap-1">
             <span className="text-xs font-medium sm:sr-only">
-              Trail mode
+              Track length
             </span>
             <Select
-              value={trailMode}
+              value={trackLength}
               onValueChange={(value) =>
-                onTrailModeChange(value as TrailMode)
+                onTrackLengthChange(value as TrackLength)
               }
             >
               <SelectTrigger
                 className="h-11 w-full sm:h-9 sm:w-28"
-                aria-label="Trail mode"
+                aria-label="Track length"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="tail">Tail</SelectItem>
+                <SelectItem value="tail">60 s tail</SelectItem>
                 <SelectItem value="full">
-                  Full tail
+                  Full elapsed
                 </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-1">
+            <span className="text-xs font-medium sm:sr-only">
+              Track color
+            </span>
+            <Select
+              value={preferences.trackMetric}
+              onValueChange={(value) =>
+                onPreferencesChange({
+                  trackMetric:
+                    value as ReplayDisplayPreferences["trackMetric"],
+                })
+              }
+            >
+              <SelectTrigger
+                className="h-11 w-full sm:h-9 sm:w-32"
+                aria-label="Track color"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="boat">Boat</SelectItem>
                 <SelectItem value="speed">Speed</SelectItem>
+                <SelectItem value="vmg">VMG</SelectItem>
+                <SelectItem value="pointing">Pointing</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-1">
+            <span className="text-xs font-medium sm:sr-only">
+              Track boats
+            </span>
+            <Select
+              value={
+                hasSelection ? preferences.trackScope : "all"
+              }
+              onValueChange={(value) =>
+                onPreferencesChange({
+                  trackScope:
+                    value as ReplayDisplayPreferences["trackScope"],
+                })
+              }
+            >
+              <SelectTrigger
+                className="h-11 w-full sm:h-9 sm:w-36"
+                aria-label="Track boats"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All boats</SelectItem>
+                <SelectItem value="selected" disabled={!hasSelection}>
+                  {hasSelection
+                    ? "Selected boat"
+                    : "Select a boat first"}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

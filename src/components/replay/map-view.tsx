@@ -11,7 +11,12 @@ import {
 import {
   applyBoatHullIconMode,
   shouldAddReplayMapLayers,
+  trackOverlayPaint,
 } from "@/components/replay/map-layers";
+import {
+  focusViewportForTrack,
+  type ReplayMapFocusRequest,
+} from "@/components/replay/map-focus";
 import {
   activeFleetPositions,
   fleetBounds,
@@ -32,7 +37,11 @@ import {
   usePlaybackStore,
   type CameraMode,
 } from "@/components/replay/playback-store";
-import type { ReplayBaseStyle } from "@/components/replay/replay-display-preferences";
+import type {
+  ReplayBaseStyle,
+  TrackMetric,
+  TrackScope,
+} from "@/components/replay/replay-display-preferences";
 import type {
   ReplayRenderFrame,
   ReplayRenderStartLine,
@@ -42,14 +51,13 @@ import type {
   ReplayRenderFrameSource,
 } from "@/components/replay/replay-render-source";
 import {
-  buildSpeedTrackData,
-  createFleetSpeedDomain,
-  lineGradientExpression,
-  SPEED_COLORS,
-} from "@/components/replay/speed-track";
-import { indexAt } from "@/components/replay/track-index";
+  buildTrackOverlayData,
+  TRACK_METRIC_PRESENTATION,
+  trackOverlayTimeFilter,
+} from "@/components/replay/track-overlay";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
+import type { RaceLeg } from "@/lib/analytics/types";
 
 export type MapStyleId = ReplayBaseStyle;
 
@@ -77,8 +85,6 @@ const SATELLITE_STYLE: maplibregl.StyleSpecification = {
   },
   layers: [{ id: "esri", type: "raster", source: "esri" }],
 };
-
-const TAIL_SECONDS = 60;
 
 const EMPTY_START_LINE:
   maplibregl.GeoJSONSourceSpecification["data"] = {
@@ -137,14 +143,6 @@ function courseMarksGeoJson(frame: ReplayRenderFrame) {
       },
     })),
   };
-}
-
-function speedSourceId(index: number): string {
-  return `speed-track-source-${index}`;
-}
-
-function speedLayerId(index: number): string {
-  return `speed-track-layer-${index}`;
 }
 
 function makeBoatArrow(): ImageData {
@@ -222,33 +220,28 @@ function addReadyBoats3dLayer(
   }
 }
 
-function trailGeoJson(
-  tracks: LoadedTrack[],
-  timeMs: number,
-  tailMs: number | null,
-) {
-  return {
-    type: "FeatureCollection" as const,
-    features: tracks.map((track) => {
-      const end = indexAt(track, timeMs);
-      const start =
-        tailMs === null
-          ? 0
-          : Math.max(0, indexAt(track, timeMs - tailMs));
-      const coords: [number, number][] = [];
-      for (let index = start; index <= end; index += 1) {
-        coords.push([track.lon[index], track.lat[index]]);
-      }
-      return {
-        type: "Feature" as const,
-        properties: { color: track.color },
-        geometry: {
-          type: "LineString" as const,
-          coordinates: coords,
-        },
-      };
-    }),
-  };
+function applyTrackPresentation(
+  map: maplibregl.Map,
+  scope: TrackScope,
+  selectedEntryId: string | null,
+): void {
+  if (!map.getLayer("trails")) return;
+  const paint = trackOverlayPaint(scope, selectedEntryId);
+  map.setPaintProperty(
+    "trails",
+    "line-color",
+    paint.color,
+  );
+  map.setPaintProperty(
+    "trails",
+    "line-width",
+    paint.width,
+  );
+  map.setPaintProperty(
+    "trails",
+    "line-opacity",
+    paint.opacity,
+  );
 }
 
 export function MapView({
@@ -258,6 +251,11 @@ export function MapView({
   show3d,
   nauticalChart,
   chartOpacity,
+  trackMetric,
+  trackScope,
+  legs,
+  twdAt,
+  focusRequest = null,
   onChartError,
 }: {
   tracks: LoadedTrack[];
@@ -266,6 +264,11 @@ export function MapView({
   show3d: boolean;
   nauticalChart: boolean;
   chartOpacity: number;
+  trackMetric: TrackMetric;
+  trackScope: TrackScope;
+  legs: readonly RaceLeg[];
+  twdAt: ((timeMs: number) => number | null) | null;
+  focusRequest?: ReplayMapFocusRequest | null;
   onChartError?: (error: unknown) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -281,6 +284,10 @@ export function MapView({
   const fleetCompactSinceRef = useRef<number | null>(null);
   const fleetCameraInitializedRef = useRef(false);
   const refreshPlaybackRef = useRef<(() => void) | null>(null);
+  const applyFocusRef = useRef<(() => void) | null>(null);
+  const focusRequestRef =
+    useRef<ReplayMapFocusRequest | null>(focusRequest);
+  const appliedFocusRequestRef = useRef<number | null>(null);
   const skipResetEaseRef = useRef(false);
   const boats3dResourcesRef =
     useRef<Boats3dResources | null>(null);
@@ -288,21 +295,41 @@ export function MapView({
   const nauticalChartRef = useRef(nauticalChart);
   const chartOpacityRef = useRef(chartOpacity);
   const onChartErrorRef = useRef(onChartError);
-  const trailMode = usePlaybackStore((state) => state.trailMode);
+  const trackLength = usePlaybackStore(
+    (state) => state.trackLength,
+  );
+  const selectedEntryId = usePlaybackStore(
+    (state) => state.selectedEntryId,
+  );
   const cameraMode = usePlaybackStore(
     (state) => state.cameraMode,
   );
-  const speedDomain = useMemo(
-    () => createFleetSpeedDomain(tracks),
-    [tracks],
-  );
-  const speedTracks = useMemo(
+  const overlayData = useMemo(
     () =>
-      tracks.map((track) =>
-        buildSpeedTrackData(track, speedDomain),
-      ),
-    [speedDomain, tracks],
+      buildTrackOverlayData({
+        tracks,
+        metric: trackMetric,
+        legs,
+        twdAt,
+      }),
+    [legs, trackMetric, tracks, twdAt],
   );
+  const overlayDataRef = useRef(overlayData);
+  const trackLengthRef = useRef(trackLength);
+  const trackScopeRef = useRef(trackScope);
+  const selectedEntryIdRef = useRef(selectedEntryId);
+
+  useEffect(() => {
+    overlayDataRef.current = overlayData;
+    trackLengthRef.current = trackLength;
+    trackScopeRef.current = trackScope;
+    selectedEntryIdRef.current = selectedEntryId;
+  }, [
+    overlayData,
+    selectedEntryId,
+    trackLength,
+    trackScope,
+  ]);
 
   useEffect(() => {
     onChartErrorRef.current = onChartError;
@@ -354,6 +381,75 @@ export function MapView({
     fleetCompactSinceRef.current = null;
     lastFleetCameraUpdateRef.current = 0;
 
+    const applyFocus = () => {
+      if (!readyRef.current) return;
+      const request = focusRequestRef.current;
+      if (
+        !request ||
+        appliedFocusRequestRef.current === request.requestId
+      ) {
+        return;
+      }
+      const track = tracks.find(
+        (candidate) => candidate.entryId === request.entryId,
+      );
+      if (!track) {
+        appliedFocusRequestRef.current = request.requestId;
+        return;
+      }
+      const viewport = focusViewportForTrack(track, request);
+      appliedFocusRequestRef.current = request.requestId;
+      if (!viewport) return;
+
+      // The focus animation already resets bearing and pitch. If the maneuver
+      // action just left follow/chase mode, prevent that mode transition from
+      // starting a second ease that would cancel this fitBounds/easeTo call.
+      const currentCameraMode =
+        usePlaybackStore.getState().cameraMode;
+      if (
+        currentCameraMode === "north" &&
+        (prevCameraModeRef.current === "follow" ||
+          prevCameraModeRef.current === "chase")
+      ) {
+        skipResetEaseRef.current = true;
+      }
+
+      const mapContainer = map.getContainer();
+      const padding = fleetCameraPadding(
+        mapContainer.clientWidth,
+        mapContainer.clientHeight,
+      );
+      if (viewport.bounds) {
+        map.fitBounds(
+          [
+            [viewport.bounds.west, viewport.bounds.south],
+            [viewport.bounds.east, viewport.bounds.north],
+          ],
+          {
+            padding,
+            maxZoom: FLEET_CAMERA_MAX_ZOOM,
+            bearing: 0,
+            pitch: 0,
+            duration: 500,
+            essential: true,
+          },
+        );
+      } else {
+        map.easeTo({
+          center: viewport.center,
+          zoom: Math.min(
+            FLEET_CAMERA_MAX_ZOOM,
+            Math.max(16, map.getZoom()),
+          ),
+          bearing: 0,
+          pitch: 0,
+          duration: 500,
+          essential: true,
+        });
+      }
+    };
+    applyFocusRef.current = applyFocus;
+
     const addReplayLayers = () => {
       if (!map.getImage("boat-arrow")) {
         map.addImage("boat-arrow", makeBoatArrow(), {
@@ -362,8 +458,6 @@ export function MapView({
       }
 
       const frame = frameSource.frameRef.current;
-      const currentTrailMode =
-        usePlaybackStore.getState().trailMode;
       const startLine = frame.course.startLine;
       addNauticalChartLayer(map, {
         beforeLayerId: "trails",
@@ -374,13 +468,7 @@ export function MapView({
 
       map.addSource("trails", {
         type: "geojson",
-        data: trailGeoJson(
-          tracks,
-          frame.timeMs,
-          currentTrailMode === "tail"
-            ? TAIL_SECONDS * 1_000
-            : null,
-        ),
+        data: overlayDataRef.current,
       });
       map.addLayer({
         id: "trails",
@@ -388,55 +476,23 @@ export function MapView({
         source: "trails",
         paint: {
           "line-color": ["get", "color"],
-          "line-width": 2,
-          "line-opacity": 0.85,
+          "line-width": 3,
+          "line-opacity": 0.9,
         },
         layout: {
           "line-cap": "round",
           "line-join": "round",
-          visibility:
-            currentTrailMode === "speed" ? "none" : "visible",
         },
+        filter: trackOverlayTimeFilter(
+          frame.timeMs,
+          trackLengthRef.current,
+        ) as maplibregl.FilterSpecification,
       });
-
-      speedTracks.forEach((speedTrack, index) => {
-        if (
-          speedTrack.coordinates.length < 2 ||
-          speedTrack.stops.length < 2
-        ) {
-          return;
-        }
-        map.addSource(speedSourceId(index), {
-          type: "geojson",
-          lineMetrics: true,
-          data: {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: speedTrack.coordinates,
-            },
-          },
-        });
-        map.addLayer({
-          id: speedLayerId(index),
-          type: "line",
-          source: speedSourceId(index),
-          paint: {
-            "line-gradient": lineGradientExpression(
-              speedTrack.stops,
-            ) as maplibregl.ExpressionSpecification,
-            "line-width": 3,
-            "line-opacity": 0.9,
-          },
-          layout: {
-            "line-cap": "round",
-            "line-join": "round",
-            visibility:
-              currentTrailMode === "speed" ? "visible" : "none",
-          },
-        });
-      });
+      applyTrackPresentation(
+        map,
+        trackScopeRef.current,
+        selectedEntryIdRef.current,
+      );
 
       map.addSource("start-line", {
         type: "geojson",
@@ -576,6 +632,7 @@ export function MapView({
       });
       readyRef.current = true;
       refreshPlaybackRef.current?.();
+      applyFocusRef.current?.();
     };
 
     const addLayers = () => {
@@ -680,9 +737,12 @@ export function MapView({
       readyRef.current = false;
       appliedStyleRef.current = null;
       mapRef.current = null;
+      if (applyFocusRef.current === applyFocus) {
+        applyFocusRef.current = null;
+      }
       map.remove();
     };
-  }, [frameSource, speedTracks, tracks]);
+  }, [frameSource, tracks]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -792,28 +852,31 @@ export function MapView({
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
 
-    const speedVisibility =
-      trailMode === "speed" ? "visible" : "none";
-    const trailVisibility =
-      trailMode === "speed" ? "none" : "visible";
+    map
+      .getSource<maplibregl.GeoJSONSource>("trails")
+      ?.setData(overlayData);
+    applyTrackPresentation(map, trackScope, selectedEntryId);
     if (map.getLayer("trails")) {
-      map.setLayoutProperty(
+      map.setFilter(
         "trails",
-        "visibility",
-        trailVisibility,
+        trackOverlayTimeFilter(
+          frameSource.frameRef.current.timeMs,
+          trackLength,
+        ) as maplibregl.FilterSpecification,
       );
     }
-    speedTracks.forEach((_, index) => {
-      const layerId = speedLayerId(index);
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(
-          layerId,
-          "visibility",
-          speedVisibility,
-        );
-      }
-    });
-  }, [speedTracks, trailMode]);
+  }, [
+    frameSource,
+    overlayData,
+    selectedEntryId,
+    trackLength,
+    trackScope,
+  ]);
+
+  useEffect(() => {
+    focusRequestRef.current = focusRequest;
+    applyFocusRef.current?.();
+  }, [focusRequest]);
 
   useEffect(() => {
     let lastTrailUpdate = 0;
@@ -979,21 +1042,18 @@ export function MapView({
         );
       }
 
-      if (trailMode === "speed") return;
       const now = performance.now();
       if (now - lastTrailUpdate > 80) {
         lastTrailUpdate = now;
-        map
-          .getSource<maplibregl.GeoJSONSource>("trails")
-          ?.setData(
-            trailGeoJson(
-              tracks,
+        if (map.getLayer("trails")) {
+          map.setFilter(
+            "trails",
+            trackOverlayTimeFilter(
               frame.timeMs,
-              trailMode === "tail"
-                ? TAIL_SECONDS * 1_000
-                : null,
-            ),
+              trackLengthRef.current,
+            ) as maplibregl.FilterSpecification,
           );
+        }
       }
     };
     const refresh = () => {
@@ -1014,8 +1074,12 @@ export function MapView({
     cameraMode,
     frameSource,
     tracks,
-    trailMode,
   ]);
+
+  const metricPresentation =
+    trackMetric === "boat"
+      ? null
+      : TRACK_METRIC_PRESENTATION[trackMetric];
 
   return (
     <div className="relative h-full w-full" data-replay-stage>
@@ -1030,27 +1094,42 @@ export function MapView({
         </div>
       ) : null}
 
-      {trailMode === "speed" ? (
+      {metricPresentation ? (
         <div
           data-replay-overlay="legend"
           className="z-10 w-64 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur"
-          aria-label={`Speed scale from ${speedDomain.minKts.toFixed(1)} to ${speedDomain.maxKts.toFixed(1)} knots`}
+          aria-label={
+            overlayData.domain
+              ? `${metricPresentation.label} scale from ${overlayData.domain.min.toFixed(1)} to ${overlayData.domain.max.toFixed(1)} ${metricPresentation.unit}`
+              : `${metricPresentation.label} unavailable`
+          }
         >
           <div className="mb-1.5 text-xs font-medium">
-            Speed (knots)
+            {metricPresentation.label} ({metricPresentation.unit})
           </div>
-          <div
-            className="h-2 rounded-full"
-            style={{
-              background: `linear-gradient(to right, ${SPEED_COLORS.slow}, ${SPEED_COLORS.intermediate}, ${SPEED_COLORS.fast})`,
-            }}
-            aria-hidden="true"
-          />
-          <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums">
-            <span>{speedDomain.minKts.toFixed(1)}</span>
-            <span>{speedDomain.midKts.toFixed(1)}</span>
-            <span>{speedDomain.maxKts.toFixed(1)}</span>
-          </div>
+          {overlayData.domain ? (
+            <>
+              <div
+                className="h-2 rounded-full"
+                style={{
+                  background: `linear-gradient(to right, ${metricPresentation.palette.low}, ${metricPresentation.palette.mid}, ${metricPresentation.palette.high})`,
+                }}
+                aria-hidden="true"
+              />
+              <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums">
+                <span>{overlayData.domain.min.toFixed(1)}</span>
+                <span>{overlayData.domain.mid.toFixed(1)}</span>
+                <span>{overlayData.domain.max.toFixed(1)}</span>
+              </div>
+              <p className="mt-1 text-[10px] text-white/60">
+                Fleet 5th–95th percentile · gaps are unavailable
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px] text-white/65">
+              No eligible analyzed samples are available.
+            </p>
+          )}
         </div>
       ) : null}
     </div>

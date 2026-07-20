@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ZoomIn } from "lucide-react";
 
+import type { ManeuverFocusTarget } from "@/components/replay/map-focus";
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -111,13 +113,21 @@ function EmptyState({ text }: { text: string }) {
 export function Maneuvers({
   tracks,
   analysis,
+  onFocus,
 }: {
   tracks: LoadedTrack[];
   analysis: RaceAnalysis | null;
+  onFocus?: (target: ManeuverFocusTarget) => void;
 }) {
   const selectedEntryId = usePlaybackStore((s) => s.selectedEntryId);
   const seek = usePlaybackStore((s) => s.seek);
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
+  const setSelectedEntryId = usePlaybackStore(
+    (s) => s.setSelectedEntryId,
+  );
+  const setCameraMode = usePlaybackStore(
+    (s) => s.setCameraMode,
+  );
   const [boatFilter, setBoatFilter] = useState<BoatFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
@@ -158,9 +168,17 @@ export function Maneuvers({
     return <EmptyState text="No maneuvers detected in this race." />;
   }
 
-  const handleRowClick = (tMs: number) => {
+  const handleRowFocus = (row: ManeuverRow) => {
     setPlaying(false);
-    seek(tMs);
+    setSelectedEntryId(row.entryId);
+    setCameraMode("north");
+    seek(row.tMs);
+    onFocus?.({
+      entryId: row.entryId,
+      timeMs: row.tMs,
+      startMs: row.window.startMs,
+      endMs: row.window.endMs,
+    });
   };
 
   return (
@@ -222,10 +240,13 @@ export function Maneuvers({
               <TableHead className="h-8 px-2 text-right">MMG</TableHead>
               <TableHead className="h-8 px-2 text-right">VMG</TableHead>
               <TableHead className="h-8 px-1 text-center">·</TableHead>
+              <TableHead className="h-8 px-1 text-center">
+                <span className="sr-only">Focus</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRows.map((row, index) => {
+            {filteredRows.map((row) => {
               const isSelected = selectedEntryId === row.entryId;
               const botchedLabel = row.botchedReason
                 ? BOTCHED_REASON_LABEL[row.botchedReason]
@@ -234,9 +255,7 @@ export function Maneuvers({
                   : "";
               return (
                 <TableRow
-                  key={`${row.entryId}-${row.tMs}-${index}`}
-                  className="cursor-pointer"
-                  onClick={() => handleRowClick(row.tMs)}
+                  key={`${row.entryId}-${row.tMs}-${row.type}`}
                   style={{
                     backgroundColor: isSelected
                       ? `${row.color}1f`
@@ -295,6 +314,22 @@ export function Maneuvers({
                       <span className="text-muted-foreground/40">·</span>
                     )}
                   </TableCell>
+                  <TableCell className="px-1 text-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-11 sm:size-8"
+                      aria-label={`Focus ${row.boatName} ${row.type} on the map`}
+                      title={`Focus ${row.boatName} ${row.type} on the map`}
+                      onClick={() => handleRowFocus(row)}
+                    >
+                      <ZoomIn
+                        className="size-3.5"
+                        aria-hidden="true"
+                      />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -302,7 +337,7 @@ export function Maneuvers({
         </Table>
       </div>
       <p className="text-xs text-muted-foreground">
-        Click a row to seek the replay to that maneuver.
+        Use Focus to select a boat, seek the replay, and frame its maneuver.
       </p>
     </div>
   );

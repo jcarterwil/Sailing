@@ -48,7 +48,9 @@ describe("replay mobile controls and safe zones (#133)", () => {
       "data-replay-desktop-settings",
     );
     expect(viewSettingsSource).toContain("orientationchange");
-    expect(viewSettingsSource).toContain('aria-label="Trail mode"');
+    expect(viewSettingsSource).toContain('aria-label="Track length"');
+    expect(viewSettingsSource).toContain('aria-label="Track color"');
+    expect(viewSettingsSource).toContain('aria-label="Track boats"');
     expect(viewSettingsSource).toContain('aria-label="Tactical camera"');
   });
 
