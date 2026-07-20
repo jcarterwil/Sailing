@@ -100,6 +100,27 @@ describe("POST replay speech", () => {
     expect(generateReplaySpeechMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces is_admin RPC failures instead of silently falling back", async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "races") return mockRaceRow();
+      throw new Error(`unexpected table ${table}`);
+    });
+    rpcMock.mockResolvedValue({ data: null, error: { message: "rpc failed" } });
+
+    const response = await POST(
+      new Request("https://example.test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: "event:a" }),
+      }),
+      context(),
+    );
+    expect(response!.status).toBe(500);
+    expect(hasClubAiEntitlementMock).not.toHaveBeenCalled();
+    expect(generateReplaySpeechMock).not.toHaveBeenCalled();
+  });
+
   it("lets admins spend TTS without Club AI", async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "admin-1" } } });
     rpcMock.mockResolvedValue({ data: true, error: null });

@@ -254,7 +254,10 @@ export function ReplayCommentary({
             aria-live="polite"
             aria-atomic="true"
           >
-            {activeItem?.text ?? "Waiting for the first race event."}
+            {activeItem?.text ??
+              (filter === "key"
+                ? "Waiting for the first key call."
+                : "Waiting for the first race event.")}
           </p>
         </div>
         <div
