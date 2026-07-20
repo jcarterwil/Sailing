@@ -12,10 +12,14 @@ import type { RaceLeg } from "@/lib/analytics/types";
 
 function track({
   t = [0, 1_000, 2_000],
+  lat = t.map((_, index) => 41 + index * 0.001),
+  lon = t.map((_, index) => -71 + index * 0.001),
   sog = [4, 5, 6],
   cog = [0, 0, 0],
 }: {
   t?: number[];
+  lat?: number[];
+  lon?: number[];
   sog?: number[];
   cog?: number[];
 } = {}): LoadedTrack {
@@ -30,8 +34,8 @@ function track({
     t0: t[0] ?? 0,
     tzOffsetMinutes: null,
     t: new Float64Array(t),
-    lat: new Float64Array(t.map((_, index) => 41 + index * 0.001)),
-    lon: new Float64Array(t.map((_, index) => -71 + index * 0.001)),
+    lat: new Float64Array(lat),
+    lon: new Float64Array(lon),
     sog: new Float32Array(sog),
     cog: new Float32Array(cog),
     hdg: new Float32Array(cog),
@@ -146,16 +150,37 @@ describe("metric track overlay", () => {
     expect(gap.features[0].properties.endMs).toBe(1_000);
   });
 
+  it("excludes non-renderable fixes from the shared metric domain", () => {
+    const data = buildTrackOverlayData({
+      tracks: [
+        track({
+          t: [0, 1_000, 2_000, 3_000],
+          lon: [-71, -70.999, Number.NaN, -70.997],
+          sog: [4, 5, 1_000, 6],
+          cog: [0, 0, 0, 0],
+        }),
+      ],
+      metric: "speed",
+    });
+
+    expect(data.features).toHaveLength(1);
+    expect(data.domain).toEqual({
+      min: 4.5,
+      mid: 4.5,
+      max: 4.5,
+    });
+  });
+
   it("filters completed segments to the elapsed tail or full history", () => {
     expect(trackOverlayTimeFilter(100_000, "tail")).toEqual([
       "all",
       ["<=", ["get", "endMs"], 100_000],
-      [">=", ["get", "endMs"], 40_000],
+      [">=", ["get", "startMs"], 40_000],
     ]);
     expect(trackOverlayTimeFilter(100_000, "full")).toEqual([
       "all",
       ["<=", ["get", "endMs"], 100_000],
-      [">=", ["get", "endMs"], Number.MIN_SAFE_INTEGER],
+      [">=", ["get", "startMs"], Number.MIN_SAFE_INTEGER],
     ]);
   });
 });

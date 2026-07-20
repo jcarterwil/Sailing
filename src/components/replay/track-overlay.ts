@@ -92,6 +92,15 @@ interface SampledFix {
   value: number | null;
 }
 
+interface TrackOverlaySegment {
+  entryId: string;
+  boatColor: string;
+  startMs: number;
+  endMs: number;
+  value: number | null;
+  coordinates: [[number, number], [number, number]];
+}
+
 function quantile(sorted: readonly number[], fraction: number): number {
   if (sorted.length === 0) return 0;
   const position = (sorted.length - 1) * fraction;
@@ -257,17 +266,7 @@ export function buildTrackOverlayData({
       }),
     ),
   );
-  const domain =
-    metric === "boat"
-      ? null
-      : createRobustMetricDomain(
-          sampledByTrack.flatMap((samples) =>
-            samples.flatMap((sample) =>
-              sample.value === null ? [] : [sample.value],
-            ),
-          ),
-        );
-  const features: TrackOverlayFeature[] = [];
+  const segments: TrackOverlaySegment[] = [];
 
   tracks.forEach((track, trackIndex) => {
     const samples = sampledByTrack[trackIndex];
@@ -292,38 +291,60 @@ export function buildTrackOverlayData({
       }
 
       let value: number | null = null;
-      let color = track.color;
       if (metric !== "boat") {
         if (
           previous.value === null ||
-          current.value === null ||
-          domain === null
+          current.value === null
         ) {
           continue;
         }
         value = (previous.value + current.value) / 2;
-        color = trackMetricColor(metric, value, domain);
       }
 
-      features.push({
-        type: "Feature",
-        properties: {
-          entryId: track.entryId,
-          color,
-          startMs: previous.timeMs,
-          endMs: current.timeMs,
-          value,
-        },
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [previous.lon, previous.lat],
-            [current.lon, current.lat],
-          ],
-        },
+      segments.push({
+        entryId: track.entryId,
+        boatColor: track.color,
+        startMs: previous.timeMs,
+        endMs: current.timeMs,
+        value,
+        coordinates: [
+          [previous.lon, previous.lat],
+          [current.lon, current.lat],
+        ],
       });
     }
   });
+
+  const domain =
+    metric === "boat"
+      ? null
+      : createRobustMetricDomain(
+          segments.flatMap((segment) =>
+            segment.value === null ? [] : [segment.value],
+          ),
+        );
+  const features: TrackOverlayFeature[] = [];
+  for (const segment of segments) {
+    let color = segment.boatColor;
+    if (metric !== "boat") {
+      if (segment.value === null || domain === null) continue;
+      color = trackMetricColor(metric, segment.value, domain);
+    }
+    features.push({
+      type: "Feature",
+      properties: {
+        entryId: segment.entryId,
+        color,
+        startMs: segment.startMs,
+        endMs: segment.endMs,
+        value: segment.value,
+      },
+      geometry: {
+        type: "LineString",
+        coordinates: segment.coordinates,
+      },
+    });
+  }
 
   return {
     type: "FeatureCollection",
@@ -344,6 +365,6 @@ export function trackOverlayTimeFilter(
   return [
     "all",
     ["<=", ["get", "endMs"], timeMs],
-    [">=", ["get", "endMs"], startMs],
+    [">=", ["get", "startMs"], startMs],
   ];
 }
