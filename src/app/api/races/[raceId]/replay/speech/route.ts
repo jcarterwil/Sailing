@@ -34,6 +34,7 @@ async function requireMember(raceId: string) {
   if (!user) return { response: json({ error: "Not signed in." }, 401) } as const;
 
   // RLS-visible read proves race membership before any AI spend.
+  // Admins are race-visible via is_race_member → is_admin short-circuit.
   const { data: race, error } = await supabase
     .from("races")
     .select("id, organizer_id")
@@ -42,6 +43,15 @@ async function requireMember(raceId: string) {
   if (error) return { response: json({ error: "Could not load race." }, 500) } as const;
   if (!race) return { response: json({ error: "Race not found." }, 404) } as const;
   return { supabase, user, race } as const;
+}
+
+async function canSpendReplaySpeech(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizerId: string,
+): Promise<boolean> {
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+  if (isAdmin) return true;
+  return hasClubAiEntitlement(organizerId);
 }
 
 /**
@@ -57,7 +67,7 @@ export async function POST(
   const access = await requireMember(raceId);
   if ("response" in access) return access.response;
 
-  if (!(await hasClubAiEntitlement(access.race.organizer_id))) {
+  if (!(await canSpendReplaySpeech(access.supabase, access.race.organizer_id))) {
     return json(
       { error: "Activate Club AI to hear OpenAI play-by-play during replay." },
       402,
