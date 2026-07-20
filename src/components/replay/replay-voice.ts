@@ -9,12 +9,24 @@ export type ReplayVoiceSpeakRequest = {
   playing: boolean;
   /** Voice narration master switch (user gesture). */
   enabled: boolean;
+  /**
+   * Playback speed multiplier. Above {@link REPLAY_SPEECH_MAX_SPEED}, new TTS
+   * lines are skipped so speech and network work do not thrash the 60fps map.
+   */
+  speed: number;
 };
 
 /**
+ * Speeds at or below this still start TTS. The control strip uses 1 / 5 / 10+;
+ * default replay speed is 10×, which is too fast for spoken lines.
+ */
+export const REPLAY_SPEECH_MAX_SPEED = 5;
+
+/**
  * Decide whether a newly active commentary item should be spoken.
- * Speak only while enabled + playing, and only when the active item changes.
- * An empty itemId means the filtered crawler has nothing to say yet.
+ * Speak only while enabled + playing, at a speakable speed, and only when the
+ * active item changes. An empty itemId means the filtered crawler has nothing
+ * to say yet.
  */
 export function shouldSpeakReplayCommentary(
   previousItemId: string | null,
@@ -22,7 +34,24 @@ export function shouldSpeakReplayCommentary(
 ): boolean {
   if (!next.enabled || !next.playing) return false;
   if (!next.itemId) return false;
+  if (next.speed > REPLAY_SPEECH_MAX_SPEED) return false;
   return next.itemId !== previousItemId;
+}
+
+/**
+ * Whether an async TTS fetch may still assign `src` / call `play()`.
+ * Prevents a stale request from resurrecting audio after a newer line (or
+ * pause/disable) already stopped the shared element — the overlap bug.
+ */
+export function shouldCommitReplaySpeechPlay(options: {
+  aborted: boolean;
+  intendedItemId: string;
+  current: Pick<ReplayVoiceSpeakRequest, "itemId" | "playing" | "enabled">;
+}): boolean {
+  if (options.aborted) return false;
+  if (!options.current.enabled || !options.current.playing) return false;
+  if (!options.current.itemId) return false;
+  return options.current.itemId === options.intendedItemId;
 }
 
 /** Stop in-flight audio when the user pauses, disables voice, or scrubs away. */

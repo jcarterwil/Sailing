@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
 
 import { usePlaybackStore } from "@/components/replay/playback-store";
 import {
+  REPLAY_SPEECH_MAX_SPEED,
   replaySpeechCacheKey,
   replaySpeechUrl,
+  shouldCommitReplaySpeechPlay,
   shouldSpeakReplayCommentary,
   shouldStopReplaySpeech,
   unlockReplaySpeechAudio,
@@ -64,12 +66,28 @@ type VoiceRequest = {
   itemText: string | null;
   playing: boolean;
   enabled: boolean;
+  speed: number;
 };
+
+function setSpeakingIndicator(
+  root: HTMLElement | null | undefined,
+  speaking: boolean,
+) {
+  if (!root) return;
+  root.dataset.replayVoiceSpeaking = speaking ? "true" : "false";
+  const icon = root.querySelector("[data-replay-voice-icon]");
+  if (icon instanceof HTMLElement) {
+    icon.classList.toggle("text-sky-600", speaking);
+  }
+}
 
 /**
  * Imperatively sync OpenAI TTS with the replay clock.
- * Subscribes only to `playing` (not `timeMs`) so the 60fps clock stays cheap;
- * active commentary id changes arrive through React props.
+ * Subscribes only to `playing` / `speed` (not `timeMs`) so the 60fps clock
+ * stays cheap; active commentary id changes arrive through React props.
+ *
+ * Speaking UI is updated via `voiceControlRef` (no React setState) so TTS
+ * start/stop does not re-render the commentary panel during playback.
  */
 export function useReplayVoiceCommentary(options: {
   raceId: string;
@@ -78,20 +96,25 @@ export function useReplayVoiceCommentary(options: {
   activeItemText: string | null;
   /** Public share / read-only replay never spends Club AI credits. */
   allowed: boolean;
+  /** Button root for imperative speaking indicator updates. */
+  voiceControlRef?: RefObject<HTMLElement | null>;
 }) {
-  const { raceId, activeItemId, activeItemText, allowed } = options;
+  const { raceId, activeItemId, activeItemText, allowed, voiceControlRef } =
+    options;
   const [wantEnabled, setWantEnabled] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
   const enabled = allowed && wantEnabled;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const spokenItemRef = useRef<string | null>(null);
   const unlockedRef = useRef(false);
+  /** Monotonic token so a stale async fetch cannot call play() after stop. */
+  const playGenerationRef = useRef(0);
   const requestRef = useRef<VoiceRequest>({
     itemId: activeItemId,
     itemText: activeItemText,
     playing: false,
     enabled: false,
+    speed: usePlaybackStore.getState().speed,
   });
 
   const ensureAudio = () => {
@@ -99,19 +122,22 @@ export function useReplayVoiceCommentary(options: {
     return audioRef.current;
   };
 
-  const stopAudio = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
-    setSpeaking(false);
-  };
-
   useEffect(() => {
+    const stopAudio = () => {
+      playGenerationRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      const audio = audioRef.current;
+      if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      setSpeakingIndicator(voiceControlRef?.current, false);
+    };
+
     const apply = (next: VoiceRequest) => {
       const previous = requestRef.current;
       if (
@@ -120,11 +146,13 @@ export function useReplayVoiceCommentary(options: {
             itemId: previous.itemId ?? "",
             playing: previous.playing,
             enabled: previous.enabled,
+            speed: previous.speed,
           },
           {
             itemId: next.itemId ?? "",
             playing: next.playing,
             enabled: next.enabled,
+            speed: next.speed,
           },
         )
       ) {
@@ -134,11 +162,26 @@ export function useReplayVoiceCommentary(options: {
         spokenItemRef.current = null;
       }
 
+      // Fast scrubbing / 10×+: mark the line seen without fetching so we do not
+      // queue overlapping TTS work that stalls MapLibre boat updates.
+      if (
+        next.enabled &&
+        next.playing &&
+        next.itemId &&
+        next.speed > REPLAY_SPEECH_MAX_SPEED &&
+        next.itemId !== spokenItemRef.current
+      ) {
+        spokenItemRef.current = next.itemId;
+        requestRef.current = next;
+        return;
+      }
+
       if (
         shouldSpeakReplayCommentary(spokenItemRef.current, {
           itemId: next.itemId ?? "",
           playing: next.playing,
           enabled: next.enabled,
+          speed: next.speed,
         })
       ) {
         const itemId = next.itemId!;
@@ -147,6 +190,7 @@ export function useReplayVoiceCommentary(options: {
         const controller = new AbortController();
         abortRef.current?.abort();
         abortRef.current = controller;
+        const generation = (playGenerationRef.current += 1);
         void (async () => {
           try {
             const url = await fetchSpeechBlob(
@@ -155,16 +199,61 @@ export function useReplayVoiceCommentary(options: {
               itemText,
               controller.signal,
             );
-            if (controller.signal.aborted) return;
+            const current = requestRef.current;
+            if (
+              generation !== playGenerationRef.current ||
+              !shouldCommitReplaySpeechPlay({
+                aborted: controller.signal.aborted,
+                intendedItemId: itemId,
+                current: {
+                  itemId: current.itemId ?? "",
+                  playing: current.playing,
+                  enabled: current.enabled,
+                },
+              })
+            ) {
+              return;
+            }
             const audio = ensureAudio();
-            audio.onended = () => setSpeaking(false);
-            audio.onerror = () => setSpeaking(false);
+            audio.onended = () => {
+              if (generation === playGenerationRef.current) {
+                setSpeakingIndicator(voiceControlRef?.current, false);
+              }
+            };
+            audio.onerror = () => {
+              if (generation === playGenerationRef.current) {
+                setSpeakingIndicator(voiceControlRef?.current, false);
+              }
+            };
             audio.src = url;
-            setSpeaking(true);
+            // Re-check after src assign — stopAudio may have run mid-await.
+            if (
+              generation !== playGenerationRef.current ||
+              !shouldCommitReplaySpeechPlay({
+                aborted: controller.signal.aborted,
+                intendedItemId: itemId,
+                current: {
+                  itemId: requestRef.current.itemId ?? "",
+                  playing: requestRef.current.playing,
+                  enabled: requestRef.current.enabled,
+                },
+              })
+            ) {
+              audio.pause();
+              audio.removeAttribute("src");
+              audio.load();
+              return;
+            }
+            setSpeakingIndicator(voiceControlRef?.current, true);
             await audio.play();
           } catch (error) {
-            if (controller.signal.aborted) return;
-            setSpeaking(false);
+            if (
+              controller.signal.aborted ||
+              generation !== playGenerationRef.current
+            ) {
+              return;
+            }
+            setSpeakingIndicator(voiceControlRef?.current, false);
             spokenItemRef.current = null;
             const message =
               error instanceof Error ? error.message : "Could not play voice commentary.";
@@ -191,35 +280,41 @@ export function useReplayVoiceCommentary(options: {
 
     // When allowed drops (or Normal has no active line), still sync a disabled
     // request so in-flight TTS is stopped without leaving orphan audio.
+    const playback = usePlaybackStore.getState();
     apply({
       itemId: activeItemId,
       itemText: activeItemText,
-      playing: usePlaybackStore.getState().playing,
+      playing: playback.playing,
       enabled: allowed && enabled,
+      speed: playback.speed,
     });
 
-    if (!allowed) return;
+    if (!allowed) {
+      return () => {
+        stopAudio();
+      };
+    }
 
-    return usePlaybackStore.subscribe((state, previous) => {
-      if (state.playing === previous.playing) return;
+    const unsubscribe = usePlaybackStore.subscribe((state, previous) => {
+      if (state.playing === previous.playing && state.speed === previous.speed) {
+        return;
+      }
       apply({
         itemId: activeItemId,
         itemText: activeItemText,
         playing: state.playing,
         enabled,
+        speed: state.speed,
       });
     });
-  }, [activeItemId, activeItemText, allowed, enabled, raceId]);
-
-  useEffect(() => {
     return () => {
+      unsubscribe();
       stopAudio();
     };
-  }, []);
+  }, [activeItemId, activeItemText, allowed, enabled, raceId, voiceControlRef]);
 
   return {
     enabled,
-    speaking,
     setEnabled: (value: boolean) => {
       if (!allowed) return;
       if (value) {
@@ -229,12 +324,29 @@ export function useReplayVoiceCommentary(options: {
         void unlockReplaySpeechAudio(audio).then(() => {
           unlockedRef.current = true;
         });
+        // Default replay speed is 10× — drop to a speakable speed so Voice
+        // does not immediately skip every line (and thrash the map).
+        const { speed, setSpeed } = usePlaybackStore.getState();
+        if (speed > REPLAY_SPEECH_MAX_SPEED) {
+          setSpeed(REPLAY_SPEECH_MAX_SPEED);
+        }
         setWantEnabled(true);
         return;
       }
       setWantEnabled(false);
       unlockedRef.current = false;
-      stopAudio();
+      playGenerationRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      const audio = audioRef.current;
+      if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      setSpeakingIndicator(voiceControlRef?.current, false);
       spokenItemRef.current = null;
     },
   };

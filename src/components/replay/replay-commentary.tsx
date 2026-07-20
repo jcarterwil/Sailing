@@ -8,7 +8,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import {
   activeReplayCommentaryItem,
@@ -188,6 +188,7 @@ export function ReplayCommentary({
     [activeId, visibleItems],
   );
   const voiceAllowed = voiceAvailable && !readOnly;
+  const voiceControlRef = useRef<HTMLButtonElement | null>(null);
   const voice = useReplayVoiceCommentary({
     raceId,
     activeItemId: activeId,
@@ -195,6 +196,7 @@ export function ReplayCommentary({
     // Keep Voice preference alive across Normal/Verbose; an empty filtered
     // stream simply has no active line to speak (and stops in-flight audio).
     allowed: voiceAllowed && status === "valid" && items.length > 0,
+    voiceControlRef,
   });
 
   if (status !== "valid" || !timeline) {
@@ -292,6 +294,7 @@ export function ReplayCommentary({
         </div>
         {voiceAllowed ? (
           <Button
+            ref={voiceControlRef}
             type="button"
             variant="ghost"
             className="h-11 shrink-0 px-3"
@@ -303,16 +306,17 @@ export function ReplayCommentary({
             }
             title={
               voice.enabled
-                ? "Voice repeats the crawler line while playing"
-                : "Hear the crawler play-by-play spoken aloud"
+                ? "Voice repeats the crawler at ≤5× (higher speeds skip lines)"
+                : "Hear the crawler play-by-play (drops speed to 5× if needed)"
             }
             data-replay-voice={voice.enabled ? "on" : "off"}
-            data-replay-voice-speaking={voice.speaking}
+            data-replay-voice-speaking="false"
             onClick={() => voice.setEnabled(!voice.enabled)}
           >
             {voice.enabled ? (
               <Volume2
-                className={cn("size-4", voice.speaking && "text-sky-600")}
+                data-replay-voice-icon
+                className="size-4"
                 aria-hidden="true"
               />
             ) : (
