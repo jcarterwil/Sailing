@@ -1,4 +1,8 @@
-import type maplibregl from "maplibre-gl";
+import type {
+  CustomLayerInterface,
+  CustomRenderMethodInput,
+  Map as MaplibreMap,
+} from "maplibre-gl";
 import type {
   Camera,
   Group,
@@ -36,7 +40,7 @@ interface SharedRenderer {
 
 export type Boat3dRendererFactory = (
   canvas: HTMLCanvasElement,
-  gl: WebGLRenderingContext | WebGL2RenderingContext,
+  gl: WebGL2RenderingContext,
 ) => SharedRenderer;
 
 interface Boats3dLayerOptions {
@@ -58,6 +62,29 @@ interface BoatModel {
 
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Local-meter ENU frame → mercator model matrix (MapLibre three.js custom-layer
+ * convention). Replaces the removed `transform.getMatrixForModel` helper.
+ */
+export function mercatorAnchorModelMatrix(
+  THREE: typeof import("three"),
+  MercatorCoordinate: MercatorCoordinateClass,
+  lng: number,
+  lat: number,
+  altitude = 0,
+): InstanceType<typeof THREE.Matrix4> {
+  const merc = MercatorCoordinate.fromLngLat({ lng, lat }, altitude);
+  const scale = merc.meterInMercatorCoordinateUnits();
+  const rotationX = new THREE.Matrix4().makeRotationAxis(
+    new THREE.Vector3(1, 0, 0),
+    Math.PI / 2,
+  );
+  return new THREE.Matrix4()
+    .makeTranslation(merc.x, merc.y, merc.z)
+    .scale(new THREE.Vector3(scale, -scale, scale))
+    .multiply(rotationX);
 }
 
 /** Apply the repository's signed attitude convention to one shared model. */
@@ -153,8 +180,8 @@ export function createBoats3dLayer(
   THREE: typeof import("three"),
   MercatorCoordinate: MercatorCoordinateClass,
   { frameRef, rendererFactory }: Boats3dLayerOptions,
-): maplibregl.CustomLayerInterface {
-  let map: maplibregl.Map | null = null;
+): CustomLayerInterface {
+  let map: MaplibreMap | null = null;
   let renderer: SharedRenderer | null = null;
   let scene: Scene | null = null;
   let camera: Camera | null = null;
@@ -175,7 +202,7 @@ export function createBoats3dLayer(
     type: "custom",
     renderingMode: "3d",
 
-    onAdd(nextMap, gl) {
+    onAdd(nextMap: MaplibreMap, gl: WebGL2RenderingContext) {
       release();
       map = nextMap;
       scene = new THREE.Scene();
@@ -216,12 +243,12 @@ export function createBoats3dLayer(
         ? rendererFactory(nextMap.getCanvas(), gl)
         : new THREE.WebGLRenderer({
             canvas: nextMap.getCanvas(),
-            context: gl as WebGLRenderingContext,
+            context: gl,
           });
       renderer.autoClear = false;
     },
 
-    render(_gl, args) {
+    render(_gl: WebGL2RenderingContext, args: CustomRenderMethodInput) {
       if (!map || !renderer || !scene || !camera) return;
       const zoom = map.getZoom();
       if (!shouldDraw3dBoats(zoom)) return;
@@ -236,11 +263,11 @@ export function createBoats3dLayer(
       });
       const meterUnits = anchor.meterInMercatorCoordinateUnits();
       const displayScale = boatDisplayScale(meterUnits, zoom);
-      const anchorModel = new THREE.Matrix4().fromArray(
-        map.transform.getMatrixForModel(
-          { lng: frame.origin.lon, lat: frame.origin.lat },
-          0,
-        ),
+      const anchorModel = mercatorAnchorModelMatrix(
+        THREE,
+        MercatorCoordinate,
+        frame.origin.lon,
+        frame.origin.lat,
       );
       camera.projectionMatrix
         .fromArray(args.defaultProjectionData.mainMatrix)
@@ -303,5 +330,5 @@ export function createBoats3dLayer(
       // Never force context loss: this renderer shares MapLibre's context.
       release();
     },
-  } satisfies maplibregl.CustomLayerInterface;
+  } satisfies CustomLayerInterface;
 }

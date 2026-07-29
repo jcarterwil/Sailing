@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
@@ -696,7 +696,7 @@ export function MapView({
       refreshPlaybackRef.current?.();
     });
 
-    map.on("click", "boats", (event) => {
+    map.on("click", "boats", (event: maplibregl.MapLayerMouseEvent) => {
       const entryId =
         event.features?.[0]?.properties?.entryId;
       if (typeof entryId !== "string") return;

@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type { Map as MaplibreMap } from "maplibre-gl";
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 
@@ -162,11 +162,8 @@ describe("createBoats3dLayer", () => {
     const map = {
       getCanvas: () => canvas,
       getZoom: () => zoom,
-      transform: {
-        getMatrixForModel: () => new THREE.Matrix4().toArray(),
-      },
-    } as unknown as maplibregl.Map;
-    const gl = {} as WebGLRenderingContext;
+    } as unknown as MaplibreMap;
+    const gl = {} as WebGL2RenderingContext;
     class FakeMercatorCoordinate {
       constructor(
         readonly x: number,
@@ -198,7 +195,7 @@ describe("createBoats3dLayer", () => {
       defaultProjectionData: {
         mainMatrix: new THREE.Matrix4().toArray(),
       },
-    } as unknown as maplibregl.CustomRenderMethodInput;
+    } as unknown as import("maplibre-gl").CustomRenderMethodInput;
     layer.render(gl, renderArgs);
     expect(events).toEqual([]);
 
