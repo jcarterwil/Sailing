@@ -65,8 +65,10 @@ function finiteOrZero(value: number): number {
 }
 
 /**
- * Local-meter ENU frame → mercator model matrix (MapLibre three.js custom-layer
- * convention). Replaces the removed `transform.getMatrixForModel` helper.
+ * Local-meter frame → mercator model matrix.
+ * Bit-for-bit equivalent of the removed MapLibre
+ * `transform.getMatrixForModel(lngLat, altitude)` helper (translate → rotateZ π
+ * → rotateX π/2 → scale(-s, s, s)).
  */
 export function mercatorAnchorModelMatrix(
   THREE: typeof import("three"),
@@ -77,14 +79,11 @@ export function mercatorAnchorModelMatrix(
 ): InstanceType<typeof THREE.Matrix4> {
   const merc = MercatorCoordinate.fromLngLat({ lng, lat }, altitude);
   const scale = merc.meterInMercatorCoordinateUnits();
-  const rotationX = new THREE.Matrix4().makeRotationAxis(
-    new THREE.Vector3(1, 0, 0),
-    Math.PI / 2,
-  );
   return new THREE.Matrix4()
     .makeTranslation(merc.x, merc.y, merc.z)
-    .scale(new THREE.Vector3(scale, -scale, scale))
-    .multiply(rotationX);
+    .multiply(new THREE.Matrix4().makeRotationZ(Math.PI))
+    .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+    .multiply(new THREE.Matrix4().makeScale(-scale, scale, scale));
 }
 
 /** Apply the repository's signed attitude convention to one shared model. */
