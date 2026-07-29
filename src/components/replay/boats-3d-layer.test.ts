@@ -140,6 +140,7 @@ describe("applyBoat3dPose", () => {
   });
 
   it("matches MapLibre v5 getMatrixForModel (translate → Rz π → Rx π/2 → scale)", () => {
+    const calls: Array<{ lng: number; lat: number; altitude: number }> = [];
     class FakeMercatorCoordinate {
       constructor(
         readonly x: number,
@@ -148,9 +149,10 @@ describe("applyBoat3dPose", () => {
       ) {}
 
       static fromLngLat(
-        _lngLat: { lng: number; lat: number },
+        lngLat: { lng: number; lat: number },
         altitude = 0,
       ) {
+        calls.push({ lng: lngLat.lng, lat: lngLat.lat, altitude });
         return new FakeMercatorCoordinate(0.25, 0.4, altitude);
       }
 
@@ -164,13 +166,18 @@ describe("applyBoat3dPose", () => {
       FakeMercatorCoordinate as unknown as typeof import("maplibre-gl").MercatorCoordinate,
       -70,
       40,
+      12,
     );
+    expect(calls).toEqual([{ lng: -70, lat: 40, altitude: 12 }]);
     const expected = new THREE.Matrix4()
-      .makeTranslation(0.25, 0.4, 0)
+      .makeTranslation(0.25, 0.4, 12)
       .multiply(new THREE.Matrix4().makeRotationZ(Math.PI))
       .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
       .multiply(new THREE.Matrix4().makeScale(-0.0025, 0.0025, 0.0025));
     expect(actual.toArray()).toEqual(expected.toArray());
+    // Scale(-s, s, s) puts -s on the x diagonal of the scale matrix before
+    // the rotations; after composition the handedness must stay inverted.
+    expect(actual.elements[0]).toBeCloseTo(expected.elements[0], 12);
   });
 });
 
