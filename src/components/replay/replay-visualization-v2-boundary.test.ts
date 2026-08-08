@@ -58,6 +58,15 @@ describe("replay visualization v2 boundaries", () => {
     );
   });
 
+  it("configures MapLibre v6 worker URL for the Next bundle", () => {
+    expect(mapViewSource).toContain(
+      'import * as maplibregl from "maplibre-gl"',
+    );
+    expect(mapViewSource).toContain(
+      'maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")',
+    );
+  });
+
   it("keeps all replay renderers on the shared publication stream", () => {
     expect(mapViewSource).toContain(
       "frameSource.subscribe",

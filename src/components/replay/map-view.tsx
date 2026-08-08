@@ -59,6 +59,10 @@ import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
 import type { RaceLeg } from "@/lib/analytics/types";
 
+// MapLibre v6 ESM worker is not auto-resolved inside Next/webpack; serve the
+// dist worker (+ its shared sibling) from /public/maplibre via sync script.
+maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+
 export type MapStyleId = ReplayBaseStyle;
 
 interface Boats3dResources {

@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# MapLibre v6 worker assets (synced from node_modules by scripts/sync-maplibre-worker.mjs)
+/public/maplibre/
+
 # production
 /build
 
