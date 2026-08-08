@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Synced MapLibre v6 worker assets (vendor ESM, not app source):
+    "public/maplibre/**",
   ]),
 ]);
 

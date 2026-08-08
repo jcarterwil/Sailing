@@ -1,10 +1,11 @@
-import type maplibregl from "maplibre-gl";
+import type { Map as MaplibreMap } from "maplibre-gl";
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 
 import {
   applyBoat3dPose,
   createBoats3dLayer,
+  mercatorAnchorModelMatrix,
   type Boat3dRendererFactory,
 } from "@/components/replay/boats-3d-layer";
 import {
@@ -137,6 +138,47 @@ describe("applyBoat3dPose", () => {
     expect(target.boat.scale.toArray()).toEqual([2, 2, 2]);
     expect(target.rig.rotation.y).toBeLessThan(0);
   });
+
+  it("matches MapLibre v5 getMatrixForModel (translate → Rz π → Rx π/2 → scale)", () => {
+    const calls: Array<{ lng: number; lat: number; altitude: number }> = [];
+    class FakeMercatorCoordinate {
+      constructor(
+        readonly x: number,
+        readonly y: number,
+        readonly z: number,
+      ) {}
+
+      static fromLngLat(
+        lngLat: { lng: number; lat: number },
+        altitude = 0,
+      ) {
+        calls.push({ lng: lngLat.lng, lat: lngLat.lat, altitude });
+        return new FakeMercatorCoordinate(0.25, 0.4, altitude);
+      }
+
+      meterInMercatorCoordinateUnits() {
+        return 0.0025;
+      }
+    }
+
+    const actual = mercatorAnchorModelMatrix(
+      THREE,
+      FakeMercatorCoordinate as unknown as typeof import("maplibre-gl").MercatorCoordinate,
+      -70,
+      40,
+      12,
+    );
+    expect(calls).toEqual([{ lng: -70, lat: 40, altitude: 12 }]);
+    const expected = new THREE.Matrix4()
+      .makeTranslation(0.25, 0.4, 12)
+      .multiply(new THREE.Matrix4().makeRotationZ(Math.PI))
+      .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+      .multiply(new THREE.Matrix4().makeScale(-0.0025, 0.0025, 0.0025));
+    expect(actual.toArray()).toEqual(expected.toArray());
+    // Scale(-s, s, s) puts -s on the x diagonal of the scale matrix before
+    // the rotations; after composition the handedness must stay inverted.
+    expect(actual.elements[0]).toBeCloseTo(expected.elements[0], 12);
+  });
 });
 
 describe("createBoats3dLayer", () => {
@@ -162,11 +204,8 @@ describe("createBoats3dLayer", () => {
     const map = {
       getCanvas: () => canvas,
       getZoom: () => zoom,
-      transform: {
-        getMatrixForModel: () => new THREE.Matrix4().toArray(),
-      },
-    } as unknown as maplibregl.Map;
-    const gl = {} as WebGLRenderingContext;
+    } as unknown as MaplibreMap;
+    const gl = {} as WebGL2RenderingContext;
     class FakeMercatorCoordinate {
       constructor(
         readonly x: number,
@@ -198,7 +237,7 @@ describe("createBoats3dLayer", () => {
       defaultProjectionData: {
         mainMatrix: new THREE.Matrix4().toArray(),
       },
-    } as unknown as maplibregl.CustomRenderMethodInput;
+    } as unknown as import("maplibre-gl").CustomRenderMethodInput;
     layer.render(gl, renderArgs);
     expect(events).toEqual([]);
 

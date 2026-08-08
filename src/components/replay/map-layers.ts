@@ -1,10 +1,11 @@
 import { boatIconOpacityExpression } from "@/components/replay/boats-3d-state";
 import type { TrackScope } from "@/components/replay/replay-display-preferences";
+import type { ExpressionSpecification } from "maplibre-gl";
 
 export interface TrackOverlayPaint {
-  color: string | unknown[];
-  width: number | unknown[];
-  opacity: number | unknown[];
+  color: string | ExpressionSpecification;
+  width: number | ExpressionSpecification;
+  opacity: number | ExpressionSpecification;
 }
 
 export function trackOverlayPaint(
@@ -14,21 +15,25 @@ export function trackOverlayPaint(
   const selectedOnly = scope === "selected" && selectedEntryId !== null;
   if (!selectedOnly) {
     return {
-      color: ["get", "color"],
+      color: ["get", "color"] as ExpressionSpecification,
       width: 3,
       opacity: 0.9,
     };
   }
-  const selected = ["==", ["get", "entryId"], selectedEntryId];
+  const selected = [
+    "==",
+    ["get", "entryId"],
+    selectedEntryId,
+  ] as ExpressionSpecification;
   return {
     color: [
       "case",
       selected,
       ["get", "color"],
       "#94a3b8",
-    ],
-    width: ["case", selected, 4, 1.5],
-    opacity: ["case", selected, 0.95, 0.18],
+    ] as ExpressionSpecification,
+    width: ["case", selected, 4, 1.5] as ExpressionSpecification,
+    opacity: ["case", selected, 0.95, 0.18] as ExpressionSpecification,
   };
 }
 
@@ -58,8 +63,9 @@ export function shouldAddReplayMapLayers(opts: {
 /** Keep labels/hit testing alive while switching only the arrow rendering. */
 export function applyBoatHullIconMode(
   map: {
-    getLayer: (id: string) => unknown;
-    setPaintProperty: (layerId: string, name: string, value: unknown) => void;
+    getLayer(id: string): unknown;
+    // Method form stays assignable from maplibre-gl@6 Map (stricter paint keys).
+    setPaintProperty(layerId: string, name: string, value: unknown): void;
   },
   hullsReady: boolean,
 ): void {

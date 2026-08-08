@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
@@ -58,6 +58,10 @@ import {
 import type { LoadedTrack } from "@/components/replay/track-loader";
 import { lerpAngle } from "@/lib/analytics/angles";
 import type { RaceLeg } from "@/lib/analytics/types";
+
+// MapLibre v6 ESM worker is not auto-resolved inside Next/webpack; serve the
+// dist worker (+ its shared sibling) from /public/maplibre via sync script.
+maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 export type MapStyleId = ReplayBaseStyle;
 
@@ -696,7 +700,7 @@ export function MapView({
       refreshPlaybackRef.current?.();
     });
 
-    map.on("click", "boats", (event) => {
+    map.on("click", "boats", (event: maplibregl.MapLayerMouseEvent) => {
       const entryId =
         event.features?.[0]?.properties?.entryId;
       if (typeof entryId !== "string") return;

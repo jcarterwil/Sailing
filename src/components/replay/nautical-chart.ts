@@ -45,15 +45,20 @@ interface NauticalChartRasterLayer {
   };
 }
 
+/**
+ * Structural map surface used by the NOAA overlay helpers.
+ * Method syntax (not property function types) keeps MapLibre Map assignable
+ * under strictFunctionTypes after maplibre-gl@6 tightened paint property keys.
+ */
 export interface NauticalChartMap {
-  getSource: (id: string) => unknown;
-  addSource: (id: string, source: NauticalChartRasterSource) => void;
-  getLayer: (id: string) => unknown;
-  addLayer: (layer: NauticalChartRasterLayer, beforeId?: string) => void;
-  setPaintProperty: (layerId: string, property: string, value: unknown) => void;
-  setLayoutProperty: (layerId: string, property: string, value: unknown) => void;
-  removeLayer: (id: string) => void;
-  removeSource: (id: string) => void;
+  getSource(id: string): unknown;
+  addSource(id: string, source: NauticalChartRasterSource): void;
+  getLayer(id: string): unknown;
+  addLayer(layer: NauticalChartRasterLayer, beforeId?: string): void;
+  setPaintProperty(layerId: string, property: string, value: unknown): void;
+  setLayoutProperty(layerId: string, property: string, value: unknown): void;
+  removeLayer(id: string): void;
+  removeSource(id: string): void;
 }
 
 export interface AddNauticalChartOptions {
